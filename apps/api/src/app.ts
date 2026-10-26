@@ -25,6 +25,9 @@ import { dashboardRouter } from './modules/dashboard/http/dashboardRouter.js';
 import { parkingRouter } from './modules/parking/http/parkingRouter.js';
 import { notificationsRouter } from './modules/notifications/http/notificationsRouter.js';
 import { academicRouter } from './modules/academic/http/academicRouter.js';
+import { studentRouter } from './modules/students/http/studentRouter.js';
+import { teacherRouter } from './modules/teachers/http/teacherRouter.js';
+import { enrolmentRouter } from './modules/enrolments/http/enrolmentRouter.js';
 
 export function createApp() {
   const env = loadEnv();
@@ -124,6 +127,9 @@ export function createApp() {
   v1.use(dashboardRouter);
   v1.use(parkingRouter);
   v1.use(notificationsRouter);
+  v1.use(studentRouter);
+  v1.use(teacherRouter);
+  v1.use(enrolmentRouter);
   app.use('/api/v1', v1);
 
   if (serveWebUi && webDist) {

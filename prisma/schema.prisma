@@ -132,33 +132,55 @@ model Subject {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  subjectEnrolments SubjectEnrolment[]
+
   @@index([courseId])
 }
 
+enum StudentProfileStatus {
+  ACTIVE
+  SUSPENDED
+  GRADUATED
+  WITHDRAWN
+}
+
+enum TeacherProfileStatus {
+  ACTIVE
+  ON_LEAVE
+  INACTIVE
+}
+
 model StudentProfile {
-  id             String      @id @default(cuid())
-  userId         String      @unique
-  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  studentNumber  String      @unique
-  courseId       String?
-  course         Course?     @relation(fields: [courseId], references: [id])
-  yearOfStudy    Int?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  enrolments     Enrolment[]
+  id            String               @id @default(cuid())
+  userId        String               @unique
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studentNumber String               @unique
+  courseId      String?
+  course        Course?              @relation(fields: [courseId], references: [id])
+  yearOfStudy   Int?
+  phone         String?
+  status        StudentProfileStatus @default(ACTIVE)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  enrolments        Enrolment[]
+  subjectEnrolments SubjectEnrolment[]
 
   @@index([courseId])
 }
 
 model TeacherProfile {
-  id           String      @id @default(cuid())
-  userId       String      @unique
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employeeCode String      @unique
+  id           String               @id @default(cuid())
+  userId       String               @unique
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeCode String               @unique
   departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id])
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  department   Department?          @relation(fields: [departmentId], references: [id])
+  title        String?
+  phone        String?
+  status       TeacherProfileStatus @default(ACTIVE)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
   @@index([departmentId])
 }
@@ -176,6 +198,28 @@ model Enrolment {
 
   @@unique([studentId, courseId, academicYear])
   @@index([courseId])
+}
+
+enum EnrolmentStatus {
+  PENDING
+  ACTIVE
+  CANCELLED
+  COMPLETED
+}
+
+model SubjectEnrolment {
+  id           String          @id @default(cuid())
+  studentId    String
+  student      StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject         @relation(fields: [subjectId], references: [id])
+  academicYear Int
+  status       EnrolmentStatus @default(PENDING)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([studentId, subjectId, academicYear])
+  @@index([subjectId])
 }
 
 model Building {

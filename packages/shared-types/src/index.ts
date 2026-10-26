@@ -275,7 +275,8 @@ export const campusModules: CampusModule[] = [
     label: 'Estudantes',
     path: '/students',
     description: 'Dados académicos de estudantes.',
-    status: 'partial',
+    status: 'available',
+    requiredRoles: ['STUDENT', 'TEACHER', 'COORDINATOR', 'ADMIN'],
     groupHint: 'Grupo Académico',
   },
   {
@@ -283,15 +284,17 @@ export const campusModules: CampusModule[] = [
     label: 'Docentes',
     path: '/teachers',
     description: 'Perfil e afectação de docentes.',
-    status: 'partial',
+    status: 'available',
+    requiredRoles: ['STUDENT', 'TEACHER', 'COORDINATOR', 'ADMIN'],
     groupHint: 'Grupo Académico',
   },
   {
     key: 'enrolments',
-    label: 'Matrículas',
+    label: 'Inscrições',
     path: '/enrolments',
-    description: 'Matrículas e inscrições.',
-    status: 'development',
+    description: 'Inscrições de estudantes em disciplinas por ano lectivo.',
+    status: 'available',
+    requiredRoles: ['STUDENT', 'TEACHER', 'COORDINATOR', 'ADMIN'],
     groupHint: 'Grupo Académico',
   },
   {
@@ -462,4 +465,92 @@ export type CourseDto = {
 export type SubjectDto = {
   id: string; code: string; name: string; credits: number;
   courseId: string; course: Ref; createdAt: string; updatedAt: string;
+};
+
+export type EntityRef = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+export type StudentProfileStatus = 'ACTIVE' | 'SUSPENDED' | 'GRADUATED' | 'WITHDRAWN';
+
+export type StudentProfileDto = {
+  id: string;
+  userId: string;
+  studentNumber: string;
+  courseId: string | null;
+  course: EntityRef | null;
+  yearOfStudy: number | null;
+  phone: string | null;
+  status: StudentProfileStatus;
+  user: { id: string; fullName: string };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateStudentProfilePayload = {
+  userId: string;
+  studentNumber: string;
+  courseId: string;
+  yearOfStudy?: number;
+  phone?: string;
+};
+
+export type UpdateStudentProfilePayload = {
+  courseId?: string;
+  yearOfStudy?: number | null;
+  phone?: string | null;
+  status?: StudentProfileStatus;
+};
+
+export type TeacherProfileStatus = 'ACTIVE' | 'ON_LEAVE' | 'INACTIVE';
+
+export type TeacherProfileDto = {
+  id: string;
+  userId: string;
+  employeeCode: string;
+  departmentId: string | null;
+  department: EntityRef | null;
+  title: string | null;
+  phone: string | null;
+  status: TeacherProfileStatus;
+  user: { id: string; fullName: string };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateTeacherProfilePayload = {
+  userId: string;
+  employeeCode: string;
+  departmentId: string;
+  title?: string;
+  phone?: string;
+};
+
+export type UpdateTeacherProfilePayload = {
+  departmentId?: string;
+  title?: string;
+  phone?: string | null;
+  status?: TeacherProfileStatus;
+};
+
+export type EnrolmentStatus = 'PENDING' | 'ACTIVE' | 'CANCELLED' | 'COMPLETED';
+
+export type SubjectEnrolmentDto = {
+  id: string;
+  studentId: string;
+  student: { id: string; studentNumber: string; fullName: string };
+  subjectId: string;
+  subject: EntityRef;
+  academicYear: number;
+  status: EnrolmentStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateEnrolmentPayload = {
+  studentId: string;
+  subjectId: string;
+  academicYear: number;
 };

@@ -73,7 +73,7 @@ async function main() {
     },
   });
 
-  await prisma.subject.upsert({
+  const subject = await prisma.subject.upsert({
     where: { code: 'PTP3' },
     update: {},
     create: {
@@ -84,7 +84,7 @@ async function main() {
     },
   });
 
-  await prisma.studentProfile.upsert({
+  const studentProfile = await prisma.studentProfile.upsert({
     where: { userId: createdUsers.STUDENT },
     update: {},
     create: {
@@ -92,6 +92,8 @@ async function main() {
       studentNumber: 'EST-2026-001',
       courseId: course.id,
       yearOfStudy: 3,
+      phone: '+258 84 000 0001',
+      status: 'ACTIVE',
     },
   });
 
@@ -102,6 +104,26 @@ async function main() {
       userId: createdUsers.TEACHER,
       employeeCode: 'DOC-100',
       departmentId: dept.id,
+      title: 'Assistente',
+      phone: '+258 84 000 0002',
+      status: 'ACTIVE',
+    },
+  });
+
+  await prisma.subjectEnrolment.upsert({
+    where: {
+      studentId_subjectId_academicYear: {
+        studentId: studentProfile.id,
+        subjectId: subject.id,
+        academicYear: 2026,
+      },
+    },
+    update: {},
+    create: {
+      studentId: studentProfile.id,
+      subjectId: subject.id,
+      academicYear: 2026,
+      status: 'ACTIVE',
     },
   });
 

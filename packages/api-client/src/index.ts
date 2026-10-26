@@ -5,9 +5,13 @@ import type {
   AuthUser,
   BuildingDto,
   CourseDto,
+  CreateEnrolmentPayload,
+  CreateStudentProfilePayload,
+  CreateTeacherProfilePayload,
   DashboardSummary,
   DepartmentDto,
   DeviceDto,
+  EnrolmentStatus,
   EquipmentDto,
   IncidentDto,
   LaboratoryDto,
@@ -16,7 +20,14 @@ import type {
   ParkingLotOverview,
   PlateReadingDto,
   RoomDto,
+  StudentProfileDto,
+  StudentProfileStatus,
   SubjectDto,
+  SubjectEnrolmentDto,
+  TeacherProfileDto,
+  TeacherProfileStatus,
+  UpdateStudentProfilePayload,
+  UpdateTeacherProfilePayload,
 } from '@smart-campus/shared-types';
 
 export class ApiClientError extends Error {
@@ -38,6 +49,18 @@ export type TokenStore = {
   setTokens: (accessToken: string, refreshToken: string) => void;
   clear: () => void;
 };
+
+type QueryParams = Record<string, string | number | undefined>;
+
+function buildQuery(params?: QueryParams): string {
+  if (!params) return '';
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
 
 export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
   async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<ApiSuccess<T>> {
@@ -150,6 +173,49 @@ export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
       request<SubjectDto[]>(`/subjects${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''}`),
     createSubject: (payload: unknown) =>
       request<SubjectDto>('/subjects', { method: 'POST', body: JSON.stringify(payload) }),
+    students: {
+      list: (params?: { courseId?: string; status?: StudentProfileStatus }) =>
+        request<StudentProfileDto[]>(`/students${buildQuery(params)}`),
+      getMe: () => request<StudentProfileDto>('/students/me'),
+      getById: (id: string) => request<StudentProfileDto>(`/students/${id}`),
+      getByUser: (userId: string) => request<StudentProfileDto>(`/students/by-user/${userId}`),
+      create: (payload: CreateStudentProfilePayload) =>
+        request<StudentProfileDto>('/students', { method: 'POST', body: JSON.stringify(payload) }),
+      update: (id: string, payload: UpdateStudentProfilePayload) =>
+        request<StudentProfileDto>(`/students/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+      updateOwn: (payload: { phone: string }) =>
+        request<StudentProfileDto>('/students/me', { method: 'PATCH', body: JSON.stringify(payload) }),
+      remove: (id: string) =>
+        request<{ id: string; deleted: true }>(`/students/${id}`, { method: 'DELETE' }),
+    },
+    teachers: {
+      list: (params?: { departmentId?: string; status?: TeacherProfileStatus }) =>
+        request<TeacherProfileDto[]>(`/teachers${buildQuery(params)}`),
+      getMe: () => request<TeacherProfileDto>('/teachers/me'),
+      getById: (id: string) => request<TeacherProfileDto>(`/teachers/${id}`),
+      getByUser: (userId: string) => request<TeacherProfileDto>(`/teachers/by-user/${userId}`),
+      create: (payload: CreateTeacherProfilePayload) =>
+        request<TeacherProfileDto>('/teachers', { method: 'POST', body: JSON.stringify(payload) }),
+      update: (id: string, payload: UpdateTeacherProfilePayload) =>
+        request<TeacherProfileDto>(`/teachers/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+      updateOwn: (payload: { phone: string }) =>
+        request<TeacherProfileDto>('/teachers/me', { method: 'PATCH', body: JSON.stringify(payload) }),
+      remove: (id: string) =>
+        request<{ id: string; deleted: true }>(`/teachers/${id}`, { method: 'DELETE' }),
+    },
+    enrolments: {
+      list: (params?: { studentId?: string; subjectId?: string; academicYear?: number }) =>
+        request<SubjectEnrolmentDto[]>(`/enrolments${buildQuery(params)}`),
+      create: (payload: CreateEnrolmentPayload) =>
+        request<SubjectEnrolmentDto>('/enrolments', { method: 'POST', body: JSON.stringify(payload) }),
+      updateStatus: (id: string, status: EnrolmentStatus) =>
+        request<SubjectEnrolmentDto>(`/enrolments/${id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status }),
+        }),
+      remove: (id: string) =>
+        request<{ id: string; deleted: true }>(`/enrolments/${id}`, { method: 'DELETE' }),
+    },
     health: async () => {
       const res = await fetch(`${baseUrl.replace(/\/api\/v1$/, '')}/health`);
       return res.json();

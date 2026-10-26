@@ -11,6 +11,7 @@ const primaryNav = [
   'users',
   'academic',
   'students',
+  'enrolments',
   'rooms',
   'incidents',
   'parking',

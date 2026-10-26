@@ -154,3 +154,88 @@ export type CreateDepartmentInput = z.infer<typeof createDepartmentSchema>;
 export type CreateCourseInput = z.infer<typeof createCourseSchema>;
 export type CreateSubjectInput = z.infer<typeof createSubjectSchema>;
 export type BatchCreateCourseWithSubjectsInput = z.infer<typeof batchCreateCourseWithSubjectsSchema>;
+
+const idSchema = z.string().trim().min(1).max(64);
+const phoneSchema = z.string().trim().min(6).max(30);
+
+export const studentProfileStatusEnum = z.enum(['ACTIVE', 'SUSPENDED', 'GRADUATED', 'WITHDRAWN']);
+
+export const createStudentProfileSchema = z.object({
+  userId: idSchema,
+  studentNumber: z.string().trim().min(2).max(30),
+  courseId: idSchema,
+  yearOfStudy: z.number().int().min(1).max(10).optional(),
+  phone: phoneSchema.optional(),
+});
+
+export const updateStudentProfileSchema = z
+  .object({
+    courseId: idSchema.optional(),
+    yearOfStudy: z.number().int().min(1).max(10).nullable().optional(),
+    phone: phoneSchema.nullable().optional(),
+    status: studentProfileStatusEnum.optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: 'Pelo menos um campo deve ser fornecido' });
+
+export const updateOwnStudentContactSchema = z.object({ phone: phoneSchema });
+
+export const listStudentsQuerySchema = z.object({
+  courseId: idSchema.optional(),
+  status: studentProfileStatusEnum.optional(),
+});
+
+export type CreateStudentProfileInput = z.infer<typeof createStudentProfileSchema>;
+export type UpdateStudentProfileInput = z.infer<typeof updateStudentProfileSchema>;
+export type UpdateOwnStudentContactInput = z.infer<typeof updateOwnStudentContactSchema>;
+export type ListStudentsQuery = z.infer<typeof listStudentsQuerySchema>;
+
+export const teacherProfileStatusEnum = z.enum(['ACTIVE', 'ON_LEAVE', 'INACTIVE']);
+
+export const createTeacherProfileSchema = z.object({
+  userId: idSchema,
+  employeeCode: z.string().trim().min(2).max(30),
+  departmentId: idSchema,
+  title: z.string().trim().min(2).max(80).optional(),
+  phone: phoneSchema.optional(),
+});
+
+export const updateTeacherProfileSchema = z
+  .object({
+    departmentId: idSchema.optional(),
+    title: z.string().trim().min(2).max(80).optional(),
+    phone: phoneSchema.nullable().optional(),
+    status: teacherProfileStatusEnum.optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: 'Pelo menos um campo deve ser fornecido' });
+
+export const updateOwnTeacherContactSchema = z.object({ phone: phoneSchema });
+
+export const listTeachersQuerySchema = z.object({
+  departmentId: idSchema.optional(),
+  status: teacherProfileStatusEnum.optional(),
+});
+
+export type CreateTeacherProfileInput = z.infer<typeof createTeacherProfileSchema>;
+export type UpdateTeacherProfileInput = z.infer<typeof updateTeacherProfileSchema>;
+export type UpdateOwnTeacherContactInput = z.infer<typeof updateOwnTeacherContactSchema>;
+export type ListTeachersQuery = z.infer<typeof listTeachersQuerySchema>;
+
+export const enrolmentStatusEnum = z.enum(['PENDING', 'ACTIVE', 'CANCELLED', 'COMPLETED']);
+
+export const createEnrolmentSchema = z.object({
+  studentId: idSchema,
+  subjectId: idSchema,
+  academicYear: z.number().int().min(2000).max(2100),
+});
+
+export const updateEnrolmentStatusSchema = z.object({ status: enrolmentStatusEnum });
+
+export const listEnrolmentsQuerySchema = z.object({
+  studentId: idSchema.optional(),
+  subjectId: idSchema.optional(),
+  academicYear: z.coerce.number().int().min(2000).max(2100).optional(),
+});
+
+export type CreateEnrolmentInput = z.infer<typeof createEnrolmentSchema>;
+export type UpdateEnrolmentStatusInput = z.infer<typeof updateEnrolmentStatusSchema>;
+export type ListEnrolmentsQuery = z.infer<typeof listEnrolmentsQuerySchema>;

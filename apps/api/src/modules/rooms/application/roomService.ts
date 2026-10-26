@@ -123,7 +123,14 @@ export async function deleteRoom(id: string, actorId: string, correlationId: str
   const existing = await prisma.room.findUnique({ where: { id } });
   if (!existing) throw notFound('ROOM_NOT_FOUND', 'Sala não encontrada');
 
-  await prisma.room.delete({ where: { id } });
+  await prisma.room.delete({ where: { id } }).catch((err: unknown) => {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === 'P2025') throw notFound('ROOM_NOT_FOUND', 'Sala não encontrada');
+    if (err.code === 'P2003') throw conflict('ROOM_IN_USE', 'A sala tem registos associados');
+    }
+    throw err;
+   });
+   
 
   await audit({
     action: 'ROOM_DELETE',

@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function hash(password: string) {
+  // Custo 12, alinhado com BCRYPT_ROUNDS do authService.
   return bcrypt.hash(password, 12);
 }
 
@@ -15,6 +16,7 @@ async function main() {
     { code: 'TEACHER', name: 'Docente', description: 'Acesso lectivo e consulta' },
     { code: 'TECHNICIAN', name: 'Técnico', description: 'Infraestrutura e ocorrências' },
     { code: 'COORDINATOR', name: 'Coordenador', description: 'Coordenação de área' },
+    { code: 'FINANCE', name: 'Tesouraria', description: 'Gestão financeira de estudantes' },
     { code: 'ADMIN', name: 'Administrador', description: 'Administração completa' },
   ];
 
@@ -29,11 +31,14 @@ async function main() {
   const roleMap = Object.fromEntries((await prisma.role.findMany()).map((r) => [r.code, r.id]));
 
   const users = [
+    { email: 'financas@smartcampus.demo', fullName: 'Tesouraria Demo', role: 'FINANCE' as RoleCode, password: 'Finance123!' },
     { email: 'admin@smartcampus.demo', fullName: 'Admin Demo', role: 'ADMIN' as RoleCode, password: 'Admin123!' },
     { email: 'coordenador@smartcampus.demo', fullName: 'Coordenador Demo', role: 'COORDINATOR' as RoleCode, password: 'Coord123!' },
     { email: 'docente@smartcampus.demo', fullName: 'Docente Demo', role: 'TEACHER' as RoleCode, password: 'Docente123!' },
+    { email: 'docente2@smartcampus.demo', fullName: 'Docente Dois Demo', role: 'TEACHER' as RoleCode, password: 'Docente123!' },
     { email: 'tecnico@smartcampus.demo', fullName: 'Técnico Demo', role: 'TECHNICIAN' as RoleCode, password: 'Tecnico123!' },
     { email: 'estudante@smartcampus.demo', fullName: 'Estudante Demo', role: 'STUDENT' as RoleCode, password: 'Estudante123!' },
+    { email: 'estudante2@smartcampus.demo', fullName: 'Estudante Dois Demo', role: 'STUDENT' as RoleCode, password: 'Estudante123!' },
   ];
 
   const createdUsers: Record<string, string> = {};
@@ -49,8 +54,13 @@ async function main() {
         roleId: roleMap[u.role],
       },
     });
-    createdUsers[u.role] = user.id;
+    createdUsers[u.email] = user.id;
   }
+
+  const adminId = createdUsers['admin@smartcampus.demo'];
+  const teacherId = createdUsers['docente@smartcampus.demo'];
+  const studentAId = createdUsers['estudante@smartcampus.demo'];
+  const studentBId = createdUsers['estudante2@smartcampus.demo'];
 
   const dept = await prisma.department.upsert({
     where: { code: 'DEI' },
@@ -81,14 +91,29 @@ async function main() {
       name: 'Prática Técnico-Profissional III',
       credits: 6,
       courseId: course.id,
+      requiredTestCount: 2,
     },
   });
+  if (subject.requiredTestCount == null) {
+    await prisma.subject.update({
+      where: { id: subject.id },
+      data: { requiredTestCount: 2 },
+    });
+  }
+  // Critério de recorrência institucional (nota mínima de admissão 0–20).
+  // Guardado: nunca sobrescreve um valor já definido na BD.
+  if (subject.recurrenceMinAdmission == null) {
+    await prisma.subject.update({
+      where: { id: subject.id },
+      data: { recurrenceMinAdmission: 7 },
+    });
+  }
 
   const studentProfile = await prisma.studentProfile.upsert({
     where: { userId: createdUsers.STUDENT },
     update: {},
     create: {
-      userId: createdUsers.STUDENT,
+      userId: studentAId,
       studentNumber: 'EST-2026-001',
       courseId: course.id,
       yearOfStudy: 3,
@@ -97,11 +122,22 @@ async function main() {
     },
   });
 
-  await prisma.teacherProfile.upsert({
-    where: { userId: createdUsers.TEACHER },
+  await prisma.studentProfile.upsert({
+    where: { userId: studentBId },
     update: {},
     create: {
-      userId: createdUsers.TEACHER,
+      userId: studentBId,
+      studentNumber: 'EST-2026-002',
+      courseId: course.id,
+      yearOfStudy: 3,
+    },
+  });
+
+  await prisma.teacherProfile.upsert({
+    where: { userId: teacherId },
+    update: {},
+    create: {
+      userId: teacherId,
       employeeCode: 'DOC-100',
       departmentId: dept.id,
       title: 'Assistente',
@@ -126,6 +162,56 @@ async function main() {
       status: 'ACTIVE',
     },
   });
+
+  await prisma.teacherProfile.upsert({
+    where: { userId: createdUsers['docente2@smartcampus.demo'] },
+    update: {},
+    create: {
+      userId: createdUsers['docente2@smartcampus.demo'],
+      employeeCode: 'DOC-101',
+      departmentId: dept.id,
+    },
+  });
+
+  const studentA = await prisma.studentProfile.findUnique({ where: { userId: studentAId } });
+  const studentB = await prisma.studentProfile.findUnique({ where: { userId: studentBId } });
+
+  if (studentA) {
+    await prisma.enrolment.upsert({
+      where: { studentId_courseId_academicYear: { studentId: studentA.id, courseId: course.id, academicYear: '2026' } },
+      update: {},
+      create: { studentId: studentA.id, courseId: course.id, academicYear: '2026', status: 'ACTIVE' },
+    });
+  }
+  if (studentB) {
+    await prisma.enrolment.upsert({
+      where: { studentId_courseId_academicYear: { studentId: studentB.id, courseId: course.id, academicYear: '2026' } },
+      update: {},
+      create: { studentId: studentB.id, courseId: course.id, academicYear: '2026', status: 'ACTIVE' },
+    });
+  }
+
+  // Avaliações contínuas padrão da disciplina (o docente pode ajustar pesos depois).
+  const defaultAssessments = [
+    { title: 'Teste 1', weight: 50 },
+    { title: 'Teste 2', weight: 50 },
+  ];
+  for (const def of defaultAssessments) {
+    const existing = await prisma.assessment.findFirst({ where: { subjectId: subject.id, title: def.title } });
+    if (!existing) {
+      await prisma.assessment.create({
+        data: {
+          title: def.title,
+          type: 'TEST',
+          gradingMode: 'SCALE',
+          maxScore: 20,
+          weight: def.weight,
+          subjectId: subject.id,
+          createdById: teacherId,
+        },
+      });
+    }
+  }
 
   const buildingA = await prisma.building.upsert({
     where: { code: 'A' },
@@ -212,7 +298,7 @@ async function main() {
         priority: 'MEDIUM',
         roomId: roomA101.id,
         equipmentId: projector.id,
-        reporterId: createdUsers.STUDENT,
+        reporterId: studentAId,
       },
     });
   }
@@ -269,7 +355,7 @@ async function main() {
   await prisma.notification.createMany({
     data: [
       {
-        userId: createdUsers.ADMIN,
+        userId: adminId,
         title: 'Bem-vindo ao Smart Campus',
         body: 'Core inicial preparado para integração modular (PTP III).',
       },
@@ -362,13 +448,45 @@ async function main() {
     });
   }
 
+  const dayMs = 24 * 60 * 60 * 1000;
+  const scheduleSpecs = [
+    {
+      title: 'Aula PTP3 — Integración Tecnológica',
+      startsAt: new Date(Date.now() + dayMs),
+      endsAt: new Date(Date.now() + dayMs + 90 * 60 * 1000),
+    },
+    {
+      title: 'Aula PTP3 — Projecto em grupo',
+      startsAt: new Date(Date.now() + 3 * dayMs),
+      endsAt: new Date(Date.now() + 3 * dayMs + 90 * 60 * 1000),
+    },
+  ];
+  for (const spec of scheduleSpecs) {
+    const exists = await prisma.classSchedule.findFirst({ where: { title: spec.title } });
+    if (!exists) {
+      await prisma.classSchedule.create({
+        data: {
+          title: spec.title,
+          subjectId: subject.id,
+          courseId: course.id,
+          teacherId,
+          roomId: roomA101.id,
+          startsAt: spec.startsAt,
+          endsAt: spec.endsAt,
+        },
+      });
+    }
+  }
+
   console.log('Seed concluído.');
   console.log('Credenciais de demonstração (apenas desenvolvimento):');
   console.log('  admin@smartcampus.demo / Admin123!');
   console.log('  coordenador@smartcampus.demo / Coord123!');
   console.log('  docente@smartcampus.demo / Docente123!');
+  console.log('  docente2@smartcampus.demo / Docente123!');
   console.log('  tecnico@smartcampus.demo / Tecnico123!');
   console.log('  estudante@smartcampus.demo / Estudante123!');
+  console.log('  estudante2@smartcampus.demo / Estudante123!');
 }
 
 main()

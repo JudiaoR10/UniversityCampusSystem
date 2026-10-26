@@ -119,3 +119,11 @@ Repositório oficial: **https://github.com/acorreialabs/UniversityCampusSystem**
 2. **Clone** do fork → ver [guia-contribuicao-grupos.md](docs/guia-contribuicao-grupos.md)  
 3. Instalar e correr (`npm install`, Docker, `npm run dev`)  
 4. Branch `feature/grupo-<area>-<modulo>-<obj>` → PR para `main`
+
+## Gestão financeira — branch de integração
+
+O módulo financeiro usa o login e o cliente oficial do Core. Abrir `/financial` após login como STUDENT, FINANCE ou ADMIN. Conta demo da tesouraria: `financas@smartcampus.demo` / `Finance123!` (após seed).
+
+- [Decisões, contratos e passos de integração](docs/decisions/financial-core-alignment.md)
+- [Resultados da validação](docs/integration-evidence/README.md)
+- Testes em base descartável: `npm run test:financial:isolated`

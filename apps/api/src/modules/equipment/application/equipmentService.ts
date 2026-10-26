@@ -134,7 +134,13 @@ export async function updateEquipment(id: string, input: Partial<CreateEquipment
 }
 
 export async function deleteEquipment(id: string, actorId: string, correlationId: string) {
-  const item = await prisma.equipment.delete({ where: { id } });
+  const item = await prisma.equipment.delete({ where: { id } }).catch((err: unknown) => {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+    throw notFound('EQUIPMENT_NOT_FOUND', 'Equipamento não encontrado');
+    }
+    throw err;
+   });
+   
 
   await audit({
     action: 'EQUIPMENT_DELETE',

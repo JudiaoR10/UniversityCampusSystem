@@ -3,9 +3,9 @@ import { ModuleStatusBadge } from '../components/ModuleStatusBadge';
 import { PageIntro } from '../components/PageIntro';
 
 const items = [
-  { label: 'Departamentos', path: '/departments', status: 'available' as const },
-  { label: 'Cursos', path: '/courses', status: 'available' as const },
-  { label: 'Disciplinas', path: '/subjects', status: 'available' as const },
+  { label: 'Departamentos', path: '/departments', status: 'development' as const },
+  { label: 'Cursos', path: '/courses', status: 'development' as const },
+  { label: 'Disciplinas', path: '/subjects', status: 'development' as const },
   { label: 'Estudantes', path: '/students', status: 'partial' as const },
   { label: 'Docentes', path: '/teachers', status: 'partial' as const },
   { label: 'Matrículas', path: '/enrolments', status: 'development' as const },

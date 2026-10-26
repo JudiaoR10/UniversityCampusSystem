@@ -20,7 +20,7 @@ export const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(128),
   fullName: z.string().min(2).max(120),
-  role: z.enum(['STUDENT', 'TEACHER', 'TECHNICIAN', 'COORDINATOR', 'ADMIN']),
+  role: z.enum(['STUDENT', 'TEACHER', 'TECHNICIAN', 'COORDINATOR', 'ADMIN', 'FINANCE']),
 });
 
 export const createRoomSchema = z.object({
@@ -115,6 +115,116 @@ export const updateDeviceStatusSchema = z.object({
   status: z.enum(['ONLINE', 'OFFLINE', 'MAINTENANCE', 'UNKNOWN']),
 });
 
+const assessmentTypeSchema = z.enum(['TEST','EXAM','ASSIGNMENT','PRACTICAL','ORAL','OTHER','RECURRENCE']);
+const gradingModeSchema = z.enum(['PERCENTAGE','POINTS','SCALE']);
+export const createAssessmentSchema = z.object({
+  title: z.string().min(3).max(120),
+  description: z.string().max(500).optional().or(z.null()),
+  subjectId: z.string().min(1),
+  type: assessmentTypeSchema.optional().default('TEST'),
+  gradingMode: gradingModeSchema.optional().default('PERCENTAGE'),
+  maxScore: z.number().positive().max(1000).optional(),
+  weight: z.number().positive().max(100).optional().or(z.literal(100)),
+  date: z.coerce.date().optional().or(z.null()),
+});
+
+export const updateAssessmentSchema = z.object({
+  title: z.string().min(3).max(120).optional(),
+  description: z.string().max(500).optional().or(z.null()),
+  type: assessmentTypeSchema.optional(),
+  gradingMode: gradingModeSchema.optional(),
+  maxScore: z.number().positive().max(1000).optional(),
+  weight: z.number().positive().max(100).optional().or(z.literal(100)),
+  date: z.coerce.date().optional().or(z.null()),
+});
+
+export const setRequiredTestCountSchema = z.object({
+  requiredTestCount: z.number().int().min(1).max(20).nullable(),
+});
+
+export const setSubjectRulesSchema = z
+  .object({
+    requiredTestCount: z.number().int().min(1).max(20).nullable().optional(),
+    recurrenceMinAdmission: z.number().min(0).max(20).nullable().optional(),
+  })
+  .refine((v) => v.requiredTestCount !== undefined || v.recurrenceMinAdmission !== undefined, {
+    message: 'Indique requiredTestCount e/ou recurrenceMinAdmission',
+  });
+
+export const publishResultsSchema = z.object({
+  published: z.boolean(),
+});
+
+export const upsertGradesSchema = z.object({
+  grades: z
+    .array(
+      z.object({
+        studentId: z.string().min(1),
+        value: z.number(),
+        comment: z.string().max(500).optional().nullable(),
+      }),
+    )
+    .min(1)
+    .max(200),
+});
+
+export const createResultSchema = z.object({
+  assessmentId: z.string().min(1),
+  studentId: z.string().min(1),
+  value: z.number(),
+  comment: z.string().max(500).optional().nullable(),
+});
+
+const scheduleBase = {
+  title: z.string().min(3).max(160),
+  subjectId: z.string().min(1),
+  courseId: z.string().min(1),
+  teacherId: z.string().min(1).optional().nullable(),
+  roomId: z.string().min(1).optional().nullable(),
+  startsAt: z.coerce.date(),
+  endsAt: z.coerce.date(),
+};
+
+export const createScheduleSchema = z
+  .object(scheduleBase)
+  .refine((s) => s.endsAt.getTime() > s.startsAt.getTime(), {
+    message: 'endsAt deve ser posterior a startsAt',
+    path: ['endsAt'],
+  });
+
+export const updateScheduleSchema = z
+  .object({
+    title: scheduleBase.title.optional(),
+    subjectId: scheduleBase.subjectId.optional(),
+    courseId: scheduleBase.courseId.optional(),
+    teacherId: scheduleBase.teacherId,
+    roomId: scheduleBase.roomId,
+    startsAt: scheduleBase.startsAt.optional(),
+    endsAt: scheduleBase.endsAt.optional(),
+  })
+  .refine(
+    (s) => {
+      if (s.startsAt && s.endsAt) return s.endsAt.getTime() > s.startsAt.getTime();
+      return true;
+    },
+    { message: 'endsAt deve ser posterior a startsAt', path: ['endsAt'] },
+  );
+
+export const attendanceStatusSchema = z.enum(['PRESENT', 'ABSENT', 'LATE', 'JUSTIFIED']);
+
+export const markAttendanceSchema = z.object({
+  records: z
+    .array(
+      z.object({
+        studentId: z.string().min(1),
+        status: attendanceStatusSchema,
+        note: z.string().max(500).optional().nullable(),
+      }),
+    )
+    .min(1)
+    .max(300),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type CreateRoomInput = z.infer<typeof createRoomSchema>;
@@ -125,31 +235,178 @@ export type CreateIncidentInput = z.infer<typeof createIncidentSchema>;
 export type UpdateIncidentStatusInput = z.infer<typeof updateIncidentStatusSchema>;
 export type CreatePlateReadingInput = z.infer<typeof createPlateReadingSchema>;
 export type UpdateParkingSpotInput = z.infer<typeof updateParkingSpotSchema>;
+export type CreateAssessmentInput = z.infer<typeof createAssessmentSchema>;
+export type UpdateAssessmentInput = z.infer<typeof updateAssessmentSchema>;
+export type SetRequiredTestCountInput = z.infer<typeof setRequiredTestCountSchema>;
+export type SetSubjectRulesInput = z.infer<typeof setSubjectRulesSchema>;
+export type PublishResultsInput = z.infer<typeof publishResultsSchema>;
+export type UpsertGradesInput = z.infer<typeof upsertGradesSchema>;
+export type CreateResultInput = z.infer<typeof createResultSchema>;
+export type CreateScheduleInput = z.infer<typeof createScheduleSchema>;
+export type UpdateScheduleInput = z.infer<typeof updateScheduleSchema>;
+export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;
+
+const financialAmountSchema = z
+  .number()
+  .positive('O valor deve ser superior a zero')
+  .max(1000000, 'Valor limite excedido por transacao')
+  .refine((value) => value === Math.round(value * 100) / 100, 'Use no maximo duas casas decimais');
+
+// Schema de criacao de Divida (usado em POST /api/v1/financial/debts)
+export const createDebtSchema = z.object({
+  studentId: z.string().min(1, 'O ID do estudante e obrigatorio'),
+  title: z.string().trim().min(3, 'Titulo deve ter pelo menos 3 caracteres').max(120),
+  description: z.string().trim().max(500).optional(),
+  amount: financialAmountSchema,
+  origin: z.string().trim().min(2, 'Origem e obrigatoria').max(60),
+  dueDate: z
+    .string()
+    .datetime({ message: 'Data de vencimento invalida (formato ISO 8601 obrigatorio)' }),
+});
+
+// Schema de registo de Pagamento (usado em POST /api/v1/financial/payments)
+export const createPaymentSchema = z.object({
+  debtId: z.string().min(1, 'ID da divida e obrigatorio'),
+  amountPaid: financialAmountSchema,
+  paymentMethod: z.enum(['BANK_TRANSFER', 'CASH_DEPOSIT', 'MOBILE_MONEY', 'POS'], {
+    errorMap: () => ({ message: 'Metodo de pagamento invalido' }),
+  }),
+  referenceCode: z
+    .string()
+    .trim()
+    .min(4, 'Codigo de referencia invalido (minimo 4 caracteres)')
+    .max(80),
+});
+
+// Schema de contestacao de Divida (usado em POST /api/v1/financial/analysis-requests)
+export const createAnalysisRequestSchema = z.object({
+  debtId: z.string().min(1, 'ID da divida e obrigatorio'),
+  reason: z.string().trim().min(10, 'A justificacao deve ter pelo menos 10 caracteres').max(1000),
+});
+
+// Schema de resolucao de contestacao (usado em PATCH /api/v1/financial/analysis-requests/:id)
+export const resolveAnalysisRequestSchema = z.object({
+  decision: z.enum(['PROCEDENTE', 'IMPROCEDENTE'], {
+    errorMap: () => ({ message: 'Decisao invalida: use PROCEDENTE ou IMPROCEDENTE' }),
+  }),
+  resolutionNotes: z.string().trim().min(5, 'A nota de resolucao e obrigatoria').max(1000),
+});
+
+// Schema de actualizacao da Politica Financeira (usado em PATCH /api/v1/financial/policies/:id)
+export const updateFinancialPolicySchema = z.object({
+  gracePeriodDays: z.number().int().min(0).max(60),
+  autoBlockEnabled: z.boolean(),
+  maxDebtAmount: z
+    .number()
+    .min(0)
+    .max(1000000)
+    .refine(
+      (value) => value === Math.round(value * 100) / 100,
+      'Use no maximo duas casas decimais',
+    ),
+});
+
+// Inferred types — modulo financeiro
+export type CreateDebtInput = z.infer<typeof createDebtSchema>;
+export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
+export type CreateAnalysisRequestInput = z.infer<typeof createAnalysisRequestSchema>;
+export type ResolveAnalysisRequestInput = z.infer<typeof resolveAnalysisRequestSchema>;
+export type UpdateFinancialPolicyInput = z.infer<typeof updateFinancialPolicySchema>;
+
+// Consulta/reenvio de um aviso existente; nao permite destinatarios ou URLs arbitrarios.
+export const financialNotificationIdSchema = z.object({
+  notificationId: z.string().trim().min(1).max(200),
+});
+export const retryFinancialNotificationSchema = z.object({}).strict();
+
+// Paginas limitadas protegem a API de consultas sem limite e queries ambiguas.
+export const paginationQuerySchema = z.object({
+  offset: z
+    .string()
+    .regex(/^\d+$/)
+    .transform(Number)
+    .pipe(z.number().int().min(0).max(100000))
+    .optional()
+    .default('0'),
+  limit: z
+    .string()
+    .regex(/^\d+$/)
+    .transform(Number)
+    .pipe(z.number().int().min(1).max(100))
+    .optional()
+    .default('50'),
+});
+export const financialPageSchema = paginationQuerySchema;
+export const financialDebtQuerySchema = financialPageSchema.extend({
+  studentId: z.string().trim().min(1).max(200).optional(),
+});
+
+const financialReadPageSchema = paginationQuerySchema.extend({
+  limit: paginationQuerySchema.shape.limit.default('20'),
+});
+export const financialStudentQuerySchema = financialReadPageSchema.extend({
+  q: z.string().trim().min(2).max(100).optional(),
+});
+export const financialAnalysisQuerySchema = financialReadPageSchema.extend({
+  status: z.enum(['PENDENTE_ANALISE', 'PROCEDENTE', 'IMPROCEDENTE']).optional(),
+  studentId: z.string().trim().min(1).max(200).optional(),
+  debtId: z.string().trim().min(1).max(200).optional(),
+});
+export const financialAnalysisIdSchema = z.object({
+  id: z.string().trim().min(1).max(200),
+});
+export type FinancialStudentQuery = z.infer<typeof financialStudentQuerySchema>;
+export type FinancialAnalysisQuery = z.infer<typeof financialAnalysisQuerySchema>;
+
+export const financialMonthSchema = z.string().regex(/^(20\d{2}|2100)-(0[1-9]|1[0-2])$/, 'Use um mês válido no formato AAAA-MM (2000–2100)');
+export const monthlyReportQuerySchema = z.object({ month: financialMonthSchema }).strict();
+export const salaryQuerySchema = financialReadPageSchema.extend({ month: financialMonthSchema });
+export const createSalarySchema = z.object({
+  teacherId: z.string().trim().min(1).max(200),
+  month: financialMonthSchema,
+  amount: financialAmountSchema,
+  notes: z.string().trim().max(500).default(''),
+}).strict();
+export const updateSalarySchema = createSalarySchema.pick({ amount: true, notes: true }).extend({
+  expectedUpdatedAt: z.string().datetime(),
+}).strict();
+export const salaryPaymentSchema = createPaymentSchema.omit({ debtId: true }).extend({
+  expectedUpdatedAt: z.string().datetime(),
+}).strict();
+export type CreateSalaryInput = z.infer<typeof createSalarySchema>;
+export type UpdateSalaryInput = z.infer<typeof updateSalarySchema>;
+export type SalaryPaymentInput = z.infer<typeof salaryPaymentSchema>;
+export type SalaryQuery = z.infer<typeof salaryQuerySchema>;
 export type CreateDeviceInput = z.infer<typeof createDeviceSchema>;
 export type UpdateDeviceStatusInput = z.infer<typeof updateDeviceStatusSchema>;
 export type UpdateDeviceInput = z.infer<typeof updateDeviceSchema>;
 
+// Schemas do módulo academic (preservado do upstream — grupo académico)
 export const createDepartmentSchema = z.object({
   code: z.string().trim().min(2).max(20),
   name: z.string().trim().min(3).max(120),
   description: z.string().max(500).optional(),
 });
+
 export const createCourseSchema = z.object({
   code: z.string().trim().min(2).max(10),
   name: z.string().trim().min(3).max(120),
   description: z.string().max(500).optional(),
   departmentId: z.string().min(1, 'Departamento obrigatório'),
 });
+
 export const createSubjectSchema = z.object({
   code: z.string().trim().min(2).max(10),
   name: z.string().trim().min(3).max(120),
   credits: z.number().int().positive(),
   courseId: z.string().min(1, 'Curso obrigatório'),
 });
+
 export const batchCreateCourseWithSubjectsSchema = z.object({
   course: createCourseSchema,
   subjects: z.array(createSubjectSchema.omit({ courseId: true })).min(1),
 });
+
 export type CreateDepartmentInput = z.infer<typeof createDepartmentSchema>;
 export type CreateCourseInput = z.infer<typeof createCourseSchema>;
 export type CreateSubjectInput = z.infer<typeof createSubjectSchema>;

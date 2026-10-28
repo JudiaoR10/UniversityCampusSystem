@@ -263,3 +263,29 @@ canvas {
   }
 }
 
+
+.financial-print-view {
+  display: none;
+}
+
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+  :root { background: #fff; }
+  body.financial-print-mode { background: #fff !important; min-height: 0; overflow: visible; }
+  body.financial-print-mode::before { display: none; }
+  body.financial-print-mode > * { display: none !important; }
+  body.financial-print-mode > .financial-print-view {
+    display: block !important;
+    color: #000;
+    background: #fff;
+    font: 10pt Arial, sans-serif;
+  }
+  .financial-print-view .table-scroll { overflow: visible; width: 100%; }
+  .financial-print-view table { min-width: 0 !important; width: 100%; table-layout: fixed; border-collapse: collapse; }
+  .financial-print-view th, .financial-print-view td { padding: 6pt; overflow-wrap: anywhere; white-space: normal; vertical-align: top; }
+  .financial-print-view thead { display: table-header-group; }
+  .financial-print-view tr { break-inside: avoid; }
+  .financial-print-view p { margin: 8pt 0; }
+  .financial-print-view * { color: #000 !important; }
+  .financial-print-view h3 { font-size: 15pt; margin-bottom: 10pt; }
+}

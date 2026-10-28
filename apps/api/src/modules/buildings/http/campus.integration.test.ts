@@ -143,6 +143,34 @@ describe('API Grupo Infraestrutura (edifícios, laboratórios, equipamentos)', (
     expect(actualizado.body.data.name).toBe('Projector actualizado');
   });
 
+  it('apagar recursos inexistentes devolve 404 e não 500', async () => {
+    const casos: Array<[string, string]> = [
+    ['buildings', 'BUILDING_NOT_FOUND'],
+    ['laboratories', 'LABORATORY_NOT_FOUND'],
+    ['equipment', 'EQUIPMENT_NOT_FOUND'],
+    ['rooms', 'ROOM_NOT_FOUND'],
+    ];
+    for (const [recurso, codigo] of casos) {
+    const res = await request(app)
+    .delete(`${api}/${recurso}/inexistente-${sufixo}`)
+    .set(auth(adminToken));
+    expect(res.status, recurso).toBe(404);
+    expect(res.body.code, recurso).toBe(codigo);
+    }
+    });
+    it('não apaga edifício que ainda tem laboratórios (409 BUILDING_IN_USE)', async () =>
+   {
+    const res = await request(app)
+    .delete(`${api}/buildings/${edificioId}`)
+    .set(auth(adminToken));
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('BUILDING_IN_USE');
+    const continuaExistir = await request(app)
+    .get(`${api}/buildings/${edificioId}`)
+    .set(auth(adminToken));
+    expect(continuaExistir.status).toBe(200);
+    });
+   
   it('remove equipamento, laboratório e edifício', async () => {
     const equipamento = await request(app)
       .delete(`${api}/equipment/${equipamentoId}`)

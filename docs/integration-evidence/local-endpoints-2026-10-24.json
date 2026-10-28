@@ -1,0 +1,41 @@
+{
+  "executedAt": "2026-10-24T09:21:16.728Z",
+  "base": "http://127.0.0.1:5173/api/v1",
+  "results": [
+    {
+      "role": "ADMIN",
+      "path": "/financial/students",
+      "status": 200
+    },
+    {
+      "role": "ADMIN",
+      "path": "/financial/analysis-requests",
+      "status": 200
+    },
+    {
+      "role": "ADMIN",
+      "path": "/financial/teachers",
+      "status": 200
+    },
+    {
+      "role": "ADMIN",
+      "path": "/financial/salaries?month=2026-10",
+      "status": 200
+    },
+    {
+      "role": "ADMIN",
+      "path": "/financial/reports/payments?month=2026-10",
+      "status": 200
+    },
+    {
+      "role": "ADMIN",
+      "path": "/financial/reports/salaries?month=2026-10",
+      "status": 200
+    },
+    {
+      "role": "STUDENT",
+      "path": "/financial/analysis-requests",
+      "status": 200
+    }
+  ]
+}

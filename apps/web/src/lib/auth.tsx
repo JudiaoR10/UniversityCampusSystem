@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AuthUser } from '@smart-campus/shared-types';
 import { createApiClient, type ApiClient } from '@smart-campus/api-client';
+import { apiBaseUrl } from './apiBaseUrl';
 
 const ACCESS_KEY = 'sc_access';
 const REFRESH_KEY = 'sc_refresh';
@@ -29,10 +30,8 @@ const tokenStore = {
   },
 };
 
-const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4100/api/v1';
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const api = useMemo(() => createApiClient(baseUrl, tokenStore), []);
+  const api = useMemo(() => createApiClient(apiBaseUrl, tokenStore), []);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 

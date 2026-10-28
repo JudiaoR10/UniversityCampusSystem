@@ -197,22 +197,36 @@ Marca o alerta como confirmado (`acknowledged: true`). Sem corpo. Idempotente: c
 | POST | `/parking/readings` | Sim | TECHNICIAN, COORDINATOR, ADMIN | Registar entrada/saída LPR |
 | PATCH | `/parking/spots/:id` | Sim | TECHNICIAN, COORDINATOR, ADMIN | Actualizar estado de vaga |
 
-### 3.9 Gestão Académica (departamentos, cursos, disciplinas)
+### 3.9 Grupo Académico (G3 — avaliações, notas, horários, resultados e assiduidade)
 
 | Método | Rota | Auth | Roles | Descrição |
 | --- | --- | --- | --- | --- |
-| GET | `/departments` | Sim | Qualquer | Listar departamentos |
-| GET | `/departments/:id` | Sim | Qualquer | Obter departamento |
-| POST | `/departments` | Sim | ADMIN, COORDINATOR | Criar departamento |
-| DELETE | `/departments/:id` | Sim | ADMIN, COORDINATOR | Eliminar departamento (só se não tiver cursos nem docentes) |
-| GET | `/courses` | Sim | Qualquer | Listar cursos (`?departmentId=`) |
-| POST | `/courses` | Sim | ADMIN, COORDINATOR | Criar curso |
-| POST | `/courses/batch-with-subjects` | Sim | ADMIN, COORDINATOR | Criar curso + disciplinas numa transação atómica |
-| GET | `/courses/:courseId/subjects` | Sim | Qualquer | Listar disciplinas de um curso |
-| GET | `/subjects` | Sim | Qualquer | Listar disciplinas (`?courseId=`) |
-| POST | `/subjects` | Sim | ADMIN, COORDINATOR | Criar disciplina |
+| GET | `/assessments` | Sim | STUDENT, TEACHER, COORDINATOR, ADMIN | Listar avaliações (filtros por curso/disciplina) |
+| GET | `/assessments/options` | Sim | TEACHER, COORDINATOR, ADMIN | Disciplinas disponíveis para criar avaliações |
+| POST | `/assessments` | Sim | TEACHER (docente da disciplina) | Criar avaliação |
+| GET | `/assessments/:id` | Sim | TEACHER, COORDINATOR, ADMIN | Obter avaliação |
+| GET | `/assessments/:id/roster` | Sim | TEACHER, COORDINATOR, ADMIN | Pauta de notas (estudantes do curso + nota actual) |
+| PATCH | `/assessments/:id` | Sim | TEACHER, COORDINATOR, ADMIN | Alterar avaliação |
+| GET | `/assessments/:id/grades` | Sim | TEACHER, COORDINATOR, ADMIN | Notas da avaliação |
+| POST | `/assessments/:id/grades` | Sim | TEACHER (docente da disciplina) | Lançar nota em bloco |
+| GET | `/my/grades` | Sim | STUDENT | Notas do próprio estudante |
+| GET | `/my/final-grades` | Sim | STUDENT | Nota final por disciplina (com exame: (admissão+exame)/2) |
+| GET | `/students/:id/grades` | Sim | STUDENT, TEACHER, COORDINATOR, ADMIN | Notas do estudante (STUDENT: só o próprio) |
+| GET | `/students/:id/final-grades` | Sim | STUDENT, TEACHER, COORDINATOR, ADMIN | Nota final por disciplina (STUDENT: só o próprio) |
+| POST | `/results` | Sim | TEACHER (docente da disciplina) | Registar resultado/acta |
+| GET | `/results` | Sim | STUDENT, TEACHER, COORDINATOR, ADMIN | Listar resultados (STUDENT: só os seus) |
+| GET | `/schedules` | Sim | STUDENT, TEACHER, COORDINATOR, ADMIN | Horários (filtros `courseId`, `subjectId`, `teacherId`, `roomId`, `from`, `to`) |
+| GET | `/schedules/options` | Sim | COORDINATOR, ADMIN | Dados de referência para gestão de horários |
+| POST | `/schedules` | Sim | COORDINATOR, ADMIN | Criar sessão de horário |
+| PATCH | `/schedules/:id` | Sim | COORDINATOR, ADMIN | Alterar sessão de horário |
+| DELETE | `/schedules/:id` | Sim | COORDINATOR, ADMIN | Eliminar sessão de horário |
+| GET | `/attendance` | Sim | STUDENT, TEACHER, COORDINATOR, ADMIN | Registos de assiduidade (scoping por role) |
+| GET | `/attendance/summary` | Sim | STUDENT, TEACHER, COORDINATOR, ADMIN | Taxas de assiduidade por estudante |
+| GET | `/attendance/sessions` | Sim | TEACHER, COORDINATOR, ADMIN | Sessões disponíveis para registar assiduidade |
+| GET | `/attendance/sessions/:id` | Sim | TEACHER, COORDINATOR, ADMIN | Pauta de assiduidade da sessão |
+| POST | `/attendance/sessions/:id` | Sim | TEACHER, COORDINATOR, ADMIN | Registar/actualizar assiduidade em bloco |
 
-**Total Core documentado:** 1 health + **47 endpoints** em `/api/v1` (23 do Core base, incluindo 2 novos em `/rooms`, + 10 da Gestão Académica + 14 do Grupo Infraestrutura).
+**Total Core documentado:** 1 health + **68 endpoints** em `/api/v1` (23 do Core base, incluindo 2 novos em `/rooms`, + 10 da Gestão Académica + 14 do Grupo Infraestrutura + 21 do Grupo Académico G3 — avaliações, notas, resultados, horários e assiduidade).
 
 ---
 
@@ -682,111 +696,106 @@ Matrículas válidas:
 5. Roles TECHNICIAN+ nas mutações  
 6. Seed do parque demo  
 
----
-
-### 5.10 Gestão Académica (`academic`)
-
-Hierarquia: **Department (1) → Course (N) → Subject (N)**. Os três recursos partilham o mesmo router e o mesmo serviço.
+### 5.10 Grupo Académico — Horários e Avaliações (G3)
 
 | Item | Detalhe |
 | --- | --- |
-| Router | `apps/api/src/modules/academic/http/academicRouter.ts` |
-| Serviço | `apps/api/src/modules/academic/application/academicService.ts` |
-| Modelos Prisma | `Department`, `Course`, `Subject` (já existentes no Core) |
-| Leitura | Qualquer utilizador autenticado |
-| Escrita | ADMIN, COORDINATOR |
-| Páginas | `DepartmentsPage`, `CoursesPage`, `SubjectsPage` (`/departments`, `/courses`, `/subjects`) |
+| Routers | `apps/api/src/modules/schedules/http/schedulesRouter.ts` e `apps/api/src/modules/assessments/http/assessmentsRouter.ts` |
+| Serviços | `.../schedules/application/scheduleService.ts` e `.../assessments/application/*Service.ts` |
+| Validação | `packages/validation/src/index.ts` (`createScheduleSchema`, `updateScheduleSchema`, `gradeSchema`, …) |
+| UI | `apps/web/src/pages/SchedulesPage.tsx` (através de `useAuth().api`) |
 
-Os campos seguem o padrão do Core (`id`, `name`). Os códigos (`code`) são **únicos globalmente** em cada recurso.
+#### GET `/schedules`
 
-#### GET `/departments` / GET `/departments/:id`
+Devolve os horários visíveis para o papel autenticado (contrato G3):
 
-DTO: `{ id, code, name, description, createdAt, updatedAt }`.
+- STUDENT: sessões do próprio curso; `?studentId` de outro estudante → **403** (anti-BOLA).
+- TEACHER: sessões em que é docente.
+- COORDINATOR/ADMIN: todas; `?studentId` resolve o curso do estudante.
 
-#### POST `/departments`
+Filtros opcionais (apenas restringem, nunca ampliam o acesso): `courseId`, `subjectId`, `teacherId`, `roomId`, `from`, `to`. Datas em ISO-8601; valor inválido → **400 `VALIDATION_ERROR`**.
 
-**Body:**
+#### GET `/schedules/options`
+
+Apenas COORDINATOR/ADMIN. Devolve `{ courses, subjects, teachers, rooms }` para preencher o formulário de gestão. Docentes listados são utilizadores activos com role TEACHER.
+
+#### POST `/schedules`
+
+Apenas COORDINATOR/ADMIN.
 
 ```json
 {
-  "code": "DEI",
-  "name": "Departamento de Engenharia Informática",
-  "description": "Opcional"
+  "title": "Aula PTP3 — Projecto",
+  "subjectId": "<subject-id>",
+  "courseId": "<course-id>",
+  "teacherId": "<user-id-role-TEACHER-ou-null>",
+  "roomId": "<room-id-ou-null>",
+  "startsAt": "2026-11-02T09:00:00.000Z",
+  "endsAt": "2026-11-02T10:30:00.000Z"
 }
 ```
 
-Resposta `201`. Código repetido → `409 DEPARTMENT_CODE_EXISTS`. Regista o evento de auditoria `DEPARTMENT_CREATE`.
+Erros de negócio: disciplina inexistente (**404 `SUBJECT_NOT_FOUND`**), curso inexistente (**404 `COURSE_NOT_FOUND`**), docente inexistente (**404 `TEACHER_NOT_FOUND`**), sala inexistente (**404 `ROOM_NOT_FOUND`**), utilizador indicado como docente sem role TEACHER (**409 `TEACHER_ROLE_MISMATCH`**), disciplina de outro curso (**409 `SUBJECT_COURSE_MISMATCH`**), `endsAt <= startsAt` (**400**).
 
-#### DELETE `/departments/:id`
+#### PATCH `/schedules/:id`
 
-Resposta `200` com `{ "ok": true }`. Regra de negócio: se o departamento tiver cursos ou docentes associados, devolve `400 BUSINESS_RULE_VIOLATION` e não elimina. Regista `DEPARTMENT_DELETE`.
+Alteração parcial; as validações de referências e datas são reaplicadas sobre o estado final.
 
-#### GET `/courses`
+#### DELETE `/schedules/:id`
 
-Filtro opcional `?departmentId=<id>`. DTO inclui `department: { id, code, name }`.
+Apenas COORDINATOR/ADMIN; devolve `{ "data": { "id": "..." } }`. Registado na auditoria (`SCHEDULE_DELETE`). Id inexistente → **404 `SCHEDULE_NOT_FOUND`**.
 
-#### POST `/courses`
+> Nota: `ClassSchedule.roomId` é uma referência solta (sem relação Prisma). O campo `room` do `ScheduleDto` é resolvido numa segunda consulta e pode vir `null`.
 
-**Body:**
+#### Avaliações e resultados
+
+`POST /assessments` aceita `points` (com `maxPoints`) ou `percentage`; `POST /assessments/:id/grades` lança notas respeitando o tipo. `GET /my/grades` (STUDENT), `GET /students/:id/grades` e `/final-grades` (staff, com verificação anti-BOLA), `POST /results` e `GET /results` completam o contrato G3.
+
+---
+
+### 5.11 Grupo Académico — Assiduidade (G3)
+
+| Item | Detalhe |
+| --- | --- |
+| Router | `apps/api/src/modules/attendance/http/attendanceRouter.ts` |
+| Serviço | `apps/api/src/modules/attendance/application/attendanceService.ts` |
+| Validação | `packages/validation/src/index.ts` (`attendanceStatusSchema`, `markAttendanceSchema`) |
+| UI | `apps/web/src/pages/AttendancePage.tsx` (através de `useAuth().api`) |
+
+#### GET `/attendance/sessions`
+
+Apenas TEACHER (sessões que lecciona), COORDINATOR, ADMIN (todas). Reutiliza `listSchedules` para devolver as sessões onde se pode registar assiduidade.
+
+#### GET `/attendance/sessions/:id`
+
+Pauta da sessão: todos os estudantes do curso da sessão, com o estado actual (`PRESENT`, `ABSENT`, `LATE`, `JUSTIFIED`) ou `null` se ainda não registado. Apenas TEACHER (sessões que lecciona), COORDINATOR, ADMIN.
+
+#### POST `/attendance/sessions/:id`
+
+Registo/actualização em bloco (upsert). Body:
 
 ```json
 {
-  "code": "LEI",
-  "name": "Licenciatura em Engenharia Informática",
-  "description": "Opcional",
-  "departmentId": "<id-do-departamento>"
-}
-```
-
-`departmentId` obtém-se de `GET /departments`. Departamento inexistente → `404 DEPARTMENT_NOT_FOUND`; código repetido → `409 COURSE_CODE_EXISTS`.
-
-#### POST `/courses/batch-with-subjects`
-
-Cria o curso e as disciplinas **numa única transação**: se algo falhar (por exemplo, dois códigos de disciplina iguais), nada é gravado.
-
-```json
-{
-  "course": {
-    "code": "LEI",
-    "name": "Licenciatura em Engenharia Informática",
-    "departmentId": "<id-do-departamento>"
-  },
-  "subjects": [
-    { "code": "PROG1", "name": "Programação I", "credits": 6 },
-    { "code": "PROG2", "name": "Programação II", "credits": 6 }
+  "records": [
+    { "studentId": "<studentProfile-id>", "status": "PRESENT", "note": "Chegou atrasado" },
+    { "studentId": "...", "status": "ABSENT", "note": null }
   ]
 }
 ```
 
-Resposta `201`: `{ "course": CourseDto, "subjects": SubjectDto[] }`. Código duplicado → `409 DUPLICATE_CODE` (rollback total).
+Validações: lista não vazia, estado válido, estudante existe, estudante pertence ao curso da sessão (senão **409 `STUDENT_COURSE_MISMATCH`**). Regista auditoria `ATTENDANCE_MARK`.
 
-#### GET `/subjects` / GET `/courses/:courseId/subjects`
+#### GET `/attendance`
 
-Filtro opcional `?courseId=<id>` em `/subjects`. DTO inclui `course: { id, code, name }` e `credits`.
+Lista de registos (scoping por role):
+- STUDENT: apenas os próprios.
+- TEACHER: registos das sessões que lecciona.
+- COORDINATOR/ADMIN: todos; filtros opcionais `studentId`, `scheduleId`, `status`.
+- STUDENT a filtrar `studentId` de outro → **403** (anti-BOLA).
 
-#### POST `/subjects`
+#### GET `/attendance/summary`
 
-**Body:**
-
-```json
-{
-  "code": "PROG1",
-  "name": "Programação I",
-  "credits": 6,
-  "courseId": "<id-do-curso>"
-}
-```
-
-`courseId` obtém-se de `GET /courses`. Curso inexistente → `404 COURSE_NOT_FOUND`; código repetido → `409 SUBJECT_CODE_EXISTS`.
-
-**Passos de criação:**
-
-1. Reutilizar os modelos `Department`, `Course`, `Subject` (sem migração nova)  
-2. `createDepartmentSchema`, `createCourseSchema`, `createSubjectSchema`, `batchCreateCourseWithSubjectsSchema`  
-3. Serviço com Prisma, `$transaction` no lote e `audit()` nas mutações  
-4. Roles de escrita: ADMIN, COORDINATOR (leitura: qualquer autenticado)  
-5. DTOs em `shared-types`, métodos em `api-client` e três páginas no `apps/web`  
-6. Testes: `academic.integration.test.ts`  
+Taxa de assiduidade por estudante: `(PRESENT + LATE) / total * 100`. Scoping igual a `/attendance`. `studentId` opcional (STUDENT só o próprio; staff qualquer).
 
 ---
 
@@ -1040,7 +1049,6 @@ npm run test:api
 | Ficheiro | Cobertura |
 | --- | --- |
 | `apps/api/src/modules/auth/http/auth.integration.test.ts` | health, login, /me, dashboard 401, fluxo salas→ocorrências→audit, students sem /users |
-| `apps/api/src/modules/academic/http/academic.integration.test.ts` | Gestão Académica: auth/RBAC, CRUD de departamentos, cursos e disciplinas, regra de eliminação, rollback do lote, auditoria |
 | `apps/api/src/modules/auth/domain/validation.test.ts` | validação |
 | `apps/api/src/modules/parking/domain/mozambiquePlate.test.ts` | matrículas MZ |
 
@@ -1160,12 +1168,10 @@ Só `ADMIN` e `COORDINATOR`. Um dispositivo `ONLINE` não se elimina.
 | HTTP | code típico | Significado |
 | --- | --- | --- |
 | 400 | `VALIDATION_ERROR` | Body inválido (Zod) |
-| 400 | `BUSINESS_RULE_VIOLATION` | Regra de negócio (ex.: eliminar departamento com cursos ou docentes) |
 | 401 | `UNAUTHORIZED` / `TOKEN_INVALID` / `USER_INACTIVE` | Sem auth ou token inválido |
 | 403 | `FORBIDDEN` | Role sem permissão |
-| 404 | `ROOM_NOT_FOUND`, `SENSOR_NOT_FOUND`, `PARKING_LOT_NOT_FOUND`, `DEPARTMENT_NOT_FOUND`, `COURSE_NOT_FOUND`, … | Recurso inexistente |
+| 404 | `ROOM_NOT_FOUND`, `SENSOR_NOT_FOUND`, `PARKING_LOT_NOT_FOUND`, … | Recurso inexistente |
 | 409 | `CONFLICT` | Ex.: email duplicado |
-| 409 | `DEPARTMENT_CODE_EXISTS`, `COURSE_CODE_EXISTS`, `SUBJECT_CODE_EXISTS`, `DUPLICATE_CODE` | Código académico já existente |
 | 429 | `RATE_LIMITED` | Demasiados pedidos |
 | 500 | `INTERNAL_ERROR` | Erro não tratado |
 
@@ -1233,15 +1239,6 @@ Marcar ao validar o Core:
 - [ ] Matrícula inválida → 400  
 - [ ] Patch spot  
 
-### Académico
-
-- [ ] Listar departamentos, cursos e disciplinas (qualquer role autenticado)  
-- [ ] Criar departamento / curso / disciplina com ADMIN ou COORDINATOR → 201  
-- [ ] Estudante a criar → 403  
-- [ ] Código repetido → 409  
-- [ ] Eliminar departamento com cursos → 400 `BUSINESS_RULE_VIOLATION`  
-- [ ] Lote com código duplicado → 409 e nada gravado  
-
 ### Documentação
 
 - [ ] Swagger abre e autentica  
@@ -1264,11 +1261,47 @@ Marcar ao validar o Core:
 | `/devices`, `/sensors/:id/readings`, `/alerts` | `modules/devices/http/devicesRouter.ts` |
 | Criação de dispositivos | `modules/devices/application/deviceService.ts` |
 | `/parking/*` | `modules/parking/http/parkingRouter.ts` |
-| `/departments`, `/courses`, `/subjects` | `modules/academic/http/academicRouter.ts` |
+| `/financial/*` | `modules/financial/http/financialRouter.ts` |
 | Middleware JWT/RBAC | `apps/api/src/middleware/auth.ts` |
 | Schemas Zod | `packages/validation/src/index.ts` |
 | Cliente frontend | `packages/api-client/src/index.ts` |
 | Confirmação de alertas | `modules/devices/application/alertService.ts` |
+
+---
+
+## Módulo financeiro
+
+A interface `/financial` consome exclusivamente o cliente HTTP partilhado e apresenta as acções de acordo com o perfil autenticado:
+
+- `STUDENT` consulta as próprias dívidas, pagamentos, contestações e avisos, e pode submeter uma contestação;
+- `FINANCE` pesquisa estudantes do Core, gere dívidas e pagamentos, decide contestações, acompanha avisos, gere salários de docentes e emite relatórios mensais;
+- `ADMIN` consulta os dados financeiros e salários, imprime relatórios e configura as políticas financeiras; não cria nem altera salários;
+- os restantes perfis não têm acesso ao módulo financeiro.
+
+A criação de utilizadores e os dados académicos de estudantes e docentes continuam sob responsabilidade do Core. A pesquisa financeira lê apenas a identidade mínima necessária. O registo de pagamento salarial confirma um pagamento já efectuado e não inicia transferências bancárias.
+
+### Endpoints financeiros
+
+| Área | Endpoints principais | Perfis |
+| --- | --- | --- |
+| Dívidas e pagamentos | `GET/POST /financial/debts`, `GET /financial/debts/:id`, `POST /financial/payments` | STUDENT lê os próprios dados; FINANCE/ADMIN consultam; FINANCE regista |
+| Estado, histórico e avisos | `GET /financial/students/:id/status`, `GET /financial/students/:id/history`, `GET /financial/students/:id/notifications` | STUDENT próprio; FINANCE/ADMIN |
+| Pesquisa de estudantes | `GET /financial/students` | FINANCE/ADMIN |
+| Contestações | `GET/POST/PATCH /financial/analysis-requests` | STUDENT submete e consulta as próprias; FINANCE/ADMIN consultam; FINANCE decide |
+| Resumo e políticas | `GET /financial/reports`, `GET/PATCH /financial/policies/:id` | FINANCE/ADMIN; política alterada apenas por ADMIN |
+| Entrega de avisos | `GET/POST /financial/notifications/:id/delivery|retry` | FINANCE/ADMIN |
+| Docentes e salários | `GET /financial/teachers`, `GET/POST/PATCH /financial/salaries`, `POST /financial/salaries/:id/payment` | FINANCE gere; ADMIN apenas consulta |
+| Relatórios mensais | `GET /financial/reports/payments`, `GET /financial/reports/salaries` | FINANCE/ADMIN |
+
+Os parâmetros, corpos, respostas e códigos de erro estão definidos em [openapi.yaml](./openapi.yaml). A matriz completa está em [authorization-matrix.md](./authorization-matrix.md).
+
+### Verificação
+
+```bash
+npm run test:financial:isolated
+```
+
+O teste cria uma base PostgreSQL descartável, aplica todas as migrações, executa o build e valida API e frontend. As evidências e capturas estão em [integration-evidence/README.md](./integration-evidence/README.md).
 
 ---
 
@@ -1283,3 +1316,6 @@ Marcar ao validar o Core:
 | [manual-construcao-core.md](./manual-construcao-core.md) | Construção do sistema |
 | [architecture.md](./architecture.md) | Arquitectura |
 
+---
+
+*Fim do Manual das APIs do Core.*

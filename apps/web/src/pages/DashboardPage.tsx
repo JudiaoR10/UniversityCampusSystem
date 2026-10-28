@@ -100,7 +100,7 @@ export function DashboardPage() {
           <h3 className="font-display text-xl font-semibold text-campus-ink">Mapa de módulos</h3>
           <a
             className="text-sm font-medium text-campus-teal underline decoration-campus-teal/30 underline-offset-4"
-            href="http://localhost:4100/api/docs"
+            href="/api/docs"
             target="_blank"
             rel="noreferrer"
           >

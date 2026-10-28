@@ -1,0 +1,11 @@
+{
+  "startedAt": "2026-10-26T19:30:27.066Z",
+  "finishedAt": "2026-10-26T19:30:50.085Z",
+  "baseCore": "3343c24",
+  "database": "PostgreSQL 15 descartável; migrações oficiais + financeiras; seed oficial",
+  "apiPassed": 82,
+  "apiFailed": 0,
+  "web": "passed",
+  "build": "passed",
+  "success": true
+}

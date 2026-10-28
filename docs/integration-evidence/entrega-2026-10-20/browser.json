@@ -1,0 +1,15 @@
+{
+  "executedAt": "2026-10-20T09:21:53.929Z",
+  "success": true,
+  "checks": [
+    "Login FINANCE oficial",
+    "Criação de dívida via UI",
+    "Login STUDENT oficial",
+    "Consulta da mesma dívida por User.id",
+    "Ausência de criação administrativa para STUDENT",
+    "Contestação via UI",
+    "Referência de pagamento com mínimo de 4 caracteres",
+    "Pagamento FINANCE reflectido na consulta STUDENT",
+    "TEACHER sem menu financeiro e acesso directo redireccionado"
+  ]
+}

@@ -13,6 +13,7 @@ enum RoleCode {
   TECHNICIAN
   COORDINATOR
   ADMIN
+  FINANCE
 }
 
 enum IncidentStatus {
@@ -77,6 +78,21 @@ model User {
   auditEvents  AuditEvent[]
   notifications Notification[]
   maintenanceActions MaintenanceAction[]
+  periodsValidated      Period[]              @relation("PeriodValidatedBy")
+  assessmentsCreated    Assessment[]          @relation("AssessmentOwner")
+  gradesGiven           Grade[]               @relation("GradeAuthor")
+  schedulesTaught       ClassSchedule[]       @relation("ScheduleTeacher")
+  attendanceRecorded    Attendance[]          @relation("AttendanceRecordedBy")
+  exemptionsGiven       SubjectExemption[]    @relation("SubjectExemptionAuthor")
+  financialDebts         Debt[]                  @relation("DebtStudent")
+  financialPayments      Payment[]               @relation("PaymentStudent")
+  confirmedPayments      Payment[]               @relation("PaymentConfirmer")
+  financialStatus        FinancialStatus?         @relation("FinancialStatusStudent")
+  analysisRequests       AnalysisRequest[]       @relation("AnalysisRequestStudent")
+  resolvedAnalysisRequests AnalysisRequest[]     @relation("AnalysisRequestResolver")
+  financialNotifications FinancialNotification[] @relation("FinancialNotificationStudent")
+
+
 
   @@index([roleId])
   @@index([isActive])
@@ -118,6 +134,7 @@ model Course {
   subjects     Subject[]
   students     StudentProfile[]
   enrolments   Enrolment[]
+  schedules    ClassSchedule[]
 
   @@index([departmentId])
 }
@@ -131,6 +148,17 @@ model Subject {
   course    Course   @relation(fields: [courseId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  assessments             Assessment[]
+  schedules               ClassSchedule[]
+  requiredTestCount       Int?
+  // Nota mínima de admissão (0–20) para o estudante poder recorrer.
+  // null = regra institucional não configurada (sinalizado na API e bloqueia publicação).
+  recurrenceMinAdmission  Float?
+  // Estado de publicação da pauta da disciplina. Enquanto publicada, as
+  // notas não podem ser alteradas (reabertura explícita e auditada).
+  resultsPublishedAt      DateTime?
+  resultsPublishedById    String?
+  exemptions              SubjectExemption[]
 
   subjectEnrolments SubjectEnrolment[]
 
@@ -165,6 +193,20 @@ model StudentProfile {
 
   enrolments        Enrolment[]
   subjectEnrolments SubjectEnrolment[]
+  id             String      @id @default(cuid())
+  userId         String      @unique
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studentNumber  String      @unique
+  courseId       String?
+  course         Course?     @relation(fields: [courseId], references: [id])
+  yearOfStudy    Int?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  enrolments     Enrolment[]
+  grades         Grade[]
+  attendance     Attendance[]
+  periodResults  PeriodResult[]
+  exemptions     SubjectExemption[]
 
   @@index([courseId])
 }
@@ -181,8 +223,39 @@ model TeacherProfile {
   status       TeacherProfileStatus @default(ACTIVE)
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
+  department   Department? @relation(fields: [departmentId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  salaries     TeacherSalary[]
 
   @@index([departmentId])
+}
+
+enum SalaryStatus {
+  PENDING
+  PAID
+}
+
+// Registo financeiro mensal. O cadastro académico continua no Core.
+model TeacherSalary {
+  id            String       @id @default(cuid())
+  teacherId     String
+  teacher       TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  month         String
+  amount        Decimal      @db.Decimal(10, 2)
+  notes         String       @default("")
+  status        SalaryStatus @default(PENDING)
+  paymentMethod PaymentMethod?
+  referenceCode String?
+  paidAt        DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([teacherId, month])
+  @@unique([paymentMethod, referenceCode])
+  @@index([month, status])
+  @@index([paidAt])
+  @@map("teacher_salaries")
 }
 
 model Enrolment {
@@ -480,4 +553,375 @@ model PlateReading {
   @@index([lotId, recordedAt])
   @@index([plate])
   @@index([spotId])
+}
+
+// ====== Módulo 3 — G3: Avaliações, Notas, Assiduidade e Horários ======
+enum AssessmentType {
+  TEST
+  EXAM
+  ASSIGNMENT
+  PRACTICAL
+  ORAL
+  OTHER
+  RECURRENCE
+}
+
+enum GradingMode {
+  PERCENTAGE
+  POINTS
+  SCALE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  JUSTIFIED
+}
+
+enum PeriodType {
+  SEMESTER
+  TRIMESTER
+  QUARTER
+  ANNUAL
+}
+
+enum GradingScope {
+  GLOBAL
+  COURSE
+  SUBJECT
+  PERIOD
+}
+
+model AcademicYear {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  startsAt    DateTime
+  endsAt      DateTime
+  active      Boolean  @default(false)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  periods     Period[]
+}
+
+model Period {
+  id             String       @id @default(cuid())
+  code           String
+  name           String
+  type           PeriodType   @default(SEMESTER)
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  startsAt       DateTime
+  endsAt         DateTime
+  closed         Boolean      @default(false)
+  validatedAt    DateTime?
+  validatedById  String?
+  validatedBy    User?        @relation("PeriodValidatedBy", fields: [validatedById], references: [id])
+  description    String?
+  periodResults  PeriodResult[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([academicYearId, code])
+  @@index([academicYearId])
+  @@index([closed])
+}
+
+model GradingConfig {
+  id          String       @id @default(cuid())
+  scope       GradingScope @default(COURSE)
+  scopeId     String
+  name        String
+  rules       Json
+  appliesFrom DateTime?
+  appliesTo   DateTime?
+  active      Boolean      @default(true)
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([scope, scopeId])
+  @@index([active])
+}
+
+model PeriodResult {
+  id               String         @id @default(cuid())
+  periodId         String
+  period           Period         @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  studentId        String
+  student          StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  averagePercent   Float?
+  averageGrade     Int?
+  creditsAttempted Int            @default(0)
+  creditsObtained  Int            @default(0)
+  status           String?
+  complete         Boolean        @default(false)
+  metadata         Json?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([periodId, studentId])
+  @@index([studentId])
+  @@index([periodId])
+}
+
+model Assessment {
+  id          String         @id @default(cuid())
+  title       String
+  description String?
+  type        AssessmentType @default(TEST)
+  gradingMode GradingMode    @default(PERCENTAGE)
+  maxScore    Float          @default(20)
+  weight      Float
+  date        DateTime?
+  subjectId   String
+  subject     Subject        @relation(fields: [subjectId], references: [id])
+  createdById String
+  createdBy   User           @relation("AssessmentOwner", fields: [createdById], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  grades      Grade[]
+
+  @@index([subjectId])
+  @@index([createdById])
+}
+
+model Grade {
+  id           String         @id @default(cuid())
+  assessmentId String
+  assessment   Assessment     @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  value        Float
+  valuePercent Float
+  comment      String?
+  gradedById   String
+  gradedBy     User           @relation("GradeAuthor", fields: [gradedById], references: [id])
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([assessmentId, studentId])
+  @@index([studentId])
+  @@index([assessmentId])
+}
+
+model ClassSchedule {
+  id        String   @id @default(cuid())
+  title     String
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  teacherId String?
+  teacher   User?    @relation("ScheduleTeacher", fields: [teacherId], references: [id])
+  roomId    String?
+  startsAt  DateTime
+  endsAt    DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  attendance Attendance[]
+
+  @@index([courseId])
+  @@index([subjectId])
+  @@index([teacherId])
+}
+
+model Attendance {
+  id               String         @id @default(cuid())
+  classScheduleId  String
+  classSchedule    ClassSchedule  @relation(fields: [classScheduleId], references: [id], onDelete: Cascade)
+  studentProfileId String
+  studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  status           AttendanceStatus
+  note             String?
+  recordedById     String?
+  recordedBy       User?          @relation("AttendanceRecordedBy", fields: [recordedById], references: [id])
+  recordedAt       DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([classScheduleId, studentProfileId])
+  @@index([studentProfileId])
+  @@index([classScheduleId])
+  @@index([status])
+}
+
+model SubjectExemption {
+  id           String         @id @default(cuid())
+  subjectId    String
+  subject      Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exemptedById String
+  exemptedBy   User           @relation("SubjectExemptionAuthor", fields: [exemptedById], references: [id])
+  reason       String?
+  /** Nota de dispensa (0–20) escolhida pelo docente; null = usa a nota de admissão. */
+  grade        Float?
+  createdAt    DateTime       @default(now())
+
+  @@unique([subjectId, studentId])
+  @@index([subjectId])
+  @@index([studentId])
+}
+
+enum DebtStatus {
+  PENDENTE
+  VENCIDA
+  REGULARIZADA
+  CANCELADA
+}
+
+enum FinancialStatusType {
+  ACTIVE
+  BLOCKED
+}
+
+enum AnalysisRequestStatus {
+  PENDENTE_ANALISE
+  PROCEDENTE
+  IMPROCEDENTE
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CASH_DEPOSIT
+  MOBILE_MONEY
+  POS
+}
+
+// Divida: propina, multa ou taxa emitida para um estudante
+model Debt {
+  id               String            @id @default(cuid())
+  code             String            @unique
+  studentId        String
+  title            String
+  description      String?
+  amount           Decimal           @db.Decimal(10, 2)
+  origin           String
+  dueDate          DateTime
+  status           DebtStatus        @default(PENDENTE)
+  payments         Payment[]
+  analysisRequests AnalysisRequest[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  student User @relation("DebtStudent", fields: [studentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([studentId, status])
+  @@index([dueDate])
+  @@map("debts")
+}
+
+// Pagamento: confirmacao de liquidacao de uma divida
+model Payment {
+  id            String        @id @default(cuid())
+  code          String        @unique
+  debtId        String
+  studentId     String
+  amountPaid    Decimal       @db.Decimal(10, 2)
+  paymentMethod PaymentMethod
+  referenceCode String
+  confirmedById String
+  paidAt        DateTime      @default(now())
+  debt          Debt          @relation(fields: [debtId], references: [id])
+  createdAt     DateTime      @default(now())
+
+  student User @relation("PaymentStudent", fields: [studentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  confirmedBy User @relation("PaymentConfirmer", fields: [confirmedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([studentId])
+  @@index([debtId])
+  @@unique([paymentMethod, referenceCode])
+  @@unique([debtId])
+  @@map("payments")
+}
+
+// Estado financeiro: registo unico por estudante (ACTIVE ou BLOCKED)
+model FinancialStatus {
+  id        String              @id @default(cuid())
+  studentId String              @unique
+  status    FinancialStatusType @default(ACTIVE)
+  blockedAt DateTime?
+  reason    String?
+  updatedAt DateTime            @updatedAt
+
+  student User @relation("FinancialStatusStudent", fields: [studentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([studentId, status])
+  @@map("financial_status")
+}
+
+// Pedido de analise: contestacao formal de uma divida pelo estudante
+model AnalysisRequest {
+  id              String                @id @default(cuid())
+  code            String                @unique
+  debtId          String
+  studentId       String
+  reason          String
+  status          AnalysisRequestStatus @default(PENDENTE_ANALISE)
+  slaDueDate      DateTime
+  resolvedById    String?
+  resolvedAt      DateTime?
+  resolutionNotes String?
+  debt            Debt                  @relation(fields: [debtId], references: [id])
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  student User @relation("AnalysisRequestStudent", fields: [studentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  resolvedBy User? @relation("AnalysisRequestResolver", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([studentId, status])
+  @@index([debtId])
+  @@map("analysis_requests")
+}
+
+enum NotificationDeliveryStatus {
+  LOCAL_ONLY
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+// Aviso financeiro e registo persistente de envio para a API externa de notificacoes.
+model FinancialNotification {
+  id        String   @id @default(cuid())
+  studentId String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  eventType              String                     @default("FINANCIAL_NOTICE")
+  resourceId             String?
+  correlationId          String?
+  deliveryStatus         NotificationDeliveryStatus @default(PENDING)
+  externalNotificationId String?                    @unique
+  attempts               Int                        @default(0)
+  nextAttemptAt          DateTime                   @default(now())
+  lastAttemptAt          DateTime?
+  sentAt                 DateTime?
+  lastError              String?
+  lockedUntil            DateTime?
+  lockToken              String?
+
+  student User @relation("FinancialNotificationStudent", fields: [studentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([studentId, read])
+  @@index([deliveryStatus, nextAttemptAt])
+  @@map("financial_notifications")
+}
+
+// Politica financeira: configuracao global de regras de bloqueio e tolerancia
+model FinancialPolicy {
+  id               String   @id @default(cuid())
+  code             String   @unique @default("DEFAULT_POLICY")
+  gracePeriodDays  Int      @default(5)
+  autoBlockEnabled Boolean  @default(true)
+  maxDebtAmount    Decimal  @default(0.00) @db.Decimal(10, 2)
+  updatedAt        DateTime @updatedAt
+
+  @@map("financial_policies")
 }

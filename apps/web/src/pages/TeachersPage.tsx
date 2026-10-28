@@ -1,6 +1,8 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import type { DepartmentDto, TeacherProfileDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
+import { AlertMessage, type AlertState } from '../components/AlertMessage';
+import { useConfirm } from '../components/ConfirmDialog';
 import { PageIntro } from '../components/PageIntro';
 
 const statusLabel: Record<TeacherProfileDto['status'], string> = {
@@ -21,13 +23,16 @@ export function TeachersPage() {
   const [teachers, setTeachers] = useState<TeacherProfileDto[]>([]);
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [alert, setAlert] = useState<AlertState | null>(null);
   const [own, setOwn] = useState<TeacherProfileDto | null>(null);
   const [phone, setPhone] = useState('');
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [ownAlert, setOwnAlert] = useState<AlertState | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { confirm, dialog } = useConfirm();
   const [form, setForm] = useState({
-    userId: '',
+    email: '',
+    password: '',
+    fullName: '',
     employeeCode: '',
     departmentId: '',
     title: '',
@@ -47,7 +52,7 @@ export function TeachersPage() {
         current.departmentId || !first ? current : { ...current, departmentId: first.id },
       );
     } catch (err) {
-      setError(messageOf(err));
+      setAlert({ tone: 'error', message: messageOf(err) });
     } finally {
       setLoading(false);
     }
@@ -77,18 +82,39 @@ export function TeachersPage() {
 
   async function create(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    const department = departments.find((item) => item.id === form.departmentId);
+    const confirmed = await confirm({
+      title: 'Criar docente',
+      message: 'Confirma a criação da conta de acesso e do perfil de docente com estes dados?',
+      details: [
+        { label: 'Nome', value: form.fullName },
+        { label: 'Email', value: form.email },
+        { label: 'Código', value: form.employeeCode },
+        { label: 'Departamento', value: department ? `${department.code} — ${department.name}` : '—' },
+      ],
+      confirmLabel: 'Criar docente',
+    });
+    if (!confirmed) return;
+    setAlert(null);
     setSubmitting(true);
     try {
       await api.teachers.create({
-        userId: form.userId,
+        email: form.email,
+        password: form.password,
+        fullName: form.fullName,
         employeeCode: form.employeeCode,
         departmentId: form.departmentId,
         title: form.title || undefined,
         phone: form.phone || undefined,
       });
+      setAlert({
+        tone: 'success',
+        message: 'Docente criado com sucesso.',
+      });
       setForm({
-        userId: '',
+        email: '',
+        password: '',
+        fullName: '',
         employeeCode: '',
         departmentId: departments[0]?.id ?? '',
         title: '',
@@ -97,7 +123,7 @@ export function TeachersPage() {
       setLoading(true);
       await load();
     } catch (err) {
-      setError(messageOf(err));
+      setAlert({ tone: 'error', message: messageOf(err) });
     } finally {
       setSubmitting(false);
     }
@@ -105,27 +131,45 @@ export function TeachersPage() {
 
   async function saveOwn(event: FormEvent) {
     event.preventDefault();
-    setFeedback(null);
+    const confirmed = await confirm({
+      title: 'Guardar contacto',
+      message: 'Actualizar o número de telefone associado ao seu perfil?',
+      details: [{ label: 'Telefone', value: phone }],
+      confirmLabel: 'Guardar',
+    });
+    if (!confirmed) return;
+    setOwnAlert(null);
     setSubmitting(true);
     try {
       const res = await api.teachers.updateOwn({ phone });
       setOwn(res.data);
-      setFeedback('Contacto actualizado.');
+      setOwnAlert({ tone: 'success', message: 'Contacto actualizado com sucesso.' });
     } catch (err) {
-      setFeedback(messageOf(err));
+      setOwnAlert({ tone: 'error', message: messageOf(err) });
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function remove(id: string) {
-    if (!window.confirm('Remover este perfil de docente?')) return;
+  async function remove(teacher: TeacherProfileDto) {
+    const confirmed = await confirm({
+      title: 'Remover docente',
+      message: 'O perfil e a conta de acesso associada serão eliminados em definitivo.',
+      details: [
+        { label: 'Código', value: teacher.employeeCode },
+        { label: 'Nome', value: teacher.user.fullName },
+      ],
+      confirmLabel: 'Remover',
+    });
+    if (!confirmed) return;
+    setAlert(null);
     try {
-      await api.teachers.remove(id);
+      await api.teachers.remove(teacher.id);
+      setAlert({ tone: 'success', message: 'Docente removido com sucesso.' });
       setLoading(true);
       await load();
     } catch (err) {
-      setError(messageOf(err));
+      setAlert({ tone: 'error', message: messageOf(err) });
     }
   }
 
@@ -134,7 +178,7 @@ export function TeachersPage() {
       <PageIntro
         eyebrow="Gestão académica"
         title="Docentes"
-        description="Diretório de docentes e afectação departamental do Core."
+        description="Criar perfil de docente"
       />
 
       {isTeacher && own ? (
@@ -158,17 +202,34 @@ export function TeachersPage() {
           <button type="submit" className="btn-primary" disabled={submitting}>
             {submitting ? 'A guardar…' : 'Guardar contacto'}
           </button>
-          {feedback ? <p className="text-sm text-campus-deep/70">{feedback}</p> : null}
+          {ownAlert ? <AlertMessage {...ownAlert} /> : null}
         </form>
       ) : null}
 
       {isAdmin ? (
-        <form onSubmit={create} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-6">
+        <form onSubmit={create} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
           <input
             className="field-input !mt-0"
-            placeholder="userId"
-            value={form.userId}
-            onChange={(event) => setForm({ ...form, userId: event.target.value })}
+            type="email"
+            placeholder="Email da conta"
+            value={form.email}
+            onChange={(event) => setForm({ ...form, email: event.target.value })}
+            required
+          />
+          <input
+            className="field-input !mt-0"
+            type="password"
+            placeholder="Password (mín. 8)"
+            minLength={8}
+            value={form.password}
+            onChange={(event) => setForm({ ...form, password: event.target.value })}
+            required
+          />
+          <input
+            className="field-input !mt-0"
+            placeholder="Nome completo"
+            value={form.fullName}
+            onChange={(event) => setForm({ ...form, fullName: event.target.value })}
             required
           />
           <input
@@ -212,7 +273,9 @@ export function TeachersPage() {
         </form>
       ) : null}
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {alert ? <AlertMessage {...alert} /> : null}
+
+      {dialog}
 
       {loading ? (
         <p className="text-campus-deep/70">A carregar docentes…</p>
@@ -244,7 +307,7 @@ export function TeachersPage() {
                       <button
                         type="button"
                         className="rounded-lg border border-campus-line px-2.5 py-1 text-xs hover:bg-campus-mist"
-                        onClick={() => void remove(teacher.id)}
+                        onClick={() => void remove(teacher)}
                       >
                         Remover
                       </button>

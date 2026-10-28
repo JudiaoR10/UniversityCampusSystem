@@ -1,6 +1,8 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import type { CourseDto, StudentProfileDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
+import { AlertMessage, type AlertState } from '../components/AlertMessage';
+import { useConfirm } from '../components/ConfirmDialog';
 import { PageIntro } from '../components/PageIntro';
 
 const statusLabel: Record<StudentProfileDto['status'], string> = {
@@ -29,7 +31,8 @@ function OwnStudentProfile() {
   >({ status: 'loading' });
   const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [alert, setAlert] = useState<AlertState | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   useEffect(() => {
     let cancelled = false;
@@ -50,14 +53,21 @@ function OwnStudentProfile() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
+    const confirmed = await confirm({
+      title: 'Guardar contacto',
+      message: 'Actualizar o número de telefone associado ao seu perfil?',
+      details: [{ label: 'Telefone', value: phone }],
+      confirmLabel: 'Guardar',
+    });
+    if (!confirmed) return;
     setSaving(true);
-    setFeedback(null);
+    setAlert(null);
     try {
       const res = await api.students.updateOwn({ phone });
       setState({ status: 'ok', data: res.data });
-      setFeedback('Contacto actualizado.');
+      setAlert({ tone: 'success', message: 'Contacto actualizado com sucesso.' });
     } catch (error) {
-      setFeedback(messageOf(error));
+      setAlert({ tone: 'error', message: messageOf(error) });
     } finally {
       setSaving(false);
     }
@@ -73,9 +83,9 @@ function OwnStudentProfile() {
         <PageIntro
           eyebrow="Área do estudante"
           title="O meu perfil"
-          description="Perfil académico associado à sua conta do Core."
+          description="Perfil académico."
         />
-        <p className="surface p-5 text-sm text-red-700">{state.message}</p>
+        <AlertMessage tone="error" message={state.message} />
       </div>
     );
   }
@@ -87,7 +97,7 @@ function OwnStudentProfile() {
       <PageIntro
         eyebrow="Área do estudante"
         title="O meu perfil"
-        description="Perfil académico associado à sua conta do Core."
+        description="Perfil académico."
       />
 
       <section className="surface grid gap-4 p-5 sm:grid-cols-2">
@@ -115,8 +125,10 @@ function OwnStudentProfile() {
         <button type="submit" className="btn-primary" disabled={saving}>
           {saving ? 'A guardar…' : 'Guardar contacto'}
         </button>
-        {feedback ? <p className="text-sm text-campus-deep/70">{feedback}</p> : null}
+        {alert ? <AlertMessage {...alert} /> : null}
       </form>
+
+      {dialog}
     </div>
   );
 }
@@ -126,10 +138,13 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
   const [students, setStudents] = useState<StudentProfileDto[]>([]);
   const [courses, setCourses] = useState<CourseDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [alert, setAlert] = useState<AlertState | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { confirm, dialog } = useConfirm();
   const [form, setForm] = useState({
-    userId: '',
+    email: '',
+    password: '',
+    fullName: '',
     studentNumber: '',
     courseId: '',
     yearOfStudy: '1',
@@ -146,7 +161,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
         current.courseId || !first ? current : { ...current, courseId: first.id },
       );
     } catch (err) {
-      setError(messageOf(err));
+      setAlert({ tone: 'error', message: messageOf(err) });
     } finally {
       setLoading(false);
     }
@@ -158,34 +173,72 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
 
   async function create(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    const course = courses.find((item) => item.id === form.courseId);
+    const confirmed = await confirm({
+      title: 'Criar estudante',
+      message: 'Confirma a criação da conta de acesso e do perfil de estudante com estes dados?',
+      details: [
+        { label: 'Nome', value: form.fullName },
+        { label: 'Email', value: form.email },
+        { label: 'Nº de estudante', value: form.studentNumber },
+        { label: 'Curso', value: course ? `${course.code} — ${course.name}` : '—' },
+      ],
+      confirmLabel: 'Criar estudante',
+    });
+    if (!confirmed) return;
+    setAlert(null);
     setSubmitting(true);
     try {
       await api.students.create({
-        userId: form.userId,
+        email: form.email,
+        password: form.password,
+        fullName: form.fullName,
         studentNumber: form.studentNumber,
         courseId: form.courseId,
         yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : undefined,
         phone: form.phone || undefined,
       });
-      setForm({ userId: '', studentNumber: '', courseId: '', yearOfStudy: '1', phone: '' });
+      setAlert({
+        tone: 'success',
+        message: 'Estudante criado com sucesso.',
+      });
+      setForm({
+        email: '',
+        password: '',
+        fullName: '',
+        studentNumber: '',
+        courseId: '',
+        yearOfStudy: '1',
+        phone: '',
+      });
       setLoading(true);
       await load();
     } catch (err) {
-      setError(messageOf(err));
+      setAlert({ tone: 'error', message: messageOf(err) });
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function remove(id: string) {
-    if (!window.confirm('Remover este perfil de estudante?')) return;
+  async function remove(student: StudentProfileDto) {
+    const confirmed = await confirm({
+      title: 'Remover estudante',
+      message: 'O perfil e a conta de acesso associada serão eliminados em definitivo.',
+      details: [
+        { label: 'Nº de estudante', value: student.studentNumber },
+        { label: 'Nome', value: student.user.fullName },
+      ],
+      confirmLabel: 'Remover',
+    });
+    if (!confirmed) return;
+    setAlert(null);
     try {
-      await api.students.remove(id);
+      await api.students.remove(student.id);
+      setAlert({ tone: 'success', message: 'Estudante removido com sucesso.' });
       setLoading(true);
       await load();
     } catch (err) {
-      setError(messageOf(err));
+      setAlert({ tone: 'error', message: messageOf(err) });
     }
   }
 
@@ -194,16 +247,33 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
       <PageIntro
         eyebrow="Gestão académica"
         title="Estudantes"
-        description="Perfis de estudante ligados aos utilizadores do Core e ao curso da gestão académica."
+        description="Criar perfil de estudante"
       />
 
       {canManage ? (
-        <form onSubmit={create} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-6">
+        <form onSubmit={create} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
           <input
             className="field-input !mt-0"
-            placeholder="userId"
-            value={form.userId}
-            onChange={(event) => setForm({ ...form, userId: event.target.value })}
+            type="email"
+            placeholder="Email da conta"
+            value={form.email}
+            onChange={(event) => setForm({ ...form, email: event.target.value })}
+            required
+          />
+          <input
+            className="field-input !mt-0"
+            type="password"
+            placeholder="Password (mín. 8)"
+            minLength={8}
+            value={form.password}
+            onChange={(event) => setForm({ ...form, password: event.target.value })}
+            required
+          />
+          <input
+            className="field-input !mt-0"
+            placeholder="Nome completo"
+            value={form.fullName}
+            onChange={(event) => setForm({ ...form, fullName: event.target.value })}
             required
           />
           <input
@@ -250,7 +320,9 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
         </form>
       ) : null}
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {alert ? <AlertMessage {...alert} /> : null}
+
+      {dialog}
 
       {loading ? (
         <p className="text-campus-deep/70">A carregar estudantes…</p>
@@ -282,7 +354,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
                       <button
                         type="button"
                         className="rounded-lg border border-campus-line px-2.5 py-1 text-xs hover:bg-campus-mist"
-                        onClick={() => void remove(student.id)}
+                        onClick={() => void remove(student)}
                       >
                         Remover
                       </button>

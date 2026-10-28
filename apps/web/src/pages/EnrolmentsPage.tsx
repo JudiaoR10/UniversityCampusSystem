@@ -6,6 +6,8 @@ import type {
   SubjectEnrolmentDto,
 } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
+import { AlertMessage, type AlertState } from '../components/AlertMessage';
+import { useConfirm } from '../components/ConfirmDialog';
 import { PageIntro } from '../components/PageIntro';
 
 const statusLabel: Record<EnrolmentStatus, string> = {
@@ -23,6 +25,7 @@ export function EnrolmentsPage() {
   const { user, api } = useAuth();
   const isStudent = user?.role === 'STUDENT';
   const canManage = user?.role === 'ADMIN' || user?.role === 'COORDINATOR';
+  const canComplete = user?.role === 'COORDINATOR';
 
   const [enrolments, setEnrolments] = useState<SubjectEnrolmentDto[]>([]);
   const [students, setStudents] = useState<StudentProfileDto[]>([]);
@@ -31,8 +34,9 @@ export function EnrolmentsPage() {
   const [ownCourseId, setOwnCourseId] = useState<string | null>(null);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [alert, setAlert] = useState<AlertState | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { confirm, dialog } = useConfirm();
   const [form, setForm] = useState({ studentId: '', subjectId: '', academicYear: '2026' });
 
   async function loadList() {
@@ -40,7 +44,7 @@ export function EnrolmentsPage() {
       const res = await api.enrolments.list();
       setEnrolments(res.data);
     } catch (err) {
-      setError(messageOf(err));
+      setAlert({ tone: 'error', message: messageOf(err) });
     } finally {
       setLoading(false);
     }
@@ -64,7 +68,7 @@ export function EnrolmentsPage() {
         setOwnStudentId(own?.id ?? null);
         setOwnCourseId(own?.course?.id ?? null);
       } catch (err) {
-        if (!cancelled) setError(messageOf(err));
+        if (!cancelled) setAlert({ tone: 'error', message: messageOf(err) });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -92,7 +96,7 @@ export function EnrolmentsPage() {
         if (!cancelled) setSubjects(res.data);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(messageOf(err));
+        if (!cancelled) setAlert({ tone: 'error', message: messageOf(err) });
       })
       .finally(() => {
         if (!cancelled) setLoadingSubjects(false);
@@ -104,46 +108,114 @@ export function EnrolmentsPage() {
 
   async function create(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    const studentId = isStudent ? ownStudentId : form.studentId;
+    if (!studentId) {
+      setAlert({
+        tone: 'error',
+        message: 'Perfil de estudante não encontrado para este utilizador.',
+      });
+      return;
+    }
+    const subject = subjects.find((item) => item.id === form.subjectId);
+    const studentName = isStudent
+      ? (user?.fullName ?? 'O meu perfil')
+      : (selectedStudent?.user.fullName ?? '—');
+    const confirmed = await confirm({
+      title: 'Nova inscrição',
+      message: 'Confirma a inscrição com estes dados? Fica pendente até ser activada.',
+      details: [
+        { label: 'Estudante', value: studentName },
+        { label: 'Disciplina', value: subject ? `${subject.code} — ${subject.name}` : '—' },
+        { label: 'Ano lectivo', value: form.academicYear },
+      ],
+      confirmLabel: 'Inscrever',
+    });
+    if (!confirmed) return;
+    setAlert(null);
     setSubmitting(true);
     try {
-      const studentId = isStudent ? ownStudentId : form.studentId;
-      if (!studentId) {
-        setError('Perfil de estudante não encontrado para este utilizador.');
-        return;
-      }
       await api.enrolments.create({
         studentId,
         subjectId: form.subjectId,
         academicYear: Number(form.academicYear),
       });
+      setAlert({
+        tone: 'success',
+        message: 'Inscrição criada com estado pendente, à espera de activação.',
+      });
       setForm({ ...form, subjectId: '' });
       setLoading(true);
       await loadList();
     } catch (err) {
-      setError(messageOf(err));
+      setAlert({ tone: 'error', message: messageOf(err) });
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function changeStatus(id: string, status: EnrolmentStatus) {
-    setError(null);
+  async function changeStatus(enrolment: SubjectEnrolmentDto, status: EnrolmentStatus) {
+    const labels: Record<EnrolmentStatus, { title: string; message: string }> = {
+      PENDING: { title: 'Reabrir inscrição', message: 'Passar a inscrição para pendente?' },
+      ACTIVE: {
+        title: 'Activar inscrição',
+        message: 'Confirmar a activação desta inscrição pendente?',
+      },
+      COMPLETED: {
+        title: 'Concluir inscrição',
+        message: 'A inscrição passa a concluída e deixa de poder mudar de estado.',
+      },
+      CANCELLED: {
+        title: 'Cancelar inscrição',
+        message: 'A inscrição fica cancelada e deixa de poder mudar de estado.',
+      },
+    };
+    const confirmed = await confirm({
+      ...labels[status],
+      details: [
+        { label: 'Estudante', value: enrolment.student.fullName },
+        {
+          label: 'Disciplina',
+          value: `${enrolment.subject.code} — ${enrolment.subject.name}`,
+        },
+        { label: 'Novo estado', value: statusLabel[status] },
+      ],
+      confirmLabel: labels[status].title,
+    });
+    if (!confirmed) return;
+    setAlert(null);
     try {
-      await api.enrolments.updateStatus(id, status);
+      await api.enrolments.updateStatus(enrolment.id, status);
+      setAlert({
+        tone: 'success',
+        message: `Inscrição actualizada para "${statusLabel[status]}".`,
+      });
       await loadList();
     } catch (err) {
-      setError(messageOf(err));
+      setAlert({ tone: 'error', message: messageOf(err) });
     }
   }
 
-  async function remove(id: string) {
-    if (!window.confirm('Eliminar esta inscrição?')) return;
+  async function remove(enrolment: SubjectEnrolmentDto) {
+    const confirmed = await confirm({
+      title: 'Eliminar inscrição',
+      message: 'Esta inscrição será eliminada em definitivo.',
+      details: [
+        { label: 'Estudante', value: enrolment.student.fullName },
+        {
+          label: 'Disciplina',
+          value: `${enrolment.subject.code} — ${enrolment.subject.name}`,
+        },
+      ],
+      confirmLabel: 'Eliminar',
+    });
+    if (!confirmed) return;
+    setAlert(null);
     try {
-      await api.enrolments.remove(id);
+      await api.enrolments.remove(enrolment.id);
+      setAlert({ tone: 'success', message: 'Inscrição eliminada.' });
       await loadList();
     } catch (err) {
-      setError(messageOf(err));
+      setAlert({ tone: 'error', message: messageOf(err) });
     }
   }
 
@@ -152,7 +224,7 @@ export function EnrolmentsPage() {
       <PageIntro
         eyebrow="Gestão académica"
         title="Inscrições em disciplinas"
-        description="Inscrições por estudante, disciplina e ano lectivo. O estado segue o fluxo pendente → activa → concluída."
+        description="Inscrições por estudante, disciplina e ano lectivo"
       />
 
       {!isStudent || ownStudentId ? (
@@ -223,7 +295,9 @@ export function EnrolmentsPage() {
         </p>
       )}
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {alert ? <AlertMessage {...alert} /> : null}
+
+      {dialog}
 
       {loading ? (
         <p className="text-campus-deep/70">A carregar inscrições…</p>
@@ -257,18 +331,18 @@ export function EnrolmentsPage() {
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         {enrolment.status === 'PENDING' ? (
-                          <Action label="Activar" onClick={() => void changeStatus(enrolment.id, 'ACTIVE')} />
+                          <Action label="Activar" onClick={() => void changeStatus(enrolment, 'ACTIVE')} />
                         ) : null}
-                        {enrolment.status === 'ACTIVE' ? (
-                          <Action label="Concluir" onClick={() => void changeStatus(enrolment.id, 'COMPLETED')} />
+                        {enrolment.status === 'ACTIVE' && canComplete ? (
+                          <Action label="Concluir" onClick={() => void changeStatus(enrolment, 'COMPLETED')} />
                         ) : null}
                         {enrolment.status === 'PENDING' || enrolment.status === 'ACTIVE' ? (
                           <Action
                             label="Cancelar"
-                            onClick={() => void changeStatus(enrolment.id, 'CANCELLED')}
+                            onClick={() => void changeStatus(enrolment, 'CANCELLED')}
                           />
                         ) : null}
-                        <Action label="Eliminar" onClick={() => void remove(enrolment.id)} />
+                        <Action label="Eliminar" onClick={() => void remove(enrolment)} />
                       </div>
                     </td>
                   ) : null}

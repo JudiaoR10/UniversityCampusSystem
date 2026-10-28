@@ -6,7 +6,10 @@ import { bearer, tokenFor, uniqueSuffix } from '../../../test/auth.js';
 
 const app = createApp();
 const suffix = uniqueSuffix();
+const tag = suffix.toLowerCase();
 const api = '/api/v1';
+const PASSWORD = 'Password123!';
+const studentEmail = `aluno.${tag}@test.local`;
 
 describe('API Estudantes', () => {
   let adminToken = '';
@@ -16,9 +19,19 @@ describe('API Estudantes', () => {
   let technicianToken = '';
   let courseId = '';
   let subjectId = '';
-  let tempStudentUserId = '';
-  let tempStudent2UserId = '';
   let createdStudentId = '';
+  let createdStudentUserId = '';
+
+  function payload(overrides: Record<string, unknown> = {}) {
+    return {
+      email: `novo.${tag}@test.local`,
+      password: PASSWORD,
+      fullName: 'Aluno Novo',
+      studentNumber: `TS${suffix}`,
+      courseId,
+      ...overrides,
+    };
+  }
 
   beforeAll(async () => {
     const seeded = await prisma.user.findUnique({ where: { email: 'estudante@smartcampus.demo' } });
@@ -34,31 +47,10 @@ describe('API Estudantes', () => {
     courseId = course.id;
     const subject = await prisma.subject.findUniqueOrThrow({ where: { code: 'PTP3' } });
     subjectId = subject.id;
-
-    const studentRole = await prisma.role.findUniqueOrThrow({ where: { code: 'STUDENT' } });
-    const temp1 = await prisma.user.create({
-      data: {
-        email: `aluno.${suffix}@test.local`,
-        fullName: 'Aluno Teste',
-        passwordHash: 'test',
-        roleId: studentRole.id,
-      },
-    });
-    tempStudentUserId = temp1.id;
-
-    const temp2 = await prisma.user.create({
-      data: {
-        email: `aluno2.${suffix}@test.local`,
-        fullName: 'Aluno Teste 2',
-        passwordHash: 'test',
-        roleId: studentRole.id,
-      },
-    });
-    tempStudent2UserId = temp2.id;
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email: { contains: suffix } } });
+    await prisma.user.deleteMany({ where: { email: { contains: tag } } });
   });
 
   it('rejeita listagem sem token (401 UNAUTHORIZED)', async () => {
@@ -106,18 +98,11 @@ describe('API Estudantes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('estudante não consulta by-user de outro (403)', async () => {
-    const res = await request(app)
-      .get(`${api}/students/by-user/${tempStudentUserId}`)
-      .set(bearer(studentToken));
-    expect(res.status).toBe(403);
-  });
-
   it('rejeita criação por docente (403)', async () => {
     const res = await request(app)
       .post(`${api}/students`)
       .set(bearer(teacherToken))
-      .send({ userId: tempStudentUserId, studentNumber: `X${suffix}`, courseId });
+      .send(payload());
     expect(res.status).toBe(403);
   });
 
@@ -125,76 +110,120 @@ describe('API Estudantes', () => {
     const res = await request(app)
       .post(`${api}/students`)
       .set(bearer(coordinatorToken))
-      .send({ userId: tempStudentUserId });
+      .send({ email: `sem-dados.${tag}@test.local` });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('VALIDATION_ERROR');
     expect(res.body.details.length).toBeGreaterThan(0);
   });
 
-  it('coordenador cria perfil de estudante (201) com DTO do Core', async () => {
+  it('coordenador cria conta e perfil na mesma operação (201)', async () => {
     const res = await request(app)
       .post(`${api}/students`)
       .set(bearer(coordinatorToken))
-      .send({
-        userId: tempStudentUserId,
-        studentNumber: `TS${suffix}`,
-        courseId,
-        yearOfStudy: 2,
-        phone: '+258 84 000 0009',
-      });
+      .send(
+        payload({
+          email: studentEmail,
+          fullName: 'Aluno Teste',
+          yearOfStudy: 2,
+          phone: '+258 84 000 0009',
+        }),
+      );
 
     expect(res.status).toBe(201);
     expect(res.body.data).toMatchObject({
-      userId: tempStudentUserId,
       studentNumber: `TS${suffix}`,
       yearOfStudy: 2,
       status: 'ACTIVE',
     });
+    expect(res.body.data.userId).toEqual(expect.any(String));
     expect(res.body.data.course).toEqual({ id: courseId, code: 'LEI', name: expect.any(String) });
     expect(res.body.data.user.fullName).toBe('Aluno Teste');
     expect(res.body.meta.correlationId).toBeTruthy();
     createdStudentId = res.body.data.id;
+    createdStudentUserId = res.body.data.userId;
 
-    const audit = await prisma.auditEvent.findFirst({
-      where: { action: 'STUDENT_PROFILE_CREATED', resourceId: createdStudentId },
+    const user = await prisma.user.findUnique({
+      where: { id: createdStudentUserId },
+      include: { role: true },
     });
-    expect(audit).not.toBeNull();
-    expect(audit?.correlationId).toBeTruthy();
+    expect(user?.email).toBe(studentEmail);
+    expect(user?.role.code).toBe('STUDENT');
+    expect(user?.isActive).toBe(true);
+
+    const login = await request(app)
+      .post(`${api}/auth/login`)
+      .send({ email: studentEmail, password: PASSWORD });
+    expect(login.status).toBe(200);
+    expect(login.body.data.user.role).toBe('STUDENT');
+
+    const [userAudit, profileAudit] = await Promise.all([
+      prisma.auditEvent.findFirst({
+        where: { action: 'USER_CREATE', resourceId: createdStudentUserId },
+      }),
+      prisma.auditEvent.findFirst({
+        where: { action: 'STUDENT_PROFILE_CREATED', resourceId: createdStudentId },
+      }),
+    ]);
+    expect(userAudit).not.toBeNull();
+    expect(profileAudit).not.toBeNull();
+    expect(userAudit?.correlationId).toBe(res.body.meta.correlationId);
+    expect(profileAudit?.correlationId).toBe(userAudit?.correlationId);
+    expect(userAudit?.actorId).toBeTruthy();
   });
 
-  it('rejeita número de estudante duplicado (409)', async () => {
+  it('rejeita email já registado (409 USER_EXISTS) sem criar perfil', async () => {
+    const number = `TS2${suffix}`;
     const res = await request(app)
       .post(`${api}/students`)
       .set(bearer(coordinatorToken))
-      .send({
-        userId: tempStudent2UserId,
-        studentNumber: `TS${suffix}`,
-        courseId,
-      });
+      .send(payload({ email: studentEmail, studentNumber: number }));
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('USER_EXISTS');
+    expect(await prisma.studentProfile.count({ where: { studentNumber: number } })).toBe(0);
+  });
+
+  it('rejeita número de estudante duplicado (409) sem criar conta', async () => {
+    const email = `dupnum.${tag}@test.local`;
+    const res = await request(app)
+      .post(`${api}/students`)
+      .set(bearer(coordinatorToken))
+      .send(payload({ email, studentNumber: `TS${suffix}` }));
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('STUDENT_NUMBER_EXISTS');
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
   });
 
-  it('rejeita utilizador que já tem perfil (409)', async () => {
+  it('não deixa conta órfã quando a criação concorrente colide no número (rollback)', async () => {
+    const studentNumber = `RACE${suffix}`;
+    const emails = [`race1.${tag}@test.local`, `race2.${tag}@test.local`];
+
+    const results = await Promise.all(
+      emails.map((email) =>
+        request(app)
+          .post(`${api}/students`)
+          .set(bearer(coordinatorToken))
+          .send(payload({ email, studentNumber })),
+      ),
+    );
+
+    const statuses = results.map((res) => res.status).sort();
+    expect(statuses).toEqual([201, 409]);
+    const loser = results.find((res) => res.status === 409);
+    expect(loser?.body.code).toBe('STUDENT_NUMBER_EXISTS');
+
+    expect(await prisma.studentProfile.count({ where: { studentNumber } })).toBe(1);
+    expect(await prisma.user.count({ where: { email: { in: emails } } })).toBe(1);
+  });
+
+  it('rejeita curso inexistente (404) sem criar conta', async () => {
+    const email = `semcurso.${tag}@test.local`;
     const res = await request(app)
       .post(`${api}/students`)
       .set(bearer(coordinatorToken))
-      .send({
-        userId: tempStudentUserId,
-        studentNumber: `TS2${suffix}`,
-        courseId,
-      });
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe('STUDENT_PROFILE_EXISTS');
-  });
-
-  it('rejeita curso inexistente (404)', async () => {
-    const res = await request(app)
-      .post(`${api}/students`)
-      .set(bearer(coordinatorToken))
-      .send({ userId: tempStudent2UserId, studentNumber: `TS3${suffix}`, courseId: 'nao-existe' });
+      .send(payload({ email, courseId: 'nao-existe' }));
     expect(res.status).toBe(404);
     expect(res.body.code).toBe('COURSE_NOT_FOUND');
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
   });
 
   it('cria inscrição e bloqueia remoção do estudante (409)', async () => {
@@ -234,7 +263,7 @@ describe('API Estudantes', () => {
   });
 
   it('estudante atualiza apenas o próprio contacto (200)', async () => {
-    const ownToken = await tokenFor(`aluno.${suffix}@test.local`);
+    const ownToken = await tokenFor(studentEmail);
     const res = await request(app)
       .patch(`${api}/students/me`)
       .set(bearer(ownToken))
@@ -244,7 +273,7 @@ describe('API Estudantes', () => {
   });
 
   it('estudante não altera o estado pelo /me (400)', async () => {
-    const ownToken = await tokenFor(`aluno.${suffix}@test.local`);
+    const ownToken = await tokenFor(studentEmail);
     const res = await request(app)
       .patch(`${api}/students/me`)
       .set(bearer(ownToken))
@@ -267,17 +296,42 @@ describe('API Estudantes', () => {
     await prisma.enrolment.delete({ where: { id: coreEnrolment.id } });
   });
 
-  it('coordenador remove estudante sem inscrições (200)', async () => {
+  it('coordenador remove estudante e conta de acesso (200)', async () => {
     const res = await request(app)
       .delete(`${api}/students/${createdStudentId}`)
       .set(bearer(coordinatorToken));
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ id: createdStudentId, deleted: true });
+
+    expect(await prisma.studentProfile.findUnique({ where: { id: createdStudentId } })).toBeNull();
+    expect(await prisma.user.findUnique({ where: { id: createdStudentUserId } })).toBeNull();
+
+    const login = await request(app)
+      .post(`${api}/auth/login`)
+      .send({ email: studentEmail, password: PASSWORD });
+    expect(login.status).toBe(401);
+    expect(login.body.code).toBe('INVALID_CREDENTIALS');
+
+    const audit = await prisma.auditEvent.findFirst({
+      where: { action: 'USER_DELETE', resourceId: createdStudentUserId },
+    });
+    expect(audit).not.toBeNull();
   });
 
-  it('admin consulta by-user sem perfil (404)', async () => {
+  it('permite recriar o estudante com o mesmo email e número após a remoção', async () => {
     const res = await request(app)
-      .get(`${api}/students/by-user/${tempStudent2UserId}`)
+      .post(`${api}/students`)
+      .set(bearer(coordinatorToken))
+      .send(payload({ email: studentEmail, fullName: 'Aluno Teste' }));
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.studentNumber).toBe(`TS${suffix}`);
+    expect(res.body.data.user.fullName).toBe('Aluno Teste');
+  });
+
+  it('admin consulta by-user de conta sem perfil (404)', async () => {
+    const res = await request(app)
+      .get(`${api}/students/by-user/${createdStudentUserId}`)
       .set(bearer(adminToken));
     expect(res.status).toBe(404);
     expect(res.body.code).toBe('STUDENT_NOT_FOUND');

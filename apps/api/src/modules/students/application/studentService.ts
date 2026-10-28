@@ -5,8 +5,9 @@ import type {
   UpdateStudentProfileInput,
 } from '@smart-campus/validation';
 import type { StudentProfileDto } from '@smart-campus/shared-types';
-import { AppError, conflict, notFound } from '../../../lib/errors.js';
+import { conflict, notFound } from '../../../lib/errors.js';
 import { audit } from '../../audit/application/auditService.js';
+import { hashPassword } from '../../auth/application/authService.js';
 import * as studentRepository from '../infrastructure/studentRepository.js';
 
 type AuditContext = {
@@ -46,8 +47,17 @@ function toDto(row: StudentRow): StudentProfileDto {
   };
 }
 
-function isDuplicate(error: unknown) {
+function isDuplicate(error: unknown): error is Prisma.PrismaClientKnownRequestError {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+function duplicateTarget(error: Prisma.PrismaClientKnownRequestError) {
+  const target = (error.meta as { target?: unknown } | undefined)?.target;
+  return Array.isArray(target) ? target.join(',') : String(target ?? '');
+}
+
+function isForeignKeyViolation(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003';
 }
 
 function auditContext(ctx: AuditContext) {
@@ -77,32 +87,43 @@ export async function getByUserId(userId: string) {
 }
 
 export async function create(input: CreateStudentProfileInput, ctx: AuditContext) {
-  const user = await studentRepository.findUserById(input.userId);
-  if (!user) throw notFound('USER_NOT_FOUND', 'Utilizador não encontrado');
-  if (!user.isActive) throw conflict('USER_INACTIVE', 'O utilizador indicado está inactivo');
-  if (user.role.code !== 'STUDENT') {
-    throw new AppError('USER_ROLE_INVALID', 'O utilizador indicado não tem a role STUDENT', 400);
-  }
-
   const course = await studentRepository.findCourseById(input.courseId);
   if (!course) throw notFound('COURSE_NOT_FOUND', 'Curso não encontrado');
 
-  if (await studentRepository.findStudentByUserId(input.userId)) {
-    throw conflict('STUDENT_PROFILE_EXISTS', 'Este utilizador já tem um perfil de estudante');
-  }
   if (await studentRepository.findStudentByStudentNumber(input.studentNumber)) {
     throw conflict('STUDENT_NUMBER_EXISTS', `Já existe um estudante com o número '${input.studentNumber}'`);
   }
 
+  const role = await studentRepository.findRoleByCode('STUDENT');
+  if (!role) {
+    throw conflict('ROLE_NOT_FOUND', 'Role STUDENT não existe na base de dados — corra o seed');
+  }
+
+  if (await studentRepository.findUserByEmail(input.email)) {
+    throw conflict('USER_EXISTS', 'Email já registado');
+  }
+
+  const passwordHash = await hashPassword(input.password);
+
   try {
-    const row = await studentRepository.createStudent({
-      userId: input.userId,
+    const row = await studentRepository.createStudentAccount({
+      email: input.email,
+      passwordHash,
+      fullName: input.fullName,
+      roleId: role.id,
       studentNumber: input.studentNumber,
       courseId: input.courseId,
       yearOfStudy: input.yearOfStudy ?? null,
       phone: input.phone ?? null,
     });
 
+    await audit({
+      action: 'USER_CREATE',
+      resource: 'User',
+      resourceId: row.userId,
+      ...auditContext(ctx),
+      metadata: { email: input.email, role: role.code },
+    });
     await audit({
       action: 'STUDENT_PROFILE_CREATED',
       resource: 'StudentProfile',
@@ -113,7 +134,12 @@ export async function create(input: CreateStudentProfileInput, ctx: AuditContext
     return toDto(row);
   } catch (error) {
     if (isDuplicate(error)) {
-      throw conflict('STUDENT_DUPLICATE', 'Número de estudante ou utilizador já registado');
+      const target = duplicateTarget(error);
+      if (target.includes('email')) throw conflict('USER_EXISTS', 'Email já registado');
+      if (target.includes('studentNumber')) {
+        throw conflict('STUDENT_NUMBER_EXISTS', `Já existe um estudante com o número '${input.studentNumber}'`);
+      }
+      throw conflict('STUDENT_DUPLICATE', 'Número de estudante ou email já registado');
     }
     throw error;
   }
@@ -162,8 +188,20 @@ export async function remove(id: string, ctx: AuditContext) {
   const existing = await studentRepository.findStudentById(id);
   if (!existing) throw notFound('STUDENT_NOT_FOUND', 'Perfil de estudante não encontrado');
 
-  const deleted = await studentRepository.deleteStudentWithoutEnrolments(id);
-  if (deleted === 0) {
+  let removed: { id: string; userId: string } | null;
+  try {
+    removed = await studentRepository.deleteStudentAccount(id);
+  } catch (error) {
+    if (isForeignKeyViolation(error)) {
+      throw conflict(
+        'USER_HAS_DEPENDENCIES',
+        'A conta tem ocorrências ou acções de manutenção associadas e não pode ser removida',
+      );
+    }
+    throw error;
+  }
+
+  if (!removed) {
     throw conflict(
       'STUDENT_HAS_ENROLMENTS',
       'Não é possível remover um estudante com inscrições associadas',
@@ -175,6 +213,13 @@ export async function remove(id: string, ctx: AuditContext) {
     resource: 'StudentProfile',
     resourceId: existing.id,
     ...auditContext(ctx),
+  });
+  await audit({
+    action: 'USER_DELETE',
+    resource: 'User',
+    resourceId: removed.userId,
+    ...auditContext(ctx),
+    metadata: { fullName: existing.user.fullName, role: 'STUDENT' },
   });
 
   return { id: existing.id, deleted: true as const };

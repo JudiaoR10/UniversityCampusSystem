@@ -160,8 +160,17 @@ const phoneSchema = z.string().trim().min(6).max(30);
 
 export const studentProfileStatusEnum = z.enum(['ACTIVE', 'SUSPENDED', 'GRADUATED', 'WITHDRAWN']);
 
+const accountEmailSchema = z.string().trim().toLowerCase().email('Email inválido');
+const accountPasswordSchema = z
+  .string()
+  .min(8, 'Password deve ter pelo menos 8 caracteres')
+  .max(128);
+const accountNameSchema = z.string().trim().min(2).max(120);
+
 export const createStudentProfileSchema = z.object({
-  userId: idSchema,
+  email: accountEmailSchema,
+  password: accountPasswordSchema,
+  fullName: accountNameSchema,
   studentNumber: z.string().trim().min(2).max(30),
   courseId: idSchema,
   yearOfStudy: z.number().int().min(1).max(10).optional(),
@@ -192,7 +201,9 @@ export type ListStudentsQuery = z.infer<typeof listStudentsQuerySchema>;
 export const teacherProfileStatusEnum = z.enum(['ACTIVE', 'ON_LEAVE', 'INACTIVE']);
 
 export const createTeacherProfileSchema = z.object({
-  userId: idSchema,
+  email: accountEmailSchema,
+  password: accountPasswordSchema,
+  fullName: accountNameSchema,
   employeeCode: z.string().trim().min(2).max(30),
   departmentId: idSchema,
   title: z.string().trim().min(2).max(80).optional(),

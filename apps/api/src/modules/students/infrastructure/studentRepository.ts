@@ -4,8 +4,11 @@ import { prisma } from '../../../lib/prisma.js';
 const courseRef = { select: { id: true, code: true, name: true } } as const;
 const userRef = { select: { id: true, fullName: true } } as const;
 
-export type CreateStudentData = {
-  userId: string;
+export type CreateStudentAccountData = {
+  email: string;
+  passwordHash: string;
+  fullName: string;
+  roleId: string;
   studentNumber: string;
   courseId: string;
   yearOfStudy?: number | null;
@@ -48,8 +51,12 @@ export async function findStudentByStudentNumber(studentNumber: string) {
   });
 }
 
-export async function findUserById(id: string) {
-  return prisma.user.findUnique({ where: { id }, include: { role: true } });
+export async function findUserByEmail(email: string) {
+  return prisma.user.findUnique({ where: { email }, select: { id: true } });
+}
+
+export async function findRoleByCode(code: 'STUDENT') {
+  return prisma.role.findUnique({ where: { code }, select: { id: true, code: true } });
 }
 
 export async function findCourseById(id: string) {
@@ -59,10 +66,20 @@ export async function findCourseById(id: string) {
   });
 }
 
-export async function createStudent(data: CreateStudentData) {
-  return prisma.studentProfile.create({
-    data,
-    include: { course: courseRef, user: userRef },
+// Conta (User) + perfil numa única transacção: se o perfil falhar, o User é revertido.
+export async function createStudentAccount(data: CreateStudentAccountData) {
+  const { email, passwordHash, fullName, roleId, ...profile } = data;
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: { email, passwordHash, fullName, roleId },
+      select: { id: true },
+    });
+
+    return tx.studentProfile.create({
+      data: { ...profile, userId: user.id },
+      include: { course: courseRef, user: userRef },
+    });
   });
 }
 
@@ -74,9 +91,17 @@ export async function updateStudent(id: string, data: UpdateStudentData) {
   });
 }
 
-export async function deleteStudentWithoutEnrolments(id: string) {
-  const result = await prisma.studentProfile.deleteMany({
-    where: { id, enrolments: { none: {} }, subjectEnrolments: { none: {} } },
+// Remove a conta (User) e o perfil em conjunto: a conta não pode ficar órfã a permitir login.
+// O perfil é apagado por cascade; devolve null quando o estudante tem inscrições.
+export async function deleteStudentAccount(id: string) {
+  return prisma.$transaction(async (tx) => {
+    const profile = await tx.studentProfile.findFirst({
+      where: { id, enrolments: { none: {} }, subjectEnrolments: { none: {} } },
+      select: { id: true, userId: true },
+    });
+    if (!profile) return null;
+
+    await tx.user.delete({ where: { id: profile.userId } });
+    return profile;
   });
-  return result.count;
 }

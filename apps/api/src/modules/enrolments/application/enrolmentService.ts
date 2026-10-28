@@ -158,8 +158,13 @@ export async function create(input: CreateEnrolmentInput, requester: Requester, 
 export async function updateStatus(
   id: string,
   input: UpdateEnrolmentStatusInput,
+  requester: Requester,
   ctx: AuditContext,
 ) {
+  if (input.status === 'COMPLETED' && requester.role === 'ADMIN') {
+    throw forbidden('Apenas a coordenação pode concluir inscrições');
+  }
+
   const existing = await enrolmentRepository.findEnrolmentById(id);
   if (!existing) throw notFound('ENROLMENT_NOT_FOUND', 'Inscrição não encontrada');
 

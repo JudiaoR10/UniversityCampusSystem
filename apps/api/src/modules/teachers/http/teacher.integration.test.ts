@@ -6,16 +6,29 @@ import { bearer, tokenFor, uniqueSuffix } from '../../../test/auth.js';
 
 const app = createApp();
 const suffix = uniqueSuffix();
+const tag = suffix.toLowerCase();
 const api = '/api/v1';
+const PASSWORD = 'Password123!';
+const teacherEmail = `docente.${tag}@test.local`;
 
 describe('API Docentes', () => {
   let adminToken = '';
   let coordinatorToken = '';
   let studentToken = '';
   let departmentId = '';
-  let tempTeacherUserId = '';
-  let tempTeacher2UserId = '';
   let createdTeacherId = '';
+  let createdTeacherUserId = '';
+
+  function payload(overrides: Record<string, unknown> = {}) {
+    return {
+      email: `novo.docente.${tag}@test.local`,
+      password: PASSWORD,
+      fullName: 'Docente Novo',
+      employeeCode: `TD${suffix}`,
+      departmentId,
+      ...overrides,
+    };
+  }
 
   beforeAll(async () => {
     const seeded = await prisma.user.findUnique({ where: { email: 'docente@smartcampus.demo' } });
@@ -27,31 +40,10 @@ describe('API Docentes', () => {
 
     const department = await prisma.department.findUniqueOrThrow({ where: { code: 'DEI' } });
     departmentId = department.id;
-
-    const teacherRole = await prisma.role.findUniqueOrThrow({ where: { code: 'TEACHER' } });
-    const temp1 = await prisma.user.create({
-      data: {
-        email: `docente.${suffix}@test.local`,
-        fullName: 'Docente Teste',
-        passwordHash: 'test',
-        roleId: teacherRole.id,
-      },
-    });
-    tempTeacherUserId = temp1.id;
-
-    const temp2 = await prisma.user.create({
-      data: {
-        email: `docente2.${suffix}@test.local`,
-        fullName: 'Docente Teste 2',
-        passwordHash: 'test',
-        roleId: teacherRole.id,
-      },
-    });
-    tempTeacher2UserId = temp2.id;
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email: { contains: suffix } } });
+    await prisma.user.deleteMany({ where: { email: { contains: tag } } });
   });
 
   it('rejeita listagem sem token (401)', async () => {
@@ -72,10 +64,7 @@ describe('API Docentes', () => {
   });
 
   it('rejeita criação por coordenador (403)', async () => {
-    const res = await request(app)
-      .post(`${api}/teachers`)
-      .set(bearer(coordinatorToken))
-      .send({ userId: tempTeacherUserId, employeeCode: `X${suffix}`, departmentId });
+    const res = await request(app).post(`${api}/teachers`).set(bearer(coordinatorToken)).send(payload());
     expect(res.status).toBe(403);
   });
 
@@ -83,69 +72,100 @@ describe('API Docentes', () => {
     const res = await request(app)
       .post(`${api}/teachers`)
       .set(bearer(adminToken))
-      .send({ userId: tempTeacherUserId });
+      .send({ studentNumber: 'sem-conta' });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
-  it('admin cria docente (201) com DTO do Core', async () => {
+  it('admin cria conta e perfil de docente na mesma operação (201)', async () => {
     const res = await request(app)
       .post(`${api}/teachers`)
       .set(bearer(adminToken))
-      .send({
-        userId: tempTeacherUserId,
-        employeeCode: `TD${suffix}`,
-        departmentId,
-        title: 'Assistente',
-        phone: '+258 84 000 0010',
-      });
+      .send(
+        payload({
+          email: teacherEmail,
+          fullName: 'Docente Teste',
+          title: 'Assistente',
+          phone: '+258 84 000 0010',
+        }),
+      );
 
     expect(res.status).toBe(201);
     expect(res.body.data).toMatchObject({
-      userId: tempTeacherUserId,
       employeeCode: `TD${suffix}`,
       title: 'Assistente',
       status: 'ACTIVE',
     });
+    expect(res.body.data.userId).toEqual(expect.any(String));
     expect(res.body.data.department).toEqual({ id: departmentId, code: 'DEI', name: expect.any(String) });
     expect(res.body.data.user.fullName).toBe('Docente Teste');
     createdTeacherId = res.body.data.id;
+    createdTeacherUserId = res.body.data.userId;
 
-    const audit = await prisma.auditEvent.findFirst({
-      where: { action: 'TEACHER_PROFILE_CREATED', resourceId: createdTeacherId },
+    const user = await prisma.user.findUnique({
+      where: { id: createdTeacherUserId },
+      include: { role: true },
     });
-    expect(audit).not.toBeNull();
+    expect(user?.email).toBe(teacherEmail);
+    expect(user?.role.code).toBe('TEACHER');
+    expect(user?.isActive).toBe(true);
+
+    const login = await request(app)
+      .post(`${api}/auth/login`)
+      .send({ email: teacherEmail, password: PASSWORD });
+    expect(login.status).toBe(200);
+    expect(login.body.data.user.role).toBe('TEACHER');
+
+    const [userAudit, profileAudit] = await Promise.all([
+      prisma.auditEvent.findFirst({
+        where: { action: 'USER_CREATE', resourceId: createdTeacherUserId },
+      }),
+      prisma.auditEvent.findFirst({
+        where: { action: 'TEACHER_PROFILE_CREATED', resourceId: createdTeacherId },
+      }),
+    ]);
+    expect(userAudit).not.toBeNull();
+    expect(profileAudit).not.toBeNull();
+    expect(userAudit?.correlationId).toBe(res.body.meta.correlationId);
+    expect(profileAudit?.correlationId).toBe(userAudit?.correlationId);
+    expect(userAudit?.actorId).toBeTruthy();
   });
 
-  it('rejeita código de docente duplicado (409)', async () => {
+  it('rejeita email já registado (409 USER_EXISTS) sem criar perfil', async () => {
+    const employeeCode = `TD2${suffix}`;
     const res = await request(app)
       .post(`${api}/teachers`)
       .set(bearer(adminToken))
-      .send({ userId: tempTeacher2UserId, employeeCode: `TD${suffix}`, departmentId });
+      .send(payload({ email: teacherEmail, employeeCode }));
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('USER_EXISTS');
+    expect(await prisma.teacherProfile.count({ where: { employeeCode } })).toBe(0);
+  });
+
+  it('rejeita código de docente duplicado (409) sem criar conta', async () => {
+    const email = `dupcode.${tag}@test.local`;
+    const res = await request(app)
+      .post(`${api}/teachers`)
+      .set(bearer(adminToken))
+      .send(payload({ email, employeeCode: `TD${suffix}` }));
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('TEACHER_EMPLOYEE_CODE_EXISTS');
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
   });
 
-  it('rejeita utilizador que já tem perfil (409)', async () => {
+  it('rejeita departamento inexistente (404) sem criar conta', async () => {
+    const email = `semdpto.${tag}@test.local`;
     const res = await request(app)
       .post(`${api}/teachers`)
       .set(bearer(adminToken))
-      .send({ userId: tempTeacherUserId, employeeCode: `TD2${suffix}`, departmentId });
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe('TEACHER_PROFILE_EXISTS');
-  });
-
-  it('rejeita departamento inexistente (404)', async () => {
-    const res = await request(app)
-      .post(`${api}/teachers`)
-      .set(bearer(adminToken))
-      .send({ userId: tempTeacher2UserId, employeeCode: `TD3${suffix}`, departmentId: 'nao-existe' });
+      .send(payload({ email, departmentId: 'nao-existe' }));
     expect(res.status).toBe(404);
     expect(res.body.code).toBe('DEPARTMENT_NOT_FOUND');
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
   });
 
-  it('docente consulta o próprio perfil em /teachers/me', async () => {
-    const ownToken = await tokenFor(`docente.${suffix}@test.local`);
+  it('docente criado consulta o próprio perfil em /teachers/me', async () => {
+    const ownToken = await tokenFor(teacherEmail);
     const res = await request(app).get(`${api}/teachers/me`).set(bearer(ownToken));
     expect(res.status).toBe(200);
     expect(res.body.data.employeeCode).toBe(`TD${suffix}`);
@@ -153,13 +173,13 @@ describe('API Docentes', () => {
 
   it('estudante não consulta by-user (403)', async () => {
     const res = await request(app)
-      .get(`${api}/teachers/by-user/${tempTeacherUserId}`)
+      .get(`${api}/teachers/by-user/${createdTeacherUserId}`)
       .set(bearer(studentToken));
     expect(res.status).toBe(403);
   });
 
-  it('outro docente não altera o perfil (403)', async () => {
-    const ownToken = await tokenFor(`docente.${suffix}@test.local`);
+  it('docente não altera o perfil por id (403)', async () => {
+    const ownToken = await tokenFor(teacherEmail);
     const res = await request(app)
       .patch(`${api}/teachers/${createdTeacherId}`)
       .set(bearer(ownToken))
@@ -178,7 +198,7 @@ describe('API Docentes', () => {
   });
 
   it('docente atualiza apenas o próprio contacto (200)', async () => {
-    const ownToken = await tokenFor(`docente.${suffix}@test.local`);
+    const ownToken = await tokenFor(teacherEmail);
     const res = await request(app)
       .patch(`${api}/teachers/me`)
       .set(bearer(ownToken))
@@ -188,7 +208,7 @@ describe('API Docentes', () => {
   });
 
   it('docente não altera outros campos pelo /me (400)', async () => {
-    const ownToken = await tokenFor(`docente.${suffix}@test.local`);
+    const ownToken = await tokenFor(teacherEmail);
     const res = await request(app)
       .patch(`${api}/teachers/me`)
       .set(bearer(ownToken))
@@ -204,11 +224,36 @@ describe('API Docentes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('admin remove docente (200)', async () => {
+  it('admin remove docente e conta de acesso (200)', async () => {
     const res = await request(app)
       .delete(`${api}/teachers/${createdTeacherId}`)
       .set(bearer(adminToken));
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ id: createdTeacherId, deleted: true });
+
+    expect(await prisma.teacherProfile.findUnique({ where: { id: createdTeacherId } })).toBeNull();
+    expect(await prisma.user.findUnique({ where: { id: createdTeacherUserId } })).toBeNull();
+
+    const login = await request(app)
+      .post(`${api}/auth/login`)
+      .send({ email: teacherEmail, password: PASSWORD });
+    expect(login.status).toBe(401);
+    expect(login.body.code).toBe('INVALID_CREDENTIALS');
+
+    const audit = await prisma.auditEvent.findFirst({
+      where: { action: 'USER_DELETE', resourceId: createdTeacherUserId },
+    });
+    expect(audit).not.toBeNull();
+  });
+
+  it('permite recriar o docente com o mesmo email e código após a remoção', async () => {
+    const res = await request(app)
+      .post(`${api}/teachers`)
+      .set(bearer(adminToken))
+      .send(payload({ email: teacherEmail, fullName: 'Docente Teste' }));
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.employeeCode).toBe(`TD${suffix}`);
+    expect(res.body.data.user.fullName).toBe('Docente Teste');
   });
 });

@@ -54,7 +54,15 @@ enrolmentRouter.patch(
   async (req, res, next) => {
     try {
       const input = updateEnrolmentStatusSchema.parse(req.body);
-      success(res, await enrolmentService.updateStatus(req.params.id, input, auditContext(req)));
+      success(
+        res,
+        await enrolmentService.updateStatus(
+          req.params.id,
+          input,
+          { id: req.user!.id, role: req.user!.role },
+          auditContext(req),
+        ),
+      );
     } catch (error) {
       next(error);
     }

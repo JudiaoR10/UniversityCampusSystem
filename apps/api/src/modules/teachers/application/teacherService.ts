@@ -5,8 +5,9 @@ import type {
   UpdateTeacherProfileInput,
 } from '@smart-campus/validation';
 import type { TeacherProfileDto } from '@smart-campus/shared-types';
-import { AppError, conflict, notFound } from '../../../lib/errors.js';
+import { conflict, notFound } from '../../../lib/errors.js';
 import { audit } from '../../audit/application/auditService.js';
+import { hashPassword } from '../../auth/application/authService.js';
 import * as teacherRepository from '../infrastructure/teacherRepository.js';
 
 type AuditContext = {
@@ -46,8 +47,17 @@ function toDto(row: TeacherRow): TeacherProfileDto {
   };
 }
 
-function isDuplicate(error: unknown) {
+function isDuplicate(error: unknown): error is Prisma.PrismaClientKnownRequestError {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+function duplicateTarget(error: Prisma.PrismaClientKnownRequestError) {
+  const target = (error.meta as { target?: unknown } | undefined)?.target;
+  return Array.isArray(target) ? target.join(',') : String(target ?? '');
+}
+
+function isForeignKeyViolation(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003';
 }
 
 function auditContext(ctx: AuditContext) {
@@ -77,19 +87,9 @@ export async function getByUserId(userId: string) {
 }
 
 export async function create(input: CreateTeacherProfileInput, ctx: AuditContext) {
-  const user = await teacherRepository.findUserById(input.userId);
-  if (!user) throw notFound('USER_NOT_FOUND', 'Utilizador não encontrado');
-  if (!user.isActive) throw conflict('USER_INACTIVE', 'O utilizador indicado está inactivo');
-  if (user.role.code !== 'TEACHER') {
-    throw new AppError('USER_ROLE_INVALID', 'O utilizador indicado não tem a role TEACHER', 400);
-  }
-
   const department = await teacherRepository.findDepartmentById(input.departmentId);
   if (!department) throw notFound('DEPARTMENT_NOT_FOUND', 'Departamento não encontrado');
 
-  if (await teacherRepository.findTeacherByUserId(input.userId)) {
-    throw conflict('TEACHER_PROFILE_EXISTS', 'Este utilizador já tem um perfil de docente');
-  }
   if (await teacherRepository.findTeacherByEmployeeCode(input.employeeCode)) {
     throw conflict(
       'TEACHER_EMPLOYEE_CODE_EXISTS',
@@ -97,15 +97,36 @@ export async function create(input: CreateTeacherProfileInput, ctx: AuditContext
     );
   }
 
+  const role = await teacherRepository.findRoleByCode('TEACHER');
+  if (!role) {
+    throw conflict('ROLE_NOT_FOUND', 'Role TEACHER não existe na base de dados — corra o seed');
+  }
+
+  if (await teacherRepository.findUserByEmail(input.email)) {
+    throw conflict('USER_EXISTS', 'Email já registado');
+  }
+
+  const passwordHash = await hashPassword(input.password);
+
   try {
-    const row = await teacherRepository.createTeacher({
-      userId: input.userId,
+    const row = await teacherRepository.createTeacherAccount({
+      email: input.email,
+      passwordHash,
+      fullName: input.fullName,
+      roleId: role.id,
       employeeCode: input.employeeCode,
       departmentId: input.departmentId,
       title: input.title ?? null,
       phone: input.phone ?? null,
     });
 
+    await audit({
+      action: 'USER_CREATE',
+      resource: 'User',
+      resourceId: row.userId,
+      ...auditContext(ctx),
+      metadata: { email: input.email, role: role.code },
+    });
     await audit({
       action: 'TEACHER_PROFILE_CREATED',
       resource: 'TeacherProfile',
@@ -116,7 +137,12 @@ export async function create(input: CreateTeacherProfileInput, ctx: AuditContext
     return toDto(row);
   } catch (error) {
     if (isDuplicate(error)) {
-      throw conflict('TEACHER_DUPLICATE', 'Código de docente ou utilizador já registado');
+      const target = duplicateTarget(error);
+      if (target.includes('email')) throw conflict('USER_EXISTS', 'Email já registado');
+      if (target.includes('employeeCode')) {
+        throw conflict('TEACHER_EMPLOYEE_CODE_EXISTS', `Já existe um docente com o código '${input.employeeCode}'`);
+      }
+      throw conflict('TEACHER_DUPLICATE', 'Código de docente ou email já registado');
     }
     throw error;
   }
@@ -165,13 +191,33 @@ export async function remove(id: string, ctx: AuditContext) {
   const existing = await teacherRepository.findTeacherById(id);
   if (!existing) throw notFound('TEACHER_NOT_FOUND', 'Perfil de docente não encontrado');
 
-  await teacherRepository.deleteTeacher(id);
+  let removed: { id: string; userId: string } | null;
+  try {
+    removed = await teacherRepository.deleteTeacherAccount(id);
+  } catch (error) {
+    if (isForeignKeyViolation(error)) {
+      throw conflict(
+        'USER_HAS_DEPENDENCIES',
+        'A conta tem ocorrências ou acções de manutenção associadas e não pode ser removida',
+      );
+    }
+    throw error;
+  }
+
+  if (!removed) throw notFound('TEACHER_NOT_FOUND', 'Perfil de docente não encontrado');
 
   await audit({
     action: 'TEACHER_PROFILE_DELETED',
     resource: 'TeacherProfile',
     resourceId: existing.id,
     ...auditContext(ctx),
+  });
+  await audit({
+    action: 'USER_DELETE',
+    resource: 'User',
+    resourceId: removed.userId,
+    ...auditContext(ctx),
+    metadata: { fullName: existing.user.fullName, role: 'TEACHER' },
   });
 
   return { id: existing.id, deleted: true as const };

@@ -490,7 +490,9 @@ export type StudentProfileDto = {
 };
 
 export type CreateStudentProfilePayload = {
-  userId: string;
+  email: string;
+  password: string;
+  fullName: string;
   studentNumber: string;
   courseId: string;
   yearOfStudy?: number;
@@ -521,7 +523,9 @@ export type TeacherProfileDto = {
 };
 
 export type CreateTeacherProfilePayload = {
-  userId: string;
+  email: string;
+  password: string;
+  fullName: string;
   employeeCode: string;
   departmentId: string;
   title?: string;

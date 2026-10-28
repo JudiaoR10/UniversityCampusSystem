@@ -51,6 +51,12 @@ tags:
     description: Parque, vagas e LPR
   - name: Academic
     description: Departamentos, cursos e disciplinas (Gestão Académica)
+  - name: Students
+    description: Perfis de estudantes (Gestão Académica)
+  - name: Teachers
+    description: Perfis de docentes (Gestão Académica)
+  - name: Enrolments
+    description: Inscrições de estudantes em disciplinas (Gestão Académica)
 security:
   - bearerAuth: []
 components:
@@ -381,6 +387,140 @@ components:
         subjects:
           type: array
           items: { $ref: '#/components/schemas/SubjectDto' }
+    EntityRef:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+    StudentProfileStatus:
+      type: string
+      enum: [ACTIVE, SUSPENDED, GRADUATED, WITHDRAWN]
+    CreateStudentProfileRequest:
+      type: object
+      description: >-
+        Conta (User) e perfil criados na mesma transacção atómica. Não envie
+        `userId` nem `role`: a role STUDENT é resolvida pelo servidor.
+      required: [email, password, fullName, studentNumber, courseId]
+      properties:
+        email: { type: string, format: email, example: aluno@ujac.ac.mz }
+        password: { type: string, format: password, minLength: 8, maxLength: 128 }
+        fullName: { type: string, minLength: 2, maxLength: 120, example: 'Ana Maria Silva' }
+        studentNumber: { type: string, minLength: 2, maxLength: 30, example: '20240123' }
+        courseId: { type: string, description: 'Obtém-se de GET /courses' }
+        yearOfStudy: { type: integer, minimum: 1, maximum: 10, nullable: true, example: 2 }
+        phone: { type: string, minLength: 6, maxLength: 30, example: '+258840000000' }
+    UpdateStudentProfileRequest:
+      type: object
+      description: Envie pelo menos um campo.
+      properties:
+        courseId: { type: string }
+        yearOfStudy: { type: integer, minimum: 1, maximum: 10, nullable: true }
+        phone: { type: string, minLength: 6, maxLength: 30, nullable: true }
+        status: { $ref: '#/components/schemas/StudentProfileStatus' }
+    UpdateContactRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone: { type: string, minLength: 6, maxLength: 30, example: '+258840000000' }
+    StudentProfileDto:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        studentNumber: { type: string, example: '20240123' }
+        courseId: { type: string, nullable: true }
+        course: { allOf: [{ $ref: '#/components/schemas/EntityRef' }], nullable: true }
+        yearOfStudy: { type: integer, nullable: true }
+        phone: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/StudentProfileStatus' }
+        user:
+          type: object
+          properties:
+            id: { type: string }
+            fullName: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TeacherProfileStatus:
+      type: string
+      enum: [ACTIVE, ON_LEAVE, INACTIVE]
+    CreateTeacherProfileRequest:
+      type: object
+      description: >-
+        Conta (User) e perfil criados na mesma transacção atómica. Não envie
+        `userId` nem `role`: a role TEACHER é resolvida pelo servidor.
+      required: [email, password, fullName, employeeCode, departmentId]
+      properties:
+        email: { type: string, format: email, example: docente@ujac.ac.mz }
+        password: { type: string, format: password, minLength: 8, maxLength: 128 }
+        fullName: { type: string, minLength: 2, maxLength: 120, example: 'João Paulo Macuácua' }
+        employeeCode: { type: string, minLength: 2, maxLength: 30, example: 'DOC-0042' }
+        departmentId: { type: string, description: 'Obtém-se de GET /departments' }
+        title: { type: string, minLength: 2, maxLength: 80, example: Professor Auxiliar }
+        phone: { type: string, minLength: 6, maxLength: 30, example: '+258840000000' }
+    UpdateTeacherProfileRequest:
+      type: object
+      description: Envie pelo menos um campo.
+      properties:
+        departmentId: { type: string }
+        title: { type: string, minLength: 2, maxLength: 80 }
+        phone: { type: string, minLength: 6, maxLength: 30, nullable: true }
+        status: { $ref: '#/components/schemas/TeacherProfileStatus' }
+    TeacherProfileDto:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        employeeCode: { type: string, example: 'DOC-0042' }
+        departmentId: { type: string, nullable: true }
+        department: { allOf: [{ $ref: '#/components/schemas/EntityRef' }], nullable: true }
+        title: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/TeacherProfileStatus' }
+        user:
+          type: object
+          properties:
+            id: { type: string }
+            fullName: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    EnrolmentStatus:
+      type: string
+      enum: [PENDING, ACTIVE, CANCELLED, COMPLETED]
+    CreateEnrolmentRequest:
+      type: object
+      required: [studentId, subjectId, academicYear]
+      properties:
+        studentId: { type: string, description: 'ID do perfil de estudante (GET /students)' }
+        subjectId: { type: string, description: 'Obtém-se de GET /subjects' }
+        academicYear: { type: integer, minimum: 2000, maximum: 2100, example: 2026 }
+    UpdateEnrolmentStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/EnrolmentStatus' }
+    SubjectEnrolmentDto:
+      type: object
+      properties:
+        id: { type: string }
+        studentId: { type: string }
+        student:
+          type: object
+          properties:
+            id: { type: string }
+            studentNumber: { type: string }
+            fullName: { type: string }
+        subjectId: { type: string }
+        subject: { $ref: '#/components/schemas/EntityRef' }
+        academicYear: { type: integer, example: 2026 }
+        status: { $ref: '#/components/schemas/EnrolmentStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DeletedResult:
+      type: object
+      properties:
+        id: { type: string }
+        deleted: { type: boolean, example: true }
 paths:
   /auth/login:
     post:
@@ -1273,3 +1413,544 @@ paths:
           description: Curso não encontrado (COURSE_NOT_FOUND)
         '409':
           description: Código já existe (SUBJECT_CODE_EXISTS)
+  /students:
+    get:
+      tags: [Students]
+      summary: Listar estudantes
+      description: Roles ADMIN, COORDINATOR, TEACHER. Filtros opcionais.
+      parameters:
+        - in: query
+          name: courseId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: status
+          required: false
+          schema: { $ref: '#/components/schemas/StudentProfileStatus' }
+      responses:
+        '200':
+          description: Lista de perfis de estudante
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/StudentProfileDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '401':
+          description: Não autenticado
+        '403':
+          description: Sem permissão
+    post:
+      tags: [Students]
+      summary: Criar conta de estudante e perfil
+      description: >-
+        Roles ADMIN, COORDINATOR. Cria a conta (User) e o perfil de estudante
+        numa transacção atómica, com a role STUDENT resolvida por `Role.code`.
+        O curso tem de existir. Se alguma parte falhar nada é gravado.
+        Audita `USER_CREATE` e `STUDENT_PROFILE_CREATED` com o mesmo
+        `correlationId`. O login continua em `POST /auth/login`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateStudentProfileRequest' }
+      responses:
+        '201':
+          description: Conta e perfil de estudante criados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StudentProfileDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '400':
+          description: Dados inválidos (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Curso não encontrado (COURSE_NOT_FOUND)
+        '409':
+          description: >-
+            Email já registado (USER_EXISTS), número já usado
+            (STUDENT_NUMBER_EXISTS), role STUDENT em falta na BD
+            (ROLE_NOT_FOUND) ou violação de unicidade concorrente
+            (STUDENT_DUPLICATE)
+  /students/me:
+    get:
+      tags: [Students]
+      summary: Perfil de estudante do utilizador autenticado
+      description: Qualquer utilizador autenticado com perfil de estudante.
+      responses:
+        '200':
+          description: Perfil de estudante
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StudentProfileDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '401':
+          description: Não autenticado
+        '404':
+          description: Sem perfil de estudante (STUDENT_NOT_FOUND)
+    patch:
+      tags: [Students]
+      summary: Actualizar contacto do próprio estudante
+      description: Role STUDENT. Apenas o telefone é actualizável pelo próprio.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateContactRequest' }
+      responses:
+        '200':
+          description: Perfil actualizado
+        '400':
+          description: Dados inválidos (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Sem perfil de estudante (STUDENT_NOT_FOUND)
+  /students/by-user/{userId}:
+    get:
+      tags: [Students]
+      summary: Obter perfil de estudante pelo utilizador
+      description: Roles ADMIN, COORDINATOR, TEACHER.
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Perfil de estudante
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StudentProfileDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '403':
+          description: Sem permissão
+        '404':
+          description: Sem perfil de estudante (STUDENT_NOT_FOUND)
+  /students/{id}:
+    get:
+      tags: [Students]
+      summary: Obter perfil de estudante
+      description: Roles ADMIN, COORDINATOR, TEACHER.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Perfil de estudante
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StudentProfileDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '403':
+          description: Sem permissão
+        '404':
+          description: Não encontrado (STUDENT_NOT_FOUND)
+    patch:
+      tags: [Students]
+      summary: Actualizar perfil de estudante
+      description: Roles ADMIN, COORDINATOR. Envie pelo menos um campo.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateStudentProfileRequest' }
+      responses:
+        '200':
+          description: Perfil actualizado
+        '400':
+          description: Dados inválidos (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Estudante (STUDENT_NOT_FOUND) ou curso (COURSE_NOT_FOUND) não encontrado
+    delete:
+      tags: [Students]
+      summary: Eliminar estudante e conta de acesso
+      description: >-
+        Roles ADMIN, COORDINATOR. Remove o perfil **e** a conta (User) na mesma
+        transacção, pelo que o email fica livre e o login deixa de funcionar.
+        Audita `STUDENT_PROFILE_DELETED` e `USER_DELETE`. Rejeita com
+        `409 STUDENT_HAS_ENROLMENTS` se o estudante tiver inscrições e com
+        `409 USER_HAS_DEPENDENCIES` se a conta tiver ocorrências ou acções de
+        manutenção associadas.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Estudante e conta eliminados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/DeletedResult' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '403':
+          description: Sem permissão
+        '404':
+          description: Não encontrado (STUDENT_NOT_FOUND)
+        '409':
+          description: >-
+            Estudante com inscrições (STUDENT_HAS_ENROLMENTS) ou conta com
+            registos do Core (USER_HAS_DEPENDENCIES)
+  /teachers:
+    get:
+      tags: [Teachers]
+      summary: Listar docentes
+      description: Qualquer utilizador autenticado. Filtros opcionais.
+      parameters:
+        - in: query
+          name: departmentId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: status
+          required: false
+          schema: { $ref: '#/components/schemas/TeacherProfileStatus' }
+      responses:
+        '200':
+          description: Lista de perfis de docente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/TeacherProfileDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '401':
+          description: Não autenticado
+    post:
+      tags: [Teachers]
+      summary: Criar conta de docente e perfil
+      description: >-
+        Role ADMIN. Cria a conta (User) e o perfil de docente numa transacção
+        atómica, com a role TEACHER resolvida por `Role.code`. O departamento
+        tem de existir. Se alguma parte falhar nada é gravado. Audita
+        `USER_CREATE` e `TEACHER_PROFILE_CREATED` com o mesmo `correlationId`.
+        O login continua em `POST /auth/login`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTeacherProfileRequest' }
+      responses:
+        '201':
+          description: Conta e perfil de docente criados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/TeacherProfileDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '400':
+          description: Dados inválidos (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Departamento não encontrado (DEPARTMENT_NOT_FOUND)
+        '409':
+          description: >-
+            Email já registado (USER_EXISTS), código já usado
+            (TEACHER_EMPLOYEE_CODE_EXISTS), role TEACHER em falta na BD
+            (ROLE_NOT_FOUND) ou violação de unicidade concorrente
+            (TEACHER_DUPLICATE)
+  /teachers/me:
+    get:
+      tags: [Teachers]
+      summary: Perfil de docente do utilizador autenticado
+      responses:
+        '200':
+          description: Perfil de docente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/TeacherProfileDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '401':
+          description: Não autenticado
+        '404':
+          description: Sem perfil de docente (TEACHER_NOT_FOUND)
+    patch:
+      tags: [Teachers]
+      summary: Actualizar contacto do próprio docente
+      description: Role TEACHER. Apenas o telefone é actualizável pelo próprio.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateContactRequest' }
+      responses:
+        '200':
+          description: Perfil actualizado
+        '400':
+          description: Dados inválidos (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Sem perfil de docente (TEACHER_NOT_FOUND)
+  /teachers/by-user/{userId}:
+    get:
+      tags: [Teachers]
+      summary: Obter perfil de docente pelo utilizador
+      description: Roles ADMIN, COORDINATOR, TEACHER.
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Perfil de docente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/TeacherProfileDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '403':
+          description: Sem permissão
+        '404':
+          description: Sem perfil de docente (TEACHER_NOT_FOUND)
+  /teachers/{id}:
+    get:
+      tags: [Teachers]
+      summary: Obter perfil de docente
+      description: Roles ADMIN, COORDINATOR, TEACHER.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Perfil de docente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/TeacherProfileDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '403':
+          description: Sem permissão
+        '404':
+          description: Não encontrado (TEACHER_NOT_FOUND)
+    patch:
+      tags: [Teachers]
+      summary: Actualizar perfil de docente
+      description: Roles ADMIN, COORDINATOR. Envie pelo menos um campo.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTeacherProfileRequest' }
+      responses:
+        '200':
+          description: Perfil actualizado
+        '400':
+          description: Dados inválidos (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão
+        '404':
+          description: >-
+            Docente (TEACHER_NOT_FOUND) ou departamento (DEPARTMENT_NOT_FOUND)
+            não encontrado
+    delete:
+      tags: [Teachers]
+      summary: Eliminar docente e conta de acesso
+      description: >-
+        Role ADMIN. Remove o perfil **e** a conta (User) na mesma transacção,
+        pelo que o email fica livre e o login deixa de funcionar. Audita
+        `TEACHER_PROFILE_DELETED` e `USER_DELETE`. Rejeita com
+        `409 USER_HAS_DEPENDENCIES` se a conta tiver ocorrências ou acções de
+        manutenção associadas.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Docente e conta eliminados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/DeletedResult' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '403':
+          description: Sem permissão
+        '404':
+          description: Não encontrado (TEACHER_NOT_FOUND)
+        '409':
+          description: Conta com registos do Core (USER_HAS_DEPENDENCIES)
+  /enrolments:
+    get:
+      tags: [Enrolments]
+      summary: Listar inscrições
+      description: >-
+        Roles ADMIN, COORDINATOR, TEACHER, STUDENT. Um STUDENT vê apenas as
+        suas próprias inscrições; os restantes podem filtrar por estudante.
+      parameters:
+        - in: query
+          name: studentId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: subjectId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: academicYear
+          required: false
+          schema: { type: integer, minimum: 2000, maximum: 2100 }
+      responses:
+        '200':
+          description: Lista de inscrições
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/SubjectEnrolmentDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '401':
+          description: Não autenticado
+        '403':
+          description: Sem permissão
+    post:
+      tags: [Enrolments]
+      summary: Criar inscrição
+      description: >-
+        ADMIN, COORDINATOR ou o próprio STUDENT. O estudante tem de estar
+        ACTIVE, ter curso e a disciplina tem de pertencer a esse curso.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateEnrolmentRequest' }
+      responses:
+        '201':
+          description: Inscrição criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/SubjectEnrolmentDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '400':
+          description: Dados inválidos (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão (FORBIDDEN)
+        '404':
+          description: Estudante (STUDENT_NOT_FOUND) ou disciplina (SUBJECT_NOT_FOUND) não encontrado
+        '409':
+          description: >-
+            Estudante inactivo (STUDENT_NOT_ACTIVE), sem curso
+            (STUDENT_WITHOUT_COURSE), disciplina de outro curso
+            (SUBJECT_NOT_IN_STUDENT_COURSE) ou inscrição duplicada
+            (DUPLICATE_ENROLMENT)
+  /enrolments/{id}/status:
+    patch:
+      tags: [Enrolments]
+      summary: Alterar estado da inscrição
+      description: >-
+        Roles ADMIN, COORDINATOR. Transições permitidas: PENDING → ACTIVE |
+        CANCELLED; ACTIVE → COMPLETED | CANCELLED; COMPLETED e CANCELLED são
+        estados finais. A conclusão (COMPLETED) está reservada à coordenação:
+        ADMIN pode activar e cancelar, mas recebe 403 ao tentar concluir.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateEnrolmentStatusRequest' }
+      responses:
+        '200':
+          description: Estado actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/SubjectEnrolmentDto' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '400':
+          description: Dados inválidos (VALIDATION_ERROR)
+        '403':
+          description: >-
+            Sem permissão, ou ADMIN a tentar concluir uma inscrição (FORBIDDEN)
+        '404':
+          description: Não encontrada (ENROLMENT_NOT_FOUND)
+        '409':
+          description: Transição inválida (INVALID_STATUS_TRANSITION)
+  /enrolments/{id}:
+    delete:
+      tags: [Enrolments]
+      summary: Eliminar inscrição
+      description: Roles ADMIN, COORDINATOR.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Inscrição eliminada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/DeletedResult' }
+                  meta: { $ref: '#/components/schemas/Meta' }
+        '403':
+          description: Sem permissão
+        '404':
+          description: Não encontrada (ENROLMENT_NOT_FOUND)

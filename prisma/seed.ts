@@ -110,7 +110,7 @@ async function main() {
   }
 
   const studentProfile = await prisma.studentProfile.upsert({
-    where: { userId: createdUsers.STUDENT },
+    where: { userId: studentAId },
     update: {},
     create: {
       userId: studentAId,

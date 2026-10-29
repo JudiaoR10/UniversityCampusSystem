@@ -193,20 +193,10 @@ model StudentProfile {
 
   enrolments        Enrolment[]
   subjectEnrolments SubjectEnrolment[]
-  id             String      @id @default(cuid())
-  userId         String      @unique
-  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  studentNumber  String      @unique
-  courseId       String?
-  course         Course?     @relation(fields: [courseId], references: [id])
-  yearOfStudy    Int?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  enrolments     Enrolment[]
-  grades         Grade[]
-  attendance     Attendance[]
-  periodResults  PeriodResult[]
-  exemptions     SubjectExemption[]
+  grades            Grade[]
+  attendance        Attendance[]
+  periodResults     PeriodResult[]
+  exemptions        SubjectExemption[]
 
   @@index([courseId])
 }
@@ -223,9 +213,6 @@ model TeacherProfile {
   status       TeacherProfileStatus @default(ACTIVE)
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
-  department   Department? @relation(fields: [departmentId], references: [id])
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
   salaries     TeacherSalary[]
 
   @@index([departmentId])

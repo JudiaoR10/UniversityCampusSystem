@@ -118,9 +118,35 @@ export type IncidentDto = {
 };
 
 export type AssessmentType = 'TEST' | 'EXAM' | 'ASSIGNMENT' | 'PRACTICAL' | 'ORAL' | 'OTHER' | 'RECURRENCE';
+
 export type GradingMode = 'PERCENTAGE' | 'POINTS' | 'SCALE';
+
+/**
+ * Situação académica do estudante numa disciplina, calculada a partir da
+ * média final (nota inteira, escala 0–20):
+ * - EXCLUIDO:   nota <= 9
+ * - APROVADO:   nota 10 a 13
+ * - DISPENSADO: nota >= 14 (banda 13.5–20)
+ */
 export type SituacaoAcademica = 'EXCLUIDO' | 'APROVADO' | 'DISPENSADO' | 'ADMITIDO_AO_EXAME';
 
+/**
+ * Estado académico detalhado do processo do estudante numa disciplina
+ * (frequência → exame normal → recorrência). Calculado exclusivamente no
+ * backend — o frontend nunca decide aprovações.
+ *
+ * - PENDENTE:                 frequência incompleta (sem dados suficientes)
+ * - DISPENSADO:               frequência >= 14 — dispensado do exame
+ * - EXCLUIDO:                 frequência < 10 — não admitido ao exame
+ * - ADMITIDO_AO_EXAME:        frequência entre 10 e 13, sem nota de exame
+ * - APROVADO_EXAME:           (admissão + exame) / 2 >= 10
+ * - REPROVADO_EXAME:          exame reprovado, sem recorrência lançada
+ * - ADMITIDO_RECORRENCIA:     reprovado no exame e elegível para recorrência
+ * - APROVADO_RECORRENCIA:     (admissão + recorrência) / 2 >= 10
+ * - REPROVADO_RECORRENCIA:    (admissão + recorrência) / 2 < 10
+ * - NAO_ELEGIVEL_RECORRENCIA: frequência abaixo do mínimo de recorrência
+ * - RECORRENCIA_EM_REVISAO:   nota de exame alterada depois da recorrência
+ */
 export type AcademicState =
   | 'PENDENTE'
   | 'DISPENSADO'
@@ -134,18 +160,27 @@ export type AcademicState =
   | 'NAO_ELEGIVEL_RECORRENCIA'
   | 'RECORRENCIA_EM_REVISAO';
 
+/** Nota de exame/recorrência ainda não lançada — nunca é zero. */
 export type ExamSlot = {
+  /** Id da avaliação de exame/recorrência da disciplina (null se não existir). */
   assessmentId: string | null;
+  /** Nota lançada (0–20), null quando ainda não existe. */
   grade: number | null;
+  /** Nota em percentagem (0–100), null quando ainda não existe. */
   valuePercent: number | null;
   comment: string | null;
+  /** true quando o campo de lançamento está disponível para este estudante. */
   editable: boolean;
+  /** Motivo do bloqueio (null quando o campo está disponível). */
   blockedReason: string | null;
 };
 
 export type RecurrenceSlot = ExamSlot & {
+  /** true quando o estudante está aprovado no exame normal → mostra "*" e bloqueia. */
   asterisk: boolean;
+  /** true quando existe campo editável para lançar a nota de recorrência. */
   editable: boolean;
+  /** Motivo do bloqueio (null quando o campo está disponível). */
   blockedReason: string | null;
 };
 
@@ -163,7 +198,9 @@ export type AssessmentDto = {
   createdById: string;
   createdAt: string;
   updatedAt: string;
+  /** true se já existirem notas lançadas para esta avaliação */
   hasGrades?: boolean;
+  /** número de notas lançadas para esta avaliação */
   gradesCount?: number;
 };
 
@@ -193,22 +230,39 @@ export type FinalGradeDto = {
   subjectId: string;
   subjectCode: string;
   subjectName: string;
+  /** Número de testes definido pelo docente (null = usa a regra dos 100% dos pesos). */
   requiredTestCount: number | null;
+  /** true quando o docente dispensou o estudante nesta disciplina (dispensa manual). */
   exempted?: boolean;
+  /** Nota de dispensa (0–20) escolhida pelo docente; null = usa a nota de admissão. */
   exemptionGrade?: number | null;
+  /** Nota final inteira (0–20). Só existe quando todas as notas contínuas estão lançadas. */
   finalGrade: number | null;
+  /** Nota de admissão inteira (média das avaliações contínuas, 0–20). */
   admissionGrade: number | null;
+  /** Nota do exame normal inteira (0–20). */
   examGrade: number | null;
+  /** Nota do exame de recorrência inteira (0–20). */
   recurrenceGrade: number | null;
+  /** true quando o resultado final inclui exame: final = (admissão + exame) / 2. */
   usedExam: boolean;
+  /** Situação calculada a partir da nota final inteira. */
   status: SituacaoAcademica | null;
+  /** Estado académico detalhado (fonte de verdade do módulo de dispensa/exames). */
   state: AcademicState | null;
+  /** Explicação legível do estado (usada quando as regras não estão configuradas). */
   stateReason: string | null;
+  /** Elegível para nota de recorrência (false quando ainda não há exame ou é inelegível). */
   recurrenceEligible: boolean;
+  /** true quando todas as avaliações contínuas exigidas têm nota (nota final disponível). */
   complete: boolean;
+  /** Total de pesos das avaliações contínuas. */
   totalWeight: number;
+  /** Quantidade de avaliações com nota. */
   gradedAssessments: number;
+  /** Quantidade total de avaliações. */
   assessments: number;
+  /** Detalhe das avaliações lançadas. */
   breakdown: Array<{
     assessmentId: string;
     title: string;
@@ -332,7 +386,9 @@ export type AssessmentRosterEntry = {
   value: number | null;
   valuePercent: number | null;
   comment: string | null;
+  /** Situação do estudante na disciplina (null enquanto a média não está completa). */
   situacao: SituacaoAcademica | null;
+  /** Estado académico detalhado (dispensa/exame/recorrência). */
   state?: AcademicState | null;
 };
 
@@ -345,12 +401,18 @@ export type AssessmentSubjectRules = {
   subjectId: string;
   subjectCode: string;
   subjectName: string;
+  /** Nº de testes com nota exigidos para calcular a situação (null = regra dos 100% de pesos). */
   requiredTestCount: number | null;
+  /** Nota mínima de admissão (0–20) para recorrer; null = regra não configurada. */
   recurrenceMinAdmission: number | null;
+  /** false quando a instituição ainda não definiu os critérios de recorrência. */
   rulesConfigured: boolean;
+  /** Pauta publicada (bloqueia alterações até ser reaberta). */
   published: boolean;
   publishedAt: string | null;
+  /** true quando existe época de exame normal aberta (avaliação EXAM criada). */
   hasExamEpoch: boolean;
+  /** true quando existe época de recorrência aberta (avaliação RECURRENCE criada). */
   hasRecurrenceEpoch: boolean;
 };
 

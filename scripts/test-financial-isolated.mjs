@@ -16,6 +16,10 @@ function run(cmd, args, capture = false) {
   });
 }
 function cleanup() { if (created) { spawnSync('docker', ['rm', '-f', '-v', name], { stdio: 'ignore' }); created = false; } }
+function gitShort(ref) {
+  const result = spawnSync('git', ['rev-parse', '--short', ref], { encoding: 'utf8' });
+  return result.status === 0 ? result.stdout.trim() : '';
+}
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { child?.kill(signal); cleanup(); process.exit(130); });
 try {
   mkdirSync('docs/integration-evidence', { recursive: true });
@@ -37,7 +41,8 @@ try {
   await run('npm', ['run', 'test:web']);
   if (env.PLAYWRIGHT_MODULE) await run('node', ['scripts/financial-browser.mjs']);
   const report = JSON.parse(readFileSync('docs/integration-evidence/api-tests.json', 'utf8'));
-  writeFileSync('docs/integration-evidence/summary.json', JSON.stringify({ startedAt, finishedAt: new Date().toISOString(), baseCore: '3343c24', database: 'PostgreSQL 15 descartável; migrações oficiais + financeiras; seed oficial', apiPassed: report.numPassedTests, apiFailed: report.numFailedTests, web: 'passed', build: 'passed', success: report.success }, null, 2) + '\n');
+  const baseCore = process.env.CORE_BASE_SHA || gitShort('MERGE_HEAD') || gitShort('upstream/main') || gitShort('HEAD');
+  writeFileSync('docs/integration-evidence/summary.json', JSON.stringify({ startedAt, finishedAt: new Date().toISOString(), baseCore, database: 'PostgreSQL 15 descartável; migrações oficiais + financeiras; seed oficial', apiPassed: report.numPassedTests, apiFailed: report.numFailedTests, web: 'passed', build: 'passed', success: report.success }, null, 2) + '\n');
   console.log('Integração validada. Evidências: docs/integration-evidence.');
 } catch (error) { console.error(error.message); process.exitCode = 1; }
 finally { cleanup(); }

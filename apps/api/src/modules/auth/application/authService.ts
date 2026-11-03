@@ -2,12 +2,12 @@ import { createHash, randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import type { RoleCode, User } from '@prisma/client';
-import { loadEnv } from '../../../config/env.js';
+import { getEnv } from '../../../config/env.js';
 import { prisma } from '../../../lib/prisma.js';
 import { conflict, forbidden, unauthorized } from '../../../lib/errors.js';
 import { audit } from '../../audit/application/auditService.js';
 
-const BCRYPT_ROUNDS = 12;
+const BCRYPT_ROUNDS = process.env.NODE_ENV === 'test' ? 4 : 12;
 
 export async function hashPassword(password: string) {
   return bcrypt.hash(password, BCRYPT_ROUNDS);
@@ -22,7 +22,7 @@ function hashToken(token: string) {
 }
 
 function signAccessToken(user: User & { role: { code: RoleCode } }) {
-  const env = loadEnv();
+  const env = getEnv();
   return jwt.sign(
     { sub: user.id, email: user.email, role: user.role.code },
     env.JWT_ACCESS_SECRET,
@@ -40,7 +40,7 @@ function parseDurationToMs(value: string): number {
 }
 
 async function issueRefreshToken(userId: string) {
-  const env = loadEnv();
+  const env = getEnv();
   const refreshToken = randomBytes(48).toString('hex');
   const expiresAt = new Date(Date.now() + parseDurationToMs(env.JWT_REFRESH_EXPIRES_IN));
   await prisma.refreshToken.create({
@@ -85,7 +85,7 @@ export async function login(email: string, password: string, meta: { correlation
     throw forbidden('Utilizador inactivo', 'USER_INACTIVE');
   }
 
-  const env = loadEnv();
+  const env = getEnv();
   const accessToken = signAccessToken(user);
   const refreshToken = await issueRefreshToken(user.id);
 
@@ -110,7 +110,7 @@ export async function login(email: string, password: string, meta: { correlation
 }
 
 export async function refresh(refreshToken: string, meta: { correlationId: string }) {
-  const env = loadEnv();
+  const env = getEnv();
   const tokenHash = hashToken(refreshToken);
   const stored = await prisma.refreshToken.findUnique({
     where: { tokenHash },

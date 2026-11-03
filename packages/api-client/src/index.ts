@@ -9,21 +9,45 @@ import type {
   AlertDto,
   ApiError,
   ApiSuccess,
+  AssessmentDto,
+  AssessmentOptions,
+  AssessmentRoster,
+  AttendanceDto,
+  AttendanceRoster,
+  AttendanceSummaryDto,
   AuthUser,
   BuildingDto,
   CourseDto,
+  CreateEnrolmentPayload,
+  CreateStudentProfilePayload,
+  CreateTeacherProfilePayload,
   DashboardSummary,
   DepartmentDto,
   DeviceDto,
+  EnrolmentStatus,
   EquipmentDto,
+  FinalGradeDto,
+  GradeDto,
   IncidentDto,
   LaboratoryDto,
   LoginResponse,
   NotificationDto,
   ParkingLotOverview,
   PlateReadingDto,
+  ResultDto,
   RoomDto,
+  ScheduleDto,
+  ScheduleFiltersInput,
+  ScheduleOptions,
+  SubjectBoard,
+  StudentProfileDto,
+  StudentProfileStatus,
   SubjectDto,
+  SubjectEnrolmentDto,
+  TeacherProfileDto,
+  TeacherProfileStatus,
+  UpdateStudentProfilePayload,
+  UpdateTeacherProfilePayload,
 } from '@smart-campus/shared-types';
 
 export class ApiClientError extends Error {
@@ -45,6 +69,28 @@ export type TokenStore = {
   setTokens: (accessToken: string, refreshToken: string) => void;
   clear: () => void;
 };
+
+function toQuery(params?: Record<string, string | undefined>): string {
+  if (!params) return '';
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') search.set(key, value);
+  }
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
+type QueryParams = Record<string, string | number | undefined>;
+
+function buildQuery(params?: QueryParams): string {
+  if (!params) return '';
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
 
 export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
   const queryString = (params: Record<string, string | number | boolean | undefined>) =>
@@ -145,6 +191,74 @@ export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
       request<PlateReadingDto>('/parking/readings', { method: 'POST', body: JSON.stringify(payload) }),
     updateParkingSpot: (id: string, payload: unknown) =>
       request<unknown>(`/parking/spots/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    assessments: () => request<AssessmentDto[]>('/assessments'),
+    assessmentOptions: () => request<AssessmentOptions>('/assessments/options'),
+    assessmentRoster: (id: string) => request<AssessmentRoster>(`/assessments/${id}/roster`),
+    assessmentGrades: (id: string) => request<GradeDto[]>(`/assessments/${id}/grades`),
+    upsertGrades: (id: string, payload: unknown) =>
+      request<GradeDto[]>(`/assessments/${id}/grades`, { method: 'POST', body: JSON.stringify(payload) }),
+    createAssessment: (payload: unknown) =>
+      request<AssessmentDto>('/assessments', { method: 'POST', body: JSON.stringify(payload) }),
+    updateAssessment: (id: string, payload: unknown) =>
+      request<AssessmentDto>(`/assessments/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteAssessment: (id: string) => request<{ id: string }>(`/assessments/${id}`, { method: 'DELETE' }),
+    setRequiredTestCount: (subjectId: string, requiredTestCount: number | null) =>
+      request<{ id: string; code: string; name: string; requiredTestCount: number | null }>(
+        `/assessments/subject/${subjectId}/required-test-count`,
+        { method: 'PATCH', body: JSON.stringify({ requiredTestCount }) },
+      ),
+    subjectBoard: (subjectId: string) => request<SubjectBoard>(`/assessments/subject/${subjectId}/board`),
+    setSubjectRules: (
+      subjectId: string,
+      payload: {
+        requiredTestCount?: number | null;
+        recurrenceMinAdmission?: number | null;
+        exemptionMinGrade?: number | null;
+      },
+    ) =>
+      request<{ id: string; code: string; name: string; requiredTestCount: number | null; recurrenceMinAdmission: number | null; exemptionMinGrade: number | null; resultsPublishedAt: string | Date | null }>(
+        `/assessments/subject/${subjectId}/rules`,
+        { method: 'PATCH', body: JSON.stringify(payload) },
+      ),
+    publishResults: (subjectId: string, published: boolean) =>
+      request<{
+        subjectId: string;
+        subjectCode: string;
+        subjectName: string;
+        published: boolean;
+        publishedAt: string | null;
+      }>(`/assessments/subject/${subjectId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+    setSubjectExemption: (
+      subjectId: string,
+      payload: { studentId: string; exempted: boolean; grade?: number | null; reason?: string | null },
+    ) =>
+      request<{ subjectId: string; studentId: string; exempted: boolean; grade: number | null }>(
+        `/assessments/subject/${subjectId}/exemptions`,
+        { method: 'POST', body: JSON.stringify(payload) },
+      ),
+    myGrades: () => request<GradeDto[]>('/my/grades'),
+    myFinalGrades: () => request<FinalGradeDto[]>('/my/final-grades'),
+    results: (params?: Record<string, string | undefined>) =>
+      request<ResultDto[]>(`/results${toQuery(params)}`),
+    createResult: (payload: unknown) =>
+      request<ResultDto>('/results', { method: 'POST', body: JSON.stringify(payload) }),
+    attendance: (filters: Record<string, string | undefined> = {}) =>
+      request<AttendanceDto[]>(`/attendance${toQuery(filters)}`),
+    attendanceSummary: (filters: Record<string, string | undefined> = {}) =>
+      request<AttendanceSummaryDto[]>(`/attendance/summary${toQuery(filters)}`),
+    attendanceSessions: () => request<ScheduleDto[]>('/attendance/sessions'),
+    attendanceRoster: (scheduleId: string) =>
+      request<AttendanceRoster>(`/attendance/sessions/${scheduleId}`),
+    markAttendance: (scheduleId: string, payload: unknown) =>
+      request<AttendanceRoster>(`/attendance/sessions/${scheduleId}`, { method: 'POST', body: JSON.stringify(payload) }),
+    schedules: (filters: ScheduleFiltersInput = {}) =>
+      request<ScheduleDto[]>(`/schedules${toQuery(filters as Record<string, string | undefined>)}`),
+    scheduleOptions: () => request<ScheduleOptions>('/schedules/options'),
+    createSchedule: (payload: unknown) =>
+      request<ScheduleDto>('/schedules', { method: 'POST', body: JSON.stringify(payload) }),
+    updateSchedule: (id: string, payload: unknown) =>
+      request<ScheduleDto>(`/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteSchedule: (id: string) => request<{ id: string }>(`/schedules/${id}`, { method: 'DELETE' }),
     financialDebts: (params: { studentId?: string; offset?: number; limit?: number } = {}) => {
       const query = new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)] as [string, string]));
       return request<DebtDto[]>(`/financial/debts?${query}`);
@@ -197,6 +311,49 @@ export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
       request<SubjectDto[]>(`/subjects${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''}`),
     createSubject: (payload: unknown) =>
       request<SubjectDto>('/subjects', { method: 'POST', body: JSON.stringify(payload) }),
+    students: {
+      list: (params?: { courseId?: string; status?: StudentProfileStatus }) =>
+        request<StudentProfileDto[]>(`/students${buildQuery(params)}`),
+      getMe: () => request<StudentProfileDto>('/students/me'),
+      getById: (id: string) => request<StudentProfileDto>(`/students/${id}`),
+      getByUser: (userId: string) => request<StudentProfileDto>(`/students/by-user/${userId}`),
+      create: (payload: CreateStudentProfilePayload) =>
+        request<StudentProfileDto>('/students', { method: 'POST', body: JSON.stringify(payload) }),
+      update: (id: string, payload: UpdateStudentProfilePayload) =>
+        request<StudentProfileDto>(`/students/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+      updateOwn: (payload: { phone: string }) =>
+        request<StudentProfileDto>('/students/me', { method: 'PATCH', body: JSON.stringify(payload) }),
+      remove: (id: string) =>
+        request<{ id: string; deleted: true }>(`/students/${id}`, { method: 'DELETE' }),
+    },
+    teachers: {
+      list: (params?: { departmentId?: string; status?: TeacherProfileStatus }) =>
+        request<TeacherProfileDto[]>(`/teachers${buildQuery(params)}`),
+      getMe: () => request<TeacherProfileDto>('/teachers/me'),
+      getById: (id: string) => request<TeacherProfileDto>(`/teachers/${id}`),
+      getByUser: (userId: string) => request<TeacherProfileDto>(`/teachers/by-user/${userId}`),
+      create: (payload: CreateTeacherProfilePayload) =>
+        request<TeacherProfileDto>('/teachers', { method: 'POST', body: JSON.stringify(payload) }),
+      update: (id: string, payload: UpdateTeacherProfilePayload) =>
+        request<TeacherProfileDto>(`/teachers/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+      updateOwn: (payload: { phone: string }) =>
+        request<TeacherProfileDto>('/teachers/me', { method: 'PATCH', body: JSON.stringify(payload) }),
+      remove: (id: string) =>
+        request<{ id: string; deleted: true }>(`/teachers/${id}`, { method: 'DELETE' }),
+    },
+    enrolments: {
+      list: (params?: { studentId?: string; subjectId?: string; academicYear?: number }) =>
+        request<SubjectEnrolmentDto[]>(`/enrolments${buildQuery(params)}`),
+      create: (payload: CreateEnrolmentPayload) =>
+        request<SubjectEnrolmentDto>('/enrolments', { method: 'POST', body: JSON.stringify(payload) }),
+      updateStatus: (id: string, status: EnrolmentStatus) =>
+        request<SubjectEnrolmentDto>(`/enrolments/${id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status }),
+        }),
+      remove: (id: string) =>
+        request<{ id: string; deleted: true }>(`/enrolments/${id}`, { method: 'DELETE' }),
+    },
     health: async () => {
       const res = await fetch(`${baseUrl.replace(/\/api\/v1$/, '')}/health`);
       return res.json();

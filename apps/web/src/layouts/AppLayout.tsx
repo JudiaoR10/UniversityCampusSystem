@@ -1,30 +1,36 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { campusModules } from "@smart-campus/shared-types";
 import { useAuth } from "../lib/auth";
+import { useNotifications } from "../lib/useNotifications"; // used only to keep unread/connected logic here for now
 import { ModuleStatusBadge } from "../components/ModuleStatusBadge";
 import { BrandMark } from "../components/BrandMark";
 import { useEffect, useMemo, useState } from "react";
 
 const primaryNav = [
-  "ops",
-  "dashboard",
-  "financial",
-  "users",
-  "academic",
-  "students",
-  "rooms",
-  "incidents",
-  "parking",
-  "iot",
-  "alerts",
-  "reports",
-  "audit",
-  "admin",
+  'ops',
+  'dashboard',
+  'financial',
+  'users',
+  'academic',
+  'students',
+  'enrolments',
+  'rooms',
+  'schedules',
+  'attendance',
+  'assessments',
+  'incidents',
+  'parking',
+  'iot',
+  'alerts',
+  'reports',
+  'audit',
+  'admin',
 ];
 
 export function AppLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const { unread } = useNotifications(); // may be removed later if UI no longer uses them
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -150,9 +156,14 @@ export function AppLayout() {
               </div>
             </div>
             <div className="hidden items-center gap-2 md:flex">
-              <span className="rounded-lg border border-campus-line bg-white/80 px-3 py-1.5 text-xs text-campus-deep/70">
-                Notificações · preparado
-              </span>
+              <NavLink
+                to="/notifications"
+                className="group inline-flex items-center justify-center rounded-full border border-campus-line bg-white/85 px-2 py-1 text-base leading-none transition hover:border-campus-teal/40 hover:bg-campus-teal/10"
+                title="Notificações (tempo real)"
+                aria-label={`Notificações${unread > 0 ? `, ${unread} por ler` : ''}`}
+              >
+                <span aria-hidden="true">🔔</span>
+              </NavLink>
               <span className="rounded-lg border border-campus-teal/25 bg-campus-teal/10 px-3 py-1.5 text-xs font-medium text-campus-teal">
                 Core activo
               </span>

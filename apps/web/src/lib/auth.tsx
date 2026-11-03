@@ -30,6 +30,9 @@ const tokenStore = {
   },
 };
 
+/** Token de acesso em bruto (ex.: EventSource, que não pode enviar headers). */
+export const getAccessToken = () => tokenStore.getAccessToken();
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const api = useMemo(() => createApiClient(apiBaseUrl, tokenStore), []);
   const [user, setUser] = useState<AuthUser | null>(null);

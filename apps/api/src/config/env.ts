@@ -44,15 +44,22 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (!merged.API_PORT && merged.PORT) {
     merged.API_PORT = merged.PORT;
   }
-
   const parsed = envSchema.safeParse(merged);
   if (!parsed.success) {
     const details = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Configuração inválida: ${details}`);
   }
-
   return {
     ...parsed.data,
     CORS_ORIGIN: normalizeCorsOrigins(parsed.data.CORS_ORIGIN),
   };
+}
+
+let cachedEnv: Env | null = null;
+
+export function getEnv(): Env {
+  if (!cachedEnv) {
+    cachedEnv = loadEnv();
+  }
+  return cachedEnv;
 }

@@ -110,7 +110,12 @@ export async function updateLaboratory(id: string, input: Partial<CreateLaborato
 }
 
 export async function deleteLaboratory(id: string, actorId: string, correlationId: string) {
-  const lab = await prisma.laboratory.delete({ where: { id } });
+  const lab = await prisma.laboratory.delete({ where: { id } }).catch((err: unknown) => {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+    throw notFound('LABORATORY_NOT_FOUND', 'Laboratório não encontrado');
+    }
+    throw err;
+   });
 
   await audit({
     action: 'LABORATORY_DELETE',

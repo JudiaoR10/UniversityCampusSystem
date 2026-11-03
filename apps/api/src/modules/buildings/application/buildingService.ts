@@ -106,8 +106,18 @@ export async function updateBuilding(id: string, input: Partial<CreateBuildingIn
 }
 
   export async function deleteBuilding(id: string, actorId: string, correlationId: string) {
-    const building = await prisma.building.delete({ where: { id } });
-  
+    const building = await prisma.building.delete({ where: { id } }).catch((err: unknown) =>
+      {
+       if (err instanceof Prisma.PrismaClientKnownRequestError) {
+       if (err.code === 'P2025') throw notFound('BUILDING_NOT_FOUND', 'Edifício não encontrado');
+       if (err.code === 'P2003') {
+       throw conflict('BUILDING_IN_USE', 'O edifício tem salas ou laboratórios associados');
+       }
+       }
+       throw err;
+      });
+
+
     await audit({
       action: 'BUILDING_DELETE',
       resource: 'Building',
@@ -116,6 +126,6 @@ export async function updateBuilding(id: string, input: Partial<CreateBuildingIn
       correlationId,
       metadata: { code: building.code },
     });
-  
+
     return { id: building.id };
   }

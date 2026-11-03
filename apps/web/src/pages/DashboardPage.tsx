@@ -3,11 +3,14 @@ import { Link } from 'react-router-dom';
 import type { DashboardSummary } from '@smart-campus/shared-types';
 import { campusModules } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
+import { canViewAlerts } from '../lib/roles';
 import { ModuleStatusBadge } from '../components/ModuleStatusBadge';
 import { PageIntro } from '../components/PageIntro';
 
+
 export function DashboardPage() {
-  const { api } = useAuth();
+    const { api, user } = useAuth();
+  const canSeeAlerts = canViewAlerts(user?.role);
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,22 +80,26 @@ export function DashboardPage() {
           </ul>
         </div>
 
-        <div className="surface p-5">
-          <h3 className="font-display text-xl font-semibold text-campus-ink">Actividade recente</h3>
-          <ul className="mt-4 space-y-3">
-            {data.recentActivity.map((e) => (
-              <li
-                key={e.id}
-                className="flex items-center justify-between gap-3 border-b border-campus-line/60 pb-2 text-sm last:border-0"
-              >
-                <span>
-                  {e.action} · {e.resource}
-                </span>
-                <span className="text-xs text-campus-deep/60">{new Date(e.createdAt).toLocaleString('pt-PT')}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+                {canSeeAlerts ? (
+          <div className="surface p-5">
+            <h3 className="font-display text-xl font-semibold text-campus-ink">Alertas recentes</h3>
+            <ul className="mt-4 space-y-3">
+              {data.recentAlerts.length === 0 ? (
+                <li className="text-sm text-campus-deep/70">Sem alertas.</li>
+              ) : (
+                data.recentAlerts.map((a) => (
+                  <li key={a.id} className="rounded-xl border border-campus-line/80 bg-campus-mist/50 px-3 py-2.5 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-campus-ink">{a.title}</span>
+                      <span className="text-xs text-campus-deep/60">{a.severity}</span>
+                    </div>
+                    {a.isDemo ? <p className="mt-1 text-xs font-medium text-campus-accent">Dados de demonstração</p> : null}
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        ) : null}
       </section>
 
       <section className="surface p-5 sm:p-6">

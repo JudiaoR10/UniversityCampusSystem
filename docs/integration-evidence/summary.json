@@ -1,6 +1,6 @@
 {
-  "startedAt": "2026-10-26T19:30:27.066Z",
-  "finishedAt": "2026-10-26T19:30:50.085Z",
+  "startedAt": "2026-10-27T04:13:11.980Z",
+  "finishedAt": "2026-10-27T04:13:41.994Z",
   "baseCore": "3343c24",
   "database": "PostgreSQL 15 descartável; migrações oficiais + financeiras; seed oficial",
   "apiPassed": 82,

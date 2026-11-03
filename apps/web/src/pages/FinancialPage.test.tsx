@@ -9,7 +9,11 @@ const mocks = vi.hoisted(() => ({ user: null as AuthUser | null, api: {
   financialAnalysisRequests: vi.fn(), resolveAnalysisRequest: vi.fn(), createAnalysisRequest: vi.fn(),
   createDebt: vi.fn(), createPayment: vi.fn(), financialPolicy: vi.fn(), updateFinancialPolicy: vi.fn(),
   financialNotifications: vi.fn(), financialDelivery: vi.fn(), retryFinancialDelivery: vi.fn(), financialReport: vi.fn(),
-  financialTeachers: vi.fn(), financialSalaries: vi.fn(), createSalary: vi.fn(), updateSalary: vi.fn(), paySalary: vi.fn(), monthlyPaymentReport: vi.fn(),
+  financialTeachers: vi.fn(), financialEmployees: vi.fn(), createExternalEmployee: vi.fn(),
+  salaryChangeRequests: vi.fn(), createSalaryChange: vi.fn(), reviewSalaryChange: vi.fn(),
+  financialSalaries: vi.fn(), createSalary: vi.fn(), paySalary: vi.fn(),
+  courseTuitions: vi.fn(), updateCourseTuition: vi.fn(), monthlyPaymentReport: vi.fn(),
+  auditEvents: vi.fn(),
 } }));
 vi.mock('../lib/auth', () => ({ useAuth: () => mocks }));
 const response = (data: unknown, meta = {}) => ({ data, meta: { correlationId: 'test', ...meta } });
@@ -18,7 +22,9 @@ const debt = { id: 'debt-1', studentId: 'student-1', title: 'Propina Outubro', a
 const history = { payments: [{ id: 'payment-1', code: 'PAY-1', paidAt: '2026-10-01', amountPaid: 100, paymentMethod: 'BANK_TRANSFER', referenceCode: 'BANK-001' }], status: { status: 'ACTIVE' }, totalPaid: 100, totalOutstanding: 200, pagination: { totalPayments: 21, hasMorePayments: true } };
 const analysis = { id: 'analysis-1', studentId: 'student-1', student, debt, reason: 'Solicito revisão desta cobrança.', status: 'PENDENTE_ANALISE', createdAt: '2026-10-01', slaDueDate: '2026-10-08' };
 const teacher = { teacherId: 'teacher-profile-1', userId: 'teacher-user-1', fullName: 'Maria Docente', employeeCode: 'DOC-1', isActive: true };
-const salary = { id: 'salary-1', teacher, month: '2026-10', amount: 15000, notes: '', status: 'PENDING', paidAt: null, updatedAt: '2026-10-24T10:00:00.000Z' };
+const employee = { employeeKey: 'CORE:teacher-user-1', userId: 'teacher-user-1', externalEmployeeId: null, fullName: 'Maria Docente', employeeCode: 'DOC-1', category: 'TEACHER', jobTitle: 'Docente', isActive: true, source: 'CORE', currentSalary: 15000, salaryApprovedAt: '2026-10-20T10:00:00.000Z' };
+const salary = { id: 'salary-1', employee, month: '2026-10', amount: 15000, notes: '', status: 'PENDING', paidAt: null, paymentMethod: null, referenceCode: null, createdAt: '2026-10-24T10:00:00.000Z', updatedAt: '2026-10-24T10:00:00.000Z' };
+const proposal = { id: 'proposal-1', employee, currentAmount: 15000, proposedAmount: 16500, reason: 'Progressão salarial.', status: 'PENDING', requestedBy: { id: 'finance-1', fullName: 'Finance' }, reviewedBy: null, reviewNotes: null, reviewedAt: null, createdAt: '2026-10-24T10:00:00.000Z', updatedAt: '2026-10-24T10:00:00.000Z' };
 function asRole(role: RoleCode) { mocks.user = { id: 'student-1', role, fullName: 'Ana', email: 'ana@example.test', isActive: true }; }
 
 beforeEach(() => {
@@ -30,20 +36,49 @@ beforeEach(() => {
   mocks.api.financialPolicy.mockResolvedValue(response({ code: 'DEFAULT_POLICY', gracePeriodDays: 5, maxDebtAmount: 0, autoBlockEnabled: true }));
   mocks.api.financialNotifications.mockResolvedValue(response([]));
   mocks.api.financialTeachers.mockResolvedValue(response([teacher], { total: 1, hasMore: false }));
+  mocks.api.financialEmployees.mockResolvedValue(response([employee], { total: 1, hasMore: false }));
+  mocks.api.salaryChangeRequests.mockResolvedValue(response([proposal], { total: 1, hasMore: false }));
   mocks.api.financialSalaries.mockResolvedValue(response([salary], { total: 1, hasMore: false }));
+  mocks.api.courseTuitions.mockResolvedValue(response([{ courseId: 'course-1', courseCode: 'LEI', courseName: 'Engenharia Informática', departmentName: 'Engenharia', amount: 5000, notes: '', updatedAt: '2026-10-24T10:00:00.000Z' }]));
   mocks.api.monthlyPaymentReport.mockResolvedValue(response({ kind: 'payments', month: '2026-10', timezone: 'Africa/Maputo', totalPayments: 1, totalAmount: 100, generatedAt: '2026-10-24T10:00:00.000Z', rows: [{ id: 'p-1', fullName: 'Ana Estudante', identityCode: '20260001', description: 'Propina Outubro', amount: 100, paymentMethod: 'BANK_TRANSFER', referenceCode: 'REPORT-001', paidAt: '2026-10-23T10:00:00Z' }] }));
   mocks.api.financialReport.mockResolvedValue(response({ totalDebts: 1, byStatus: { pendentes: 1, vencidas: 0, regularizadas: 0, canceladas: 0 }, totalPayments: 0, studentsBlocked: 0, generatedAt: '2026-10-23' }));
+  mocks.api.auditEvents.mockResolvedValue(response([{ id: 'audit-1', action: 'DEBT_CREATED', resource: 'financial', correlationId: 'corr-1', createdAt: '2026-10-23T10:00:00Z', actor: { fullName: 'Tesouraria Demo' } }]));
 });
 afterEach(cleanup);
 
 describe('Acções financeiras por perfil', () => {
-  it('ADMIN consulta salários sem criar, editar ou pagar; pode imprimir o relatório mensal completo', async () => {
+  it('ADMIN entra no painel administrativo e não recebe acções operacionais', async () => {
     asRole('ADMIN');
+    render(<FinancialPage />);
+    expect(screen.getByRole('button', { name: 'Visão geral' })).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByText('Dívidas pendentes')).toBeInTheDocument();
+    expect(screen.getByText('Contestações pendentes')).toBeInTheDocument();
+    expect(screen.getByText('Actividade financeira recente')).toBeInTheDocument();
+    expect(screen.queryByText('Seleccionar estudante')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Registar dívida|Registar pagamento|Analisar/ })).not.toBeInTheDocument();
+  });
+
+  it('ADMIN consulta estudante sem registar dívida ou pagamento', async () => {
+    asRole('ADMIN');
+    render(<FinancialPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar estudante' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Seleccionar Ana Estudante' }));
+    await screen.findByText('Propina Outubro');
+    expect(screen.queryByRole('heading', { name: 'Nova dívida' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Registar pagamento' })).not.toBeInTheDocument();
+  });
+
+  it('ADMIN consulta funcionários e aprova salários sem criar ou pagar; pode imprimir o relatório mensal', async () => {
+    asRole('ADMIN');
+    mocks.api.reviewSalaryChange.mockResolvedValue(response({ ...proposal, status: 'APPROVED' }));
     const print = vi.spyOn(window, 'print').mockImplementation(() => {});
     render(<FinancialPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Salários dos docentes' }));
-    await screen.findByText('Maria Docente · DOC-1');
-    expect(screen.queryByRole('button', { name: /Novo salário|Editar salário|Registar pagamento salarial/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Funcionários' }));
+    await screen.findAllByText('Maria Docente');
+    expect(screen.queryByRole('button', { name: /Propor salário|Gerar salário|Registar pagamento salarial/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Nota da decisão'), { target: { value: 'Valor conferido.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Aprovar salário' }));
+    await waitFor(() => expect(mocks.api.reviewSalaryChange).toHaveBeenCalledWith('proposal-1', { decision: 'APPROVED', reviewNotes: 'Valor conferido.' }));
     fireEvent.click(screen.getByRole('button', { name: 'Relatórios mensais' }));
     const section = screen.getByRole('region', { name: 'Relatórios mensais' });
     await within(section).findByText('REPORT-001');
@@ -57,20 +92,29 @@ describe('Acções financeiras por perfil', () => {
     print.mockRestore();
   });
 
-  it('FINANCE cria o salário usando o perfil docente e regista o pagamento com a versão apresentada', async () => {
-    asRole('FINANCE'); mocks.api.createSalary.mockResolvedValue(response(salary)); mocks.api.paySalary.mockResolvedValue(response({ ...salary, status: 'PAID' }));
+  it('FINANCE propõe o salário aprovado, gera a folha mensal e regista o pagamento', async () => {
+    asRole('FINANCE');
+    mocks.api.salaryChangeRequests.mockResolvedValue(response([], { total: 0, hasMore: false }));
+    mocks.api.createSalaryChange.mockResolvedValue(response(proposal));
+    mocks.api.createSalary.mockResolvedValue(response(salary));
+    mocks.api.paySalary.mockResolvedValue(response({ ...salary, status: 'PAID' }));
     render(<FinancialPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Salários dos docentes' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Novo salário mensal' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Seleccionar docente Maria Docente' }));
-    fireEvent.change(screen.getByLabelText('Valor do salário (MZN)'), { target: { value: '15000' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Registar salário' }));
-    await screen.findByText('Salário mensal registado.');
-    expect(mocks.api.createSalary).toHaveBeenCalledWith(expect.objectContaining({ teacherId: teacher.teacherId, amount: 15000 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Funcionários' }));
+    await screen.findAllByText('Maria Docente');
+    fireEvent.click(screen.getByRole('button', { name: 'Propor salário' }));
+    fireEvent.change(screen.getByLabelText('Novo salário proposto (MZN)'), { target: { value: '16500' } });
+    fireEvent.change(screen.getByLabelText('Justificação da proposta'), { target: { value: 'Progressão salarial.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar para aprovação' }));
+    await screen.findByText('Proposta enviada ao administrador.');
+    expect(mocks.api.createSalaryChange).toHaveBeenCalledWith({ employeeKey: employee.employeeKey, proposedAmount: 16500, reason: 'Progressão salarial.' });
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar salário mensal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar salário' }));
+    await screen.findByText('Salário mensal gerado com o valor aprovado.');
+    expect(mocks.api.createSalary).toHaveBeenCalledWith(expect.objectContaining({ employeeKey: employee.employeeKey }));
     fireEvent.click(screen.getByRole('button', { name: 'Registar pagamento salarial' }));
     fireEvent.change(screen.getByLabelText('Referência do pagamento salarial'), { target: { value: 'SAL-001' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar pagamento salarial' }));
-    await screen.findByText('Operação salarial registada.');
+    await waitFor(() => expect(mocks.api.paySalary).toHaveBeenCalled());
     expect(mocks.api.paySalary).toHaveBeenCalledWith(salary.id, { amountPaid: 15000, expectedUpdatedAt: salary.updatedAt, paymentMethod: 'BANK_TRANSFER', referenceCode: 'SAL-001' });
   });
 
@@ -144,7 +188,7 @@ describe('Acções financeiras por perfil', () => {
   it('ADMIN abre a engrenagem e guarda apenas as três políticas existentes', async () => {
     asRole('ADMIN'); mocks.api.updateFinancialPolicy.mockResolvedValue(response({}));
     render(<FinancialPage />);
-    expect(mocks.api.financialPolicy).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.api.financialPolicy).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByRole('button', { name: 'Políticas financeiras' }));
     fireEvent.change(await screen.findByLabelText('Dias de tolerância'), { target: { value: '10' } });
     fireEvent.change(screen.getByLabelText('Limite de dívida vencida (MZN)'), { target: { value: '500' } });
@@ -152,6 +196,7 @@ describe('Acções financeiras por perfil', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar políticas' }));
     await screen.findByText('Políticas guardadas.');
     expect(mocks.api.updateFinancialPolicy).toHaveBeenCalledWith({ gracePeriodDays: 10, maxDebtAmount: 500, autoBlockEnabled: false });
+    await waitFor(() => expect(mocks.api.financialPolicy).toHaveBeenCalledTimes(3));
   });
 
   it('mostra erro de histórico e permite repetir a consulta', async () => {

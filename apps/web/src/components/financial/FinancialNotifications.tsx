@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useAuth } from '../../lib/auth';
-import { date, errorMessage, LoadState, Pagination, useFinancialLoad } from './shared';
+import { BusyLabel, date, errorMessage, LoadState, Pagination, useFinancialLoad } from './shared';
 
 export function FinancialNotifications({ studentId, manager }: { studentId: string; manager: boolean }) {
   const { api } = useAuth();
@@ -27,7 +27,8 @@ function Delivery({ id }: { id: string }) {
 }
 
 function DeliveryDetails({ id }: { id: string }) {
-  const { api } = useAuth();
+  const { api, user } = useAuth();
+  const canRetry = user?.role === 'FINANCE';
   const load = useCallback(() => api.financialDelivery(id), [api, id]);
   const result = useFinancialLoad(load);
   const [busy, setBusy] = useState(false);
@@ -45,7 +46,7 @@ function DeliveryDetails({ id }: { id: string }) {
     <LoadState {...result} />
     {error && <p role="alert" className="text-red-700">{error}</p>}
     {delivery && <><p>{labels[delivery.deliveryStatus]} · Tentativas: {delivery.attempts}</p>
-      {['PENDING', 'FAILED'].includes(delivery.deliveryStatus) && <button className="btn-secondary" disabled={busy} onClick={() => void retry()}>Reenviar aviso</button>}
+      {canRetry && ['PENDING', 'FAILED'].includes(delivery.deliveryStatus) && <button className="btn-secondary" disabled={busy} onClick={() => void retry()}><BusyLabel busy={busy} busyText="A reenviar…">Reenviar aviso</BusyLabel></button>}
       <p className="text-sm text-campus-deep/75">O estado de envio não confirma a leitura pelo estudante.</p>
     </>}
   </div>;

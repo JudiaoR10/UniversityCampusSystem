@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { DebtDto } from "@smart-campus/shared-types";
 import { useAuth } from "../../lib/auth";
-
+import { BusyLabel, LoadState, SuccessFeedback } from "./shared";
 
 export function FinancialDebts({ studentId }: { studentId: string }) {
   const { api, user } = useAuth();
@@ -13,7 +13,8 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<DebtDto | null>(null);
   const allowed = !!user && ["STUDENT", "FINANCE", "ADMIN"].includes(user.role);
-  const manager = !!user && ["FINANCE", "ADMIN"].includes(user.role);
+  const canManage = user?.role === "FINANCE";
+  const canContest = user?.role === "STUDENT";
   async function reload() {
     const res = await api.financialDebts({ studentId, offset, limit: 20 });
     setDebts(res.data);
@@ -89,14 +90,14 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
     return <p className="surface p-4 text-sm text-campus-deep sm:p-5">O seu perfil não tem acesso à gestão financeira.</p>;
   return (
     <div className="space-y-6">
+      <SuccessFeedback message={message} onClose={() => setMessage("")} />
       {error && (
         <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </p>
       )}
-      {loading ? <p role="status" className="surface p-4 text-sm text-campus-deep/75">A carregar dívidas...</p> : null}
-      {message && <p role="status" className="rounded-xl bg-campus-teal/10 px-3 py-2 text-sm text-campus-teal">{message}</p>}
-      {manager && (
+      <LoadState loading={loading} error="" reload={() => void reload()} label="A carregar dívidas…" />
+      {canManage && (
         <form
           className="surface grid gap-4 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3"
           onSubmit={(e) => void submit(e, "debt")}
@@ -142,7 +143,7 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
             disabled={busy}
             className="btn-primary w-full self-end md:col-span-2 md:w-auto md:justify-self-start xl:col-span-1"
           >
-            Registar dívida
+            <BusyLabel busy={busy} busyText="A registar…">Registar dívida</BusyLabel>
           </button>
         </form>
       )}
@@ -178,13 +179,13 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
                     </td>
                     <td className="px-4 py-3">{debt.status}</td>
                     <td className="px-4 py-3">
-                      {["PENDENTE", "VENCIDA"].includes(debt.status) && (
+                      {["PENDENTE", "VENCIDA"].includes(debt.status) && (canManage || canContest) && (
                         <button
                           disabled={busy}
                           className="btn-secondary whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
                           onClick={() => setSelected(debt)}
                         >
-                          {manager ? "Registar pagamento" : "Contestar"}
+                          {canManage ? "Registar pagamento" : "Contestar"}
                         </button>
                       )}
                     </td>
@@ -215,12 +216,12 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
       {selected && (
         <form
           className="surface grid gap-4 p-4 sm:p-5 md:grid-cols-2"
-          onSubmit={(e) => void submit(e, manager ? "payment" : "analysis")}
+          onSubmit={(e) => void submit(e, canManage ? "payment" : "analysis")}
         >
           <h2 className="break-words font-display text-xl font-semibold text-campus-ink md:col-span-2">
             {selected.title} — {selected.amount.toFixed(2)} MZN
           </h2>
-          {manager ? (
+          {canManage ? (
             <>
               <label className="min-w-0 text-sm font-medium">
                 Método{" "}
@@ -256,7 +257,7 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
           )}
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap md:col-span-2">
             <button disabled={busy} className="btn-primary">
-              {manager ? "Confirmar pagamento integral" : "Submeter contestação"}
+              <BusyLabel busy={busy} busyText="A processar…">{canManage ? "Confirmar pagamento integral" : "Submeter contestação"}</BusyLabel>
             </button>
             <button
               type="button"

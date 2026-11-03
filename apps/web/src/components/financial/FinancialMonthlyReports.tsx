@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { MonthlyPaymentReportDto } from '@smart-campus/shared-types';
 import { useAuth } from '../../lib/auth';
-import { LoadState, money, useFinancialLoad } from './shared';
+import { BusyLabel, LoadState, money, useFinancialLoad } from './shared';
 
 export const currentFinancialMonth = () => {
   const parts = new Intl.DateTimeFormat('en', { timeZone: 'Africa/Maputo', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
@@ -46,7 +46,7 @@ function MonthlyReport({ kind, month }: { kind: 'payments' | 'salaries'; month: 
   return <>
     <LoadState {...result} />
     {report && <>
-      <div className="flex flex-wrap gap-3"><button className="btn-primary" onClick={print}>Imprimir relatório mensal</button><button className="btn-secondary" onClick={result.reload}>Actualizar relatório</button></div>
+      <div className="flex flex-wrap gap-3"><button className="btn-primary" onClick={print}>Imprimir relatório mensal</button><button className="btn-secondary" disabled={result.loading} onClick={result.reload}><BusyLabel busy={result.loading} busyText="A actualizar…">Actualizar relatório</BusyLabel></button></div>
       <div className="surface space-y-4 p-4 sm:p-5"><ReportContent report={report} /></div>
       {createPortal(<div className="financial-print-view" ref={printRef} aria-hidden="true"><ReportContent report={report} /></div>, document.body)}
     </>}

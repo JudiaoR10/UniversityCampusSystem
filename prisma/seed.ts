@@ -107,6 +107,17 @@ async function main() {
     },
   });
 
+  await prisma.externalEmployee.upsert({
+    where: { employeeCode: 'LIM-001' },
+    update: { fullName: 'Ana Serviços', category: 'CLEANER', jobTitle: 'Agente de limpeza', isActive: true },
+    create: { employeeCode: 'LIM-001', fullName: 'Ana Serviços', category: 'CLEANER', jobTitle: 'Agente de limpeza' },
+  });
+  await prisma.externalEmployee.upsert({
+    where: { employeeCode: 'GRD-001' },
+    update: { fullName: 'Carlos Segurança', category: 'GUARD', jobTitle: 'Guarda', isActive: true },
+    create: { employeeCode: 'GRD-001', fullName: 'Carlos Segurança', category: 'GUARD', jobTitle: 'Guarda' },
+  });
+
   const buildingA = await prisma.building.upsert({
     where: { code: 'A' },
     update: {},
@@ -344,6 +355,7 @@ async function main() {
 
   console.log('Seed concluído.');
   console.log('Credenciais de demonstração (apenas desenvolvimento):');
+  console.log('  financas@smartcampus.demo / Finance123!');
   console.log('  admin@smartcampus.demo / Admin123!');
   console.log('  coordenador@smartcampus.demo / Coord123!');
   console.log('  docente@smartcampus.demo / Docente123!');

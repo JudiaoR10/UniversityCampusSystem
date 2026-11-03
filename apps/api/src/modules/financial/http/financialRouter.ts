@@ -19,8 +19,13 @@ import {
   monthlyReportQuerySchema,
   salaryQuerySchema,
   createSalarySchema,
-  updateSalarySchema,
   salaryPaymentSchema,
+  employeeQuerySchema,
+  createExternalEmployeeSchema,
+  createSalaryChangeSchema,
+  salaryChangeQuerySchema,
+  reviewSalaryChangeSchema,
+  updateCourseTuitionSchema,
 } from "@smart-campus/validation";
 import { authenticate, authorize } from "../../../middleware/auth.js";
 import { success } from "../../../middleware/errorHandler.js";
@@ -54,6 +59,40 @@ router.get('/teachers', authenticate, authorize('FINANCE', 'ADMIN'), async (req,
     success(res, result.data, 200, result.meta);
   } catch (error) { next(error); }
 });
+router.get('/employees', authenticate, authorize('FINANCE', 'ADMIN'), async (req, res, next) => {
+  try {
+    const result = await payroll.listEmployees(req.user!, employeeQuerySchema.parse(req.query));
+    success(res, result.data, 200, result.meta);
+  } catch (error) { next(error); }
+});
+router.post('/employees/external', authenticate, authorize('FINANCE'), async (req, res, next) => {
+  try {
+    success(res, await payroll.createExternalEmployee(
+      req.user!, createExternalEmployeeSchema.parse(req.body), req.correlationId,
+    ), 201);
+  } catch (error) { next(error); }
+});
+router.get('/salary-change-requests', authenticate, authorize('FINANCE', 'ADMIN'), async (req, res, next) => {
+  try {
+    const result = await payroll.listSalaryChangeRequests(req.user!, salaryChangeQuerySchema.parse(req.query));
+    success(res, result.data, 200, result.meta);
+  } catch (error) { next(error); }
+});
+router.post('/salary-change-requests', authenticate, authorize('FINANCE'), async (req, res, next) => {
+  try {
+    success(res, await payroll.createSalaryChangeRequest(
+      req.user!, createSalaryChangeSchema.parse(req.body), req.correlationId,
+    ), 201);
+  } catch (error) { next(error); }
+});
+router.patch('/salary-change-requests/:id/review', authenticate, authorize('ADMIN'), async (req, res, next) => {
+  try {
+    const { id } = financialAnalysisIdSchema.parse(req.params);
+    success(res, await payroll.reviewSalaryChangeRequest(
+      req.user!, id, reviewSalaryChangeSchema.parse(req.body), req.correlationId,
+    ));
+  } catch (error) { next(error); }
+});
 router.get('/salaries', authenticate, authorize('FINANCE', 'ADMIN'), async (req, res, next) => {
   try {
     const result = await payroll.listSalaries(req.user!, salaryQuerySchema.parse(req.query));
@@ -64,16 +103,22 @@ router.post('/salaries', authenticate, authorize('FINANCE'), async (req, res, ne
   try { success(res, await payroll.createSalary(req.user!, createSalarySchema.parse(req.body), req.correlationId), 201); }
   catch (error) { next(error); }
 });
-router.patch('/salaries/:id', authenticate, authorize('FINANCE'), async (req, res, next) => {
-  try {
-    const { id } = financialAnalysisIdSchema.parse(req.params);
-    success(res, await payroll.updateSalary(req.user!, id, updateSalarySchema.parse(req.body), req.correlationId));
-  } catch (error) { next(error); }
-});
 router.post('/salaries/:id/payment', authenticate, authorize('FINANCE'), async (req, res, next) => {
   try {
     const { id } = financialAnalysisIdSchema.parse(req.params);
     success(res, await payroll.paySalary(req.user!, id, salaryPaymentSchema.parse(req.body), req.correlationId));
+  } catch (error) { next(error); }
+});
+router.get('/course-tuitions', authenticate, authorize('FINANCE', 'ADMIN'), async (req, res, next) => {
+  try { success(res, await payroll.listCourseTuitions(req.user!)); }
+  catch (error) { next(error); }
+});
+router.put('/course-tuitions/:id', authenticate, authorize('FINANCE'), async (req, res, next) => {
+  try {
+    const { id } = financialAnalysisIdSchema.parse(req.params);
+    success(res, await payroll.updateCourseTuition(
+      req.user!, id, updateCourseTuitionSchema.parse(req.body), req.correlationId,
+    ));
   } catch (error) { next(error); }
 });
 router.get('/reports/payments', authenticate, authorize('FINANCE', 'ADMIN'), async (req, res, next) => {
@@ -129,7 +174,7 @@ router.get(
 router.post(
   "/notifications/:notificationId/retry",
   authenticate,
-  authorize("FINANCE", "ADMIN"),
+  authorize("FINANCE"),
   async (req, res, next) => {
     try {
       const { notificationId } = financialNotificationIdSchema.parse(
@@ -228,13 +273,13 @@ router.get(
 
 /**
  * POST /api/v1/financial/debts
- * Registar nova divida. Apenas FINANCE e ADMIN (INV-3).
+ * Registar nova divida. Apenas FINANCE (INV-3).
  * Validacao Zod rejeita campos em falta com erro 400 estruturado (Exercicio 3).
  */
 router.post(
   "/debts",
   authenticate,
-  authorize("FINANCE", "ADMIN"),
+  authorize("FINANCE"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Zod valida o body — se falhar, lanca ZodError que o errorHandler converte em 400
@@ -258,12 +303,12 @@ router.post(
 
 /**
  * POST /api/v1/financial/payments
- * Confirmar pagamento e regularizar divida (transaccao atomica). Apenas FINANCE e ADMIN.
+ * Confirmar pagamento e regularizar divida (transaccao atomica). Apenas FINANCE.
  */
 router.post(
   "/payments",
   authenticate,
-  authorize("FINANCE", "ADMIN"),
+  authorize("FINANCE"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = createPaymentSchema.parse(req.body);
@@ -411,13 +456,13 @@ router.post(
 
 /**
  * PATCH /api/v1/financial/analysis-requests/:id
- * Resolver contestacao: PROCEDENTE ou IMPROCEDENTE. Apenas FINANCE e ADMIN (INV-3).
+ * Resolver contestacao: PROCEDENTE ou IMPROCEDENTE. Apenas FINANCE (INV-3).
  * Exercicio 4: regra de negocio — nao pode resolver uma contestacao ja decidida.
  */
 router.patch(
   "/analysis-requests/:id",
   authenticate,
-  authorize("FINANCE", "ADMIN"),
+  authorize("FINANCE"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = resolveAnalysisRequestSchema.parse(req.body);

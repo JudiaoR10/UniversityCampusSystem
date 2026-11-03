@@ -572,9 +572,25 @@ export interface TeacherIdentitySummaryDto {
   isActive: boolean;
 }
 
-export interface TeacherSalaryDto {
+export type EmployeeCategory = 'TEACHER' | 'TECHNICIAN' | 'COORDINATOR' | 'ADMINISTRATIVE' | 'FINANCE' | 'CLEANER' | 'GUARD' | 'OTHER';
+
+export interface EmployeeDto {
+  employeeKey: string;
+  userId: string | null;
+  externalEmployeeId: string | null;
+  employeeCode: string;
+  fullName: string;
+  category: EmployeeCategory;
+  jobTitle: string;
+  isActive: boolean;
+  source: 'CORE' | 'EXTERNAL';
+  currentSalary: number | null;
+  salaryApprovedAt: string | null;
+}
+
+export interface EmployeeSalaryDto {
   id: string;
-  teacher: TeacherIdentitySummaryDto;
+  employee: EmployeeDto;
   month: string;
   amount: number;
   notes: string;
@@ -584,6 +600,33 @@ export interface TeacherSalaryDto {
   paidAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type TeacherSalaryDto = EmployeeSalaryDto;
+
+export interface SalaryChangeRequestDto {
+  id: string;
+  employee: EmployeeDto;
+  currentAmount: number | null;
+  proposedAmount: number;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedBy: { id: string; fullName: string };
+  reviewedBy: { id: string; fullName: string } | null;
+  reviewNotes: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CourseTuitionDto {
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  departmentName: string;
+  amount: number | null;
+  notes: string;
+  updatedAt: string | null;
 }
 
 export interface MonthlyPaymentRowDto {

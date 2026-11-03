@@ -3,12 +3,20 @@ import { prisma } from '../../../lib/prisma.js';
 import { getMe } from '../../auth/application/authService.js';
 
 export async function getDashboard(userId: string) {
+  const viewer = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: { select: { code: true } } },
+  });
+  const canSeeAlerts = viewer?.role.code !== 'STUDENT';
+
   const [currentUser, roomsCount, openIncidents, devicesCount, recentAlerts, recentActivity] = await Promise.all([
     getMe(userId),
     prisma.room.count(),
     prisma.incident.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
     prisma.device.count(),
-    prisma.alert.findMany({ orderBy: { createdAt: 'desc' }, take: 5 }),
+    canSeeAlerts
+      ? prisma.alert.findMany({ orderBy: { createdAt: 'desc' }, take: 5 })
+      : Promise.resolve([]),
     prisma.auditEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 8 }),
   ]);
 

@@ -70,6 +70,14 @@ export async function assertTeacherTeachesSubject(subjectId: string, actor: Acto
   if (actor.role !== 'TEACHER') {
     throw forbidden('Criação de avaliações e lançamento de notas é exclusivo do docente da disciplina', 'FORBIDDEN');
   }
+  // O docente deve estar registado como TeacherProfile activo (módulo de docentes).
+  const teacherProfile = await prisma.teacherProfile.findUnique({
+    where: { userId: actor.id },
+    select: { status: true },
+  });
+  if (!teacherProfile || teacherProfile.status !== 'ACTIVE') {
+    throw forbidden('Docente não está registado/activo no módulo de docentes', 'FORBIDDEN');
+  }
   const schedule = await prisma.classSchedule.findFirst({
     where: { subjectId, teacherId: actor.id },
     select: { id: true },
@@ -847,11 +855,13 @@ export async function getSubjectBoard(subjectId: string, actor: Actor) {
   const { subject, assessments } = await loadSubjectContext(subjectId);
   const exemptedStudents = await loadSubjectExemptions(subjectId);
 
-  const students = await prisma.studentProfile.findMany({
-    where: { courseId: subject.courseId },
-    include: { user: { select: { fullName: true } } },
-    orderBy: { studentNumber: 'asc' },
+  // Apenas estudantes INSCRITOS na disciplina (módulo de inscrições).
+  const enrolments = await prisma.subjectEnrolment.findMany({
+    where: { subjectId, status: { in: ['ACTIVE', 'PENDING'] } },
+    include: { student: { include: { user: { select: { fullName: true } } } } },
+    orderBy: { student: { studentNumber: 'asc' } },
   });
+  const students = enrolments.map((e) => e.student);
 
   const examAssessment = assessments.find((a) => a.type === 'EXAM') ?? null;
   const recurrenceAssessment = assessments.find((a) => a.type === 'RECURRENCE') ?? null;
@@ -994,11 +1004,13 @@ export async function getAssessmentRoster(id: string, actor: Actor) {
   if (!assessment) throw notFound('ASSESSMENT_NOT_FOUND', 'Avaliação não encontrada');
   assertCanManageAssessment(assessment, actor);
 
-  const students = await prisma.studentProfile.findMany({
-    where: { courseId: assessment.subject.courseId },
-    include: { user: { select: { fullName: true } } },
-    orderBy: { studentNumber: 'asc' },
+  // Apenas estudantes INSCRITOS na disciplina (módulo de inscrições).
+  const enrolmentsRoster = await prisma.subjectEnrolment.findMany({
+    where: { subjectId: assessment.subject.id, status: { in: ['ACTIVE', 'PENDING'] } },
+    include: { student: { include: { user: { select: { fullName: true } } } } },
+    orderBy: { student: { studentNumber: 'asc' } },
   });
+  const students = enrolmentsRoster.map((e) => e.student);
 
   const grades = await prisma.grade.findMany({ where: { assessmentId: id } });
   const byStudent = new Map(grades.map((g) => [g.studentId, g]));
@@ -1189,6 +1201,20 @@ export async function upsertGrades(assessmentId: string, input: UpsertGradesInpu
     throw conflict(
       'STUDENT_COURSE_MISMATCH',
       `Estudantes fora do curso da disciplina: ${courseMismatch.map((s) => s.studentNumber).join(', ')}`,
+    );
+  }
+
+  // Apenas estudantes INSCRITOS na disciplina podem receber notas (módulo de inscrições).
+  const enrolments = await prisma.subjectEnrolment.findMany({
+    where: { subjectId: assessment.subject.id, studentId: { in: studentIds }, status: { in: ['ACTIVE', 'PENDING'] } },
+    select: { studentId: true },
+  });
+  const enrolledIds = new Set(enrolments.map((e) => e.studentId));
+  const notEnrolled = students.filter((s) => !enrolledIds.has(s.id));
+  if (notEnrolled.length > 0) {
+    throw conflict(
+      'STUDENT_NOT_ENROLLED',
+      `Estudantes não inscritos nesta disciplina: ${notEnrolled.map((s) => s.studentNumber).join(', ')}`,
     );
   }
 
@@ -1573,8 +1599,15 @@ export async function getFinalGrades(studentId: string, actor: Actor) {
   const profile = await prisma.studentProfile.findUnique({ where: { id: studentId } });
   if (!profile || !profile.courseId) throw notFound('STUDENT_PROFILE_NOT_FOUND', 'Estudante sem curso atribuído');
 
+  // Apenas disciplinas em que o estudante está INSCRITO (módulo de inscrições).
+  const enrolmentRows = await prisma.subjectEnrolment.findMany({
+    where: { studentId, status: { in: ['ACTIVE', 'PENDING'] } },
+    select: { subjectId: true },
+  });
+  const enrolledSubjectIds = enrolmentRows.map((e) => e.subjectId);
+
   const subjects = await prisma.subject.findMany({
-    where: { courseId: profile.courseId },
+    where: { id: { in: enrolledSubjectIds.length ? enrolledSubjectIds : undefined }, courseId: profile.courseId },
     include: {
       assessments: { include: { grades: { where: { studentId } } } },
     },

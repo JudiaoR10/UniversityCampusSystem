@@ -45,6 +45,15 @@ describe('Módulo Avaliações — RBAC (Semana 5) e testes (Semana 6)', () => {
     studentAProfileId = profileA.id;
     studentBProfileId = profileB.id;
 
+    // Garante inscrição de ambos os estudantes em PTP3 (módulo de inscrições).
+    for (const pid of [profileA.id, profileB.id]) {
+      await prisma.subjectEnrolment.upsert({
+        where: { studentId_subjectId_academicYear: { studentId: pid, subjectId, academicYear: 2026 } },
+        update: {},
+        create: { studentId: pid, subjectId, academicYear: 2026, status: 'ACTIVE' },
+      });
+    }
+
     // Garante pelo menos uma avaliação existente para o estudante visualizar.
     const teacherUser = await prisma.user.findUnique({ where: { email: 'docente@smartcampus.demo' } });
     if (!teacherUser) throw new Error('Docente em falta no seed');

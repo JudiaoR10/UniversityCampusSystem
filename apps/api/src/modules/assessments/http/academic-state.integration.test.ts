@@ -41,6 +41,7 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
         await prisma.grade.deleteMany({ where: { assessmentId: { in: assessmentIds } } });
       }
       await prisma.assessment.deleteMany({ where: { subjectId: subject.id } });
+      await prisma.subjectEnrolment.deleteMany({ where: { subjectId: subject.id } });
       await prisma.classSchedule.deleteMany({ where: { subjectId: subject.id } });
       await prisma.subject.delete({ where: { id: subject.id } }).catch(() => undefined);
     }
@@ -151,6 +152,13 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
         startsAt: new Date(Date.now() + dayMs),
         endsAt: new Date(Date.now() + dayMs + 90 * 60 * 1000),
       },
+    });
+
+    // Inscrição do estudante na disciplina (módulo de inscrições).
+    await prisma.subjectEnrolment.upsert({
+      where: { studentId_subjectId_academicYear: { studentId: studentAId, subjectId, academicYear: 2026 } },
+      update: {},
+      create: { studentId: studentAId, subjectId, academicYear: 2026, status: 'ACTIVE' },
     });
 
     test1Id = await createAssessment({ title: 'Contínuo 1 (Sprint)', type: 'TEST', weight: 50 });

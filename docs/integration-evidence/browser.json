@@ -1,0 +1,23 @@
+{
+  "executedAt": "2026-10-24T09:24:36.431Z",
+  "success": true,
+  "checks": [
+    "Login FINANCE oficial",
+    "Pesquisa e selecção de estudante do Core",
+    "Criação de dívida via UI",
+    "Login STUDENT oficial",
+    "Consulta da mesma dívida por User.id",
+    "Ausência de criação administrativa para STUDENT",
+    "Contestação via UI",
+    "Decisão FINANCE visível ao estudante",
+    "Referência de pagamento com mínimo de 4 caracteres",
+    "Pagamento FINANCE reflectido no histórico STUDENT",
+    "Histórico em ecrã móvel sem overflow da página",
+    "Engrenagem exclusiva ADMIN com políticas persistidas",
+    "Salário criado, editado e pago por FINANCE",
+    "ADMIN sem acções de edição salarial",
+    "Relatório mensal de salários com referência e valor reais",
+    "Impressão PDF completa sem menus da aplicação",
+    "TEACHER sem menu financeiro e acesso directo redireccionado"
+  ]
+}

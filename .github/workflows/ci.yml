@@ -14,16 +14,16 @@ jobs:
         env:
           POSTGRES_USER: smartcampus
           POSTGRES_PASSWORD: smartcampus
-          POSTGRES_DB: smart_campus
+          POSTGRES_DB: smart_campus_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U smartcampus -d smart_campus"
+          --health-cmd "pg_isready -U smartcampus -d smart_campus_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://smartcampus:smartcampus@localhost:5432/smart_campus?schema=public
+      DATABASE_URL: postgresql://smartcampus:smartcampus@localhost:5432/smart_campus_test?schema=public
       JWT_ACCESS_SECRET: ci-access-secret-change-me-min-32-chars!!
       JWT_REFRESH_SECRET: ci-refresh-secret-change-me-min-32-chars!
       CORS_ORIGIN: http://localhost:5173

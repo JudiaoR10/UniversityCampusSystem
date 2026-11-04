@@ -21,16 +21,17 @@
 | key | Módulo | Rota | Estado | Grupo atribuído | Branch sugerida |
 | --- | --- | --- | --- | --- | --- |
 | academic | Hub académico | `/academic` | partial | _a definir_ | — |
-| departments | Departamentos | `/departments` | **available** | Gestão Académica — Mirson Maluve | `feature/grupo-academico-departments-crud` |
-| courses | Cursos | `/courses` | **available** | Gestão Académica — Mirson Maluve | `feature/grupo-academico-courses-crud` |
-| subjects | Disciplinas | `/subjects` | **available** | Gestão Académica — Mirson Maluve | `feature/grupo-academico-subjects-crud` |
+| departments | Departamentos | `/departments` | development | _a definir_ | `feature/grupo-academico-departments-crud` |
+| courses | Cursos | `/courses` | development | _a definir_ | `feature/grupo-academico-courses-crud` |
+| subjects | Disciplinas | `/subjects` | development | _a definir_ | `feature/grupo-academico-subjects-crud` |
 | students | Estudantes | `/students` | partial | _a definir_ | `feature/grupo-academico-students-ui` |
 | teachers | Docentes | `/teachers` | partial | _a definir_ | `feature/grupo-academico-teachers-ui` |
 | enrolments | Matrículas | `/enrolments` | development | _a definir_ | `feature/grupo-academico-enrolments-crud` |
-| assessments | Avaliações e notas | `/assessments` | development | _a definir_ | `feature/grupo-academico-assessments-crud` |
-| schedules | Horários e assiduidade | `/schedules` | development | _a definir_ | `feature/grupo-academico-schedules-crud` |
+| assessments | Avaliações e notas | `/assessments` | available | G3 | `feature/grupo-academico-assessments-crud` |
+| schedules | Horários | `/schedules` | available | G3 | `feature/grupo-academico-schedules-crud` |
+| attendance | Assiduidade | `/attendance` | available | G3 | `feature/grupo-academico-attendance-crud` |
 
-**Modelos Prisma já existentes:** `Department`, `Course`, `Subject`, `StudentProfile`, `TeacherProfile`, `Enrolment`.
+**Modelos Prisma já existentes:** `Department`, `Course`, `Subject`, `StudentProfile`, `TeacherProfile`, `Enrolment`, `Assessment`, `Grade`, `ClassSchedule`, `Attendance`.
 
 ---
 
@@ -42,10 +43,10 @@
 | key | Módulo | Rota | Estado | Grupo atribuído | Branch sugerida |
 | --- | --- | --- | --- | --- | --- |
 | campus | Hub campus | `/campus` | partial | _a definir_ | — |
-| buildings | Edifícios | `/buildings` | partial | _a definir_ | `feature/grupo-infra-buildings-crud` |
+| buildings | Edifícios | `/buildings` | **available** | Grupo Infraestrutura | `feature/grupo-infra-campus-crud` |
 | rooms | Salas | `/rooms` | **available** | Core | — |
-| laboratories | Laboratórios | `/laboratories` | development | _a definir_ | `feature/grupo-infra-laboratories-crud` |
-| equipment | Equipamentos | `/equipment` | development | _a definir_ | `feature/grupo-infra-equipment-crud` |
+| laboratories | Laboratórios | `/laboratories` | **available** | Grupo Infraestrutura | `feature/grupo-infra-campus-crud` |
+| equipment | Equipamentos | `/equipment` | **available** | Grupo Infraestrutura | `feature/grupo-infra-campus-crud` |
 | parking | Estacionamento | `/parking` | **available** | Core | — |
 
 **Modelos Prisma:** `Building`, `Room`, `Laboratory`, `Equipment`, `ParkingLot`, `ParkingSpot`, `PlateReading`.
@@ -78,6 +79,18 @@
 | alerts | Alertas | `/alerts` | partial | _a definir_ | `feature/grupo-iot-alerts-rules` |
 
 **Modelos Prisma:** `Device`, `Sensor`, `Reading`, `Alert` (+ campo `mqttTopic`).
+
+---
+
+## Grupo Financeiro
+
+**Branch prefix:** `feature/grupo-financeiro-*`
+
+| key | Módulo | Rota | Estado | Grupo atribuído | Branch sugerida |
+| --- | --- | --- | --- | --- | --- |
+| financial | Gestão financeira | `/financial` | **available** | Grupo Financeiro | `feature/grupo-financeiro-financial-integracao` |
+
+**Modelos Prisma:** `Debt`, `Payment`, `FinancialStatus`, `AnalysisRequest`, `FinancialPolicy`, `FinancialNotification`, `TeacherSalary`.
 
 ---
 

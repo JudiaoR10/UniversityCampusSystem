@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function hash(password: string) {
+  // Custo 12, alinhado com BCRYPT_ROUNDS do authService.
   return bcrypt.hash(password, 12);
 }
 
@@ -15,6 +16,7 @@ async function main() {
     { code: 'TEACHER', name: 'Docente', description: 'Acesso lectivo e consulta' },
     { code: 'TECHNICIAN', name: 'Técnico', description: 'Infraestrutura e ocorrências' },
     { code: 'COORDINATOR', name: 'Coordenador', description: 'Coordenação de área' },
+    { code: 'FINANCE', name: 'Tesouraria', description: 'Gestão financeira de estudantes' },
     { code: 'ADMIN', name: 'Administrador', description: 'Administração completa' },
   ];
 
@@ -29,11 +31,14 @@ async function main() {
   const roleMap = Object.fromEntries((await prisma.role.findMany()).map((r) => [r.code, r.id]));
 
   const users = [
+    { email: 'financas@smartcampus.demo', fullName: 'Tesouraria Demo', role: 'FINANCE' as RoleCode, password: 'Finance123!' },
     { email: 'admin@smartcampus.demo', fullName: 'Admin Demo', role: 'ADMIN' as RoleCode, password: 'Admin123!' },
     { email: 'coordenador@smartcampus.demo', fullName: 'Coordenador Demo', role: 'COORDINATOR' as RoleCode, password: 'Coord123!' },
     { email: 'docente@smartcampus.demo', fullName: 'Docente Demo', role: 'TEACHER' as RoleCode, password: 'Docente123!' },
+    { email: 'docente2@smartcampus.demo', fullName: 'Docente Dois Demo', role: 'TEACHER' as RoleCode, password: 'Docente123!' },
     { email: 'tecnico@smartcampus.demo', fullName: 'Técnico Demo', role: 'TECHNICIAN' as RoleCode, password: 'Tecnico123!' },
     { email: 'estudante@smartcampus.demo', fullName: 'Estudante Demo', role: 'STUDENT' as RoleCode, password: 'Estudante123!' },
+    { email: 'estudante2@smartcampus.demo', fullName: 'Estudante Dois Demo', role: 'STUDENT' as RoleCode, password: 'Estudante123!' },
   ];
 
   const createdUsers: Record<string, string> = {};
@@ -49,8 +54,13 @@ async function main() {
         roleId: roleMap[u.role],
       },
     });
-    createdUsers[u.role] = user.id;
+    createdUsers[u.email] = user.id;
   }
+
+  const adminId = createdUsers['admin@smartcampus.demo'];
+  const teacherId = createdUsers['docente@smartcampus.demo'];
+  const studentAId = createdUsers['estudante@smartcampus.demo'];
+  const studentBId = createdUsers['estudante2@smartcampus.demo'];
 
   const dept = await prisma.department.upsert({
     where: { code: 'DEI' },
@@ -73,7 +83,7 @@ async function main() {
     },
   });
 
-  await prisma.subject.upsert({
+  const subject = await prisma.subject.upsert({
     where: { code: 'PTP3' },
     update: {},
     create: {
@@ -81,118 +91,167 @@ async function main() {
       name: 'Prática Técnico-Profissional III',
       credits: 6,
       courseId: course.id,
+      requiredTestCount: 2,
+    },
+  });
+  if (subject.requiredTestCount == null) {
+    await prisma.subject.update({
+      where: { id: subject.id },
+      data: { requiredTestCount: 2 },
+    });
+  }
+  // Critério de recorrência institucional (nota mínima de admissão 0–20).
+  // Guardado: nunca sobrescreve um valor já definido na BD.
+  if (subject.recurrenceMinAdmission == null) {
+    await prisma.subject.update({
+      where: { id: subject.id },
+      data: { recurrenceMinAdmission: 7 },
+    });
+  }
+
+  const studentProfile = await prisma.studentProfile.upsert({
+    where: { userId: studentAId },
+    update: {},
+    create: {
+      userId: studentAId,
+      studentNumber: 'EST-2026-001',
+      courseId: course.id,
+      yearOfStudy: 3,
+      phone: '+258 84 000 0001',
+      status: 'ACTIVE',
     },
   });
 
   await prisma.studentProfile.upsert({
-    where: { userId: createdUsers.STUDENT },
+    where: { userId: studentBId },
     update: {},
     create: {
-      userId: createdUsers.STUDENT,
-      studentNumber: 'EST-2026-001',
+      userId: studentBId,
+      studentNumber: 'EST-2026-002',
       courseId: course.id,
       yearOfStudy: 3,
     },
   });
 
   await prisma.teacherProfile.upsert({
-    where: { userId: createdUsers.TEACHER },
+    where: { userId: teacherId },
     update: {},
     create: {
-      userId: createdUsers.TEACHER,
+      userId: teacherId,
       employeeCode: 'DOC-100',
+      departmentId: dept.id,
+      title: 'Assistente',
+      phone: '+258 84 000 0002',
+      status: 'ACTIVE',
+    },
+  });
+
+  await prisma.subjectEnrolment.upsert({
+    where: {
+      studentId_subjectId_academicYear: {
+        studentId: studentProfile.id,
+        subjectId: subject.id,
+        academicYear: 2026,
+      },
+    },
+    update: {},
+    create: {
+      studentId: studentProfile.id,
+      subjectId: subject.id,
+      academicYear: 2026,
+      status: 'ACTIVE',
+    },
+  });
+
+  await prisma.teacherProfile.upsert({
+    where: { userId: createdUsers['docente2@smartcampus.demo'] },
+    update: {},
+    create: {
+      userId: createdUsers['docente2@smartcampus.demo'],
+      employeeCode: 'DOC-101',
       departmentId: dept.id,
     },
   });
 
-  const buildingA = await prisma.building.upsert({
-    where: { code: 'A' },
-    update: {},
-    create: { code: 'A', name: 'Edifício A — Ciências', floors: 3, description: 'Edifício principal de demonstração' },
-  });
+  const studentA = await prisma.studentProfile.findUnique({ where: { userId: studentAId } });
+  const studentB = await prisma.studentProfile.findUnique({ where: { userId: studentBId } });
 
-  const buildingB = await prisma.building.upsert({
-    where: { code: 'B' },
-    update: {},
-    create: { code: 'B', name: 'Edifício B — Laboratórios', floors: 2 },
-  });
-
-  const roomA101 = await prisma.room.upsert({
-    where: { code: 'A-101' },
-    update: {},
-    create: {
-      code: 'A-101',
-      name: 'Sala de Aula 101',
-      capacity: 40,
-      floor: 1,
-      status: 'AVAILABLE',
-      buildingId: buildingA.id,
-    },
-  });
-
-  await prisma.room.upsert({
-    where: { code: 'A-201' },
-    update: {},
-    create: {
-      code: 'A-201',
-      name: 'Sala de Aula 201',
-      capacity: 30,
-      floor: 2,
-      status: 'AVAILABLE',
-      buildingId: buildingA.id,
-    },
-  });
-
-  const labRoom = await prisma.room.upsert({
-    where: { code: 'B-L01' },
-    update: {},
-    create: {
-      code: 'B-L01',
-      name: 'Laboratório IoT',
-      capacity: 20,
-      floor: 1,
-      status: 'AVAILABLE',
-      buildingId: buildingB.id,
-    },
-  });
-
-  await prisma.laboratory.upsert({
-    where: { code: 'LAB-IOT' },
-    update: {},
-    create: {
-      code: 'LAB-IOT',
-      name: 'Laboratório de IoT',
-      description: 'Espaço preparado para integração MQTT',
-      buildingId: buildingB.id,
-    },
-  });
-
-  const projector = await prisma.equipment.upsert({
-    where: { code: 'EQ-PROJ-01' },
-    update: {},
-    create: {
-      code: 'EQ-PROJ-01',
-      name: 'Projector Epson',
-      description: 'Projector da sala A-101',
-      roomId: roomA101.id,
-    },
-  });
-
-  const existingIncident = await prisma.incident.findFirst({
-    where: { title: 'Projector sem imagem' },
-  });
-  if (!existingIncident) {
-    await prisma.incident.create({
-      data: {
-        title: 'Projector sem imagem',
-        description: 'O projector da sala A-101 não liga. Dados fictícios de demonstração.',
-        status: 'OPEN',
-        priority: 'MEDIUM',
-        roomId: roomA101.id,
-        equipmentId: projector.id,
-        reporterId: createdUsers.STUDENT,
-      },
+  if (studentA) {
+    await prisma.enrolment.upsert({
+      where: { studentId_courseId_academicYear: { studentId: studentA.id, courseId: course.id, academicYear: '2026' } },
+      update: {},
+      create: { studentId: studentA.id, courseId: course.id, academicYear: '2026', status: 'ACTIVE' },
     });
+  }
+  if (studentB) {
+    await prisma.enrolment.upsert({
+      where: { studentId_courseId_academicYear: { studentId: studentB.id, courseId: course.id, academicYear: '2026' } },
+      update: {},
+      create: { studentId: studentB.id, courseId: course.id, academicYear: '2026', status: 'ACTIVE' },
+    });
+  }
+
+  // Avaliações contínuas padrão da disciplina (o docente pode ajustar pesos depois).
+  const defaultAssessments = [
+    { title: 'Teste 1', weight: 50 },
+    { title: 'Teste 2', weight: 50 },
+  ];
+  for (const def of defaultAssessments) {
+    const existing = await prisma.assessment.findFirst({ where: { subjectId: subject.id, title: def.title } });
+    if (!existing) {
+      await prisma.assessment.create({
+        data: {
+          title: def.title,
+          type: 'TEST',
+          gradingMode: 'SCALE',
+          maxScore: 20,
+          weight: def.weight,
+          subjectId: subject.id,
+          createdById: teacherId,
+        },
+      });
+    }
+  }
+
+  const buildingD2 = await prisma.building.upsert({
+    where: { code: 'D2' },
+    update: { name: 'Edifício D2 - UJAC', description: 'Edifício principal da UJAC', floors: 2 },
+    create: { code: 'D2', name: 'Edifício D2 - UJAC', floors: 2, description: 'Edifício principal da UJAC' },
+  });
+
+  // Piso 1
+  await prisma.room.upsert({ where: { code: 'D2-101' }, update: {}, create: { code: 'D2-101', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-102' }, update: {}, create: { code: 'D2-102', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-103' }, update: {}, create: { code: 'D2-103', name: 'Sala dos Professores', capacity: 15, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-104' }, update: {}, create: { code: 'D2-104', name: 'Gabinete de Apoio ao Estudante', capacity: 12, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-105' }, update: {}, create: { code: 'D2-105', name: 'Laboratório', capacity: 25, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-106' }, update: {}, create: { code: 'D2-106', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-107' }, update: {}, create: { code: 'D2-107', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-108' }, update: {}, create: { code: 'D2-108', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-109' }, update: {}, create: { code: 'D2-109', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-110' }, update: {}, create: { code: 'D2-110', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-111' }, update: {}, create: { code: 'D2-111', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-112' }, update: {}, create: { code: 'D2-112', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+
+  // Piso 2
+  await prisma.room.upsert({ where: { code: 'D2-201' }, update: {}, create: { code: 'D2-201', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-202' }, update: {}, create: { code: 'D2-202', name: 'Sala de Coordenação dos Cursos (ISCEG, ISET, FACISH)', capacity: 15, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-203' }, update: {}, create: { code: 'D2-203', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-204' }, update: {}, create: { code: 'D2-204', name: 'Laboratório de Informática', capacity: 25, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-205' }, update: {}, create: { code: 'D2-205', name: 'Laboratório', capacity: 25, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-206' }, update: {}, create: { code: 'D2-206', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-207' }, update: {}, create: { code: 'D2-207', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-207A' }, update: {}, create: { code: 'D2-207A', name: 'Sala de Aula', capacity: 30, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-208' }, update: {}, create: { code: 'D2-208', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-209' }, update: {}, create: { code: 'D2-209', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-210' }, update: {}, create: { code: 'D2-210', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-211' }, update: {}, create: { code: 'D2-211', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-212' }, update: {}, create: { code: 'D2-212', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-213' }, update: {}, create: { code: 'D2-213', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+
+  const roomD2101 = await prisma.room.findUnique({ where: { code: 'D2-101' } });
+  if (!roomD2101) {
+    throw new Error('D2-101 não encontrado após criação das salas do edifício D2');
   }
 
   const device = await prisma.device.upsert({
@@ -203,7 +262,7 @@ async function main() {
       name: 'Sensor ambiental A-101',
       type: 'ESP32',
       status: 'ONLINE',
-      roomId: roomA101.id,
+      roomId: roomD2101.id,
       mqttTopic: 'campus/building-a/room-a101/env',
     },
   });
@@ -247,7 +306,7 @@ async function main() {
   await prisma.notification.createMany({
     data: [
       {
-        userId: createdUsers.ADMIN,
+        userId: adminId,
         title: 'Bem-vindo ao Smart Campus',
         body: 'Core inicial preparado para integração modular (PTP III).',
       },
@@ -340,13 +399,45 @@ async function main() {
     });
   }
 
+  const dayMs = 24 * 60 * 60 * 1000;
+  const scheduleSpecs = [
+    {
+      title: 'Aula PTP3 — Integración Tecnológica',
+      startsAt: new Date(Date.now() + dayMs),
+      endsAt: new Date(Date.now() + dayMs + 90 * 60 * 1000),
+    },
+    {
+      title: 'Aula PTP3 — Projecto em grupo',
+      startsAt: new Date(Date.now() + 3 * dayMs),
+      endsAt: new Date(Date.now() + 3 * dayMs + 90 * 60 * 1000),
+    },
+  ];
+  for (const spec of scheduleSpecs) {
+    const exists = await prisma.classSchedule.findFirst({ where: { title: spec.title } });
+    if (!exists) {
+      await prisma.classSchedule.create({
+        data: {
+          title: spec.title,
+          subjectId: subject.id,
+          courseId: course.id,
+          teacherId,
+          roomId: roomD2101.id,
+          startsAt: spec.startsAt,
+          endsAt: spec.endsAt,
+        },
+      });
+    }
+  }
+
   console.log('Seed concluído.');
   console.log('Credenciais de demonstração (apenas desenvolvimento):');
   console.log('  admin@smartcampus.demo / Admin123!');
   console.log('  coordenador@smartcampus.demo / Coord123!');
   console.log('  docente@smartcampus.demo / Docente123!');
+  console.log('  docente2@smartcampus.demo / Docente123!');
   console.log('  tecnico@smartcampus.demo / Tecnico123!');
   console.log('  estudante@smartcampus.demo / Estudante123!');
+  console.log('  estudante2@smartcampus.demo / Estudante123!');
 }
 
 main()

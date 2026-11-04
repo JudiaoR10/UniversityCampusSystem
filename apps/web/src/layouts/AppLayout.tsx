@@ -1,17 +1,23 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { campusModules } from '@smart-campus/shared-types';
-import { useAuth } from '../lib/auth';
-import { ModuleStatusBadge } from '../components/ModuleStatusBadge';
-import { BrandMark } from '../components/BrandMark';
-import { useEffect, useMemo, useState } from 'react';
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { campusModules } from "@smart-campus/shared-types";
+import { useAuth } from "../lib/auth";
+import { useNotifications } from "../lib/useNotifications"; // used only to keep unread/connected logic here for now
+import { ModuleStatusBadge } from "../components/ModuleStatusBadge";
+import { BrandMark } from "../components/BrandMark";
+import { useEffect, useMemo, useState } from "react";
 
 const primaryNav = [
   'ops',
   'dashboard',
+  'financial',
   'users',
   'academic',
   'students',
+  'enrolments',
   'rooms',
+  'schedules',
+  'attendance',
+  'assessments',
   'incidents',
   'parking',
   'iot',
@@ -24,6 +30,7 @@ const primaryNav = [
 export function AppLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const { unread } = useNotifications(); // may be removed later if UI no longer uses them
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -31,9 +38,9 @@ export function AppLayout() {
   }, [location.pathname]);
 
   useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : '';
+    document.body.style.overflow = open ? "hidden" : "";
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.overflow = "";
     };
   }, [open]);
 
@@ -42,11 +49,21 @@ export function AppLayout() {
       campusModules.filter((m) => {
         if (
           !primaryNav.includes(m.key) &&
-          !['buildings', 'devices', 'campus', 'teachers', 'maintenance', 'notifications'].includes(m.key)
+          ![
+            "buildings",
+            "laboratories",
+            "equipment",
+            "devices",
+            "campus",
+            "teachers",
+            "maintenance",
+            "notifications",
+          ].includes(m.key)
         ) {
           return false;
         }
-        if (m.requiredRoles && user && !m.requiredRoles.includes(user.role)) return false;
+        if (m.requiredRoles && user && !m.requiredRoles.includes(user.role))
+          return false;
         return true;
       }),
     [user],
@@ -58,7 +75,7 @@ export function AppLayout() {
     <div className="min-h-screen min-h-[100dvh] lg:grid lg:grid-cols-[272px_1fr]">
       <aside
         className={`fixed inset-y-0 left-0 z-40 flex w-[min(272px,88vw)] flex-col border-r border-white/10 bg-gradient-to-b from-[#10233d] via-[#123049] to-[#0f3d36] text-white transition duration-300 lg:static lg:w-auto lg:translate-x-0 ${
-          open ? 'translate-x-0' : '-translate-x-full'
+          open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex items-start justify-between gap-2 border-b border-white/10 px-4 py-4 sm:px-5 sm:py-5">
@@ -81,8 +98,8 @@ export function AppLayout() {
               className={({ isActive }) =>
                 `group flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm transition ${
                   isActive
-                    ? 'bg-white/15 text-white shadow-soft'
-                    : 'text-white/70 hover:bg-white/8 hover:text-white'
+                    ? "bg-white/15 text-white shadow-soft"
+                    : "text-white/70 hover:bg-white/8 hover:text-white"
                 }`
               }
             >
@@ -96,7 +113,9 @@ export function AppLayout() {
         <div className="border-t border-white/10 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div className="rounded-xl bg-white/8 px-3 py-3">
             <p className="truncate text-sm font-semibold">{user?.fullName}</p>
-            <p className="mt-0.5 text-xs tracking-wide text-white/60">{user?.role}</p>
+            <p className="mt-0.5 text-xs tracking-wide text-white/60">
+              {user?.role}
+            </p>
             <button
               type="button"
               onClick={() => void logout()}
@@ -132,14 +151,19 @@ export function AppLayout() {
               <div className="min-w-0">
                 <p className="eyebrow hidden sm:block">Área actual</p>
                 <h1 className="truncate font-display text-lg font-semibold text-campus-ink sm:text-xl">
-                  {current?.label ?? 'Smart Campus'}
+                  {current?.label ?? "Smart Campus"}
                 </h1>
               </div>
             </div>
             <div className="hidden items-center gap-2 md:flex">
-              <span className="rounded-lg border border-campus-line bg-white/80 px-3 py-1.5 text-xs text-campus-deep/70">
-                Notificações · preparado
-              </span>
+              <NavLink
+                to="/notifications"
+                className="group inline-flex items-center justify-center rounded-full border border-campus-line bg-white/85 px-2 py-1 text-base leading-none transition hover:border-campus-teal/40 hover:bg-campus-teal/10"
+                title="Notificações (tempo real)"
+                aria-label={`Notificações${unread > 0 ? `, ${unread} por ler` : ''}`}
+              >
+                <span aria-hidden="true">🔔</span>
+              </NavLink>
               <span className="rounded-lg border border-campus-teal/25 bg-campus-teal/10 px-3 py-1.5 text-xs font-medium text-campus-teal">
                 Core activo
               </span>

@@ -32,10 +32,22 @@ roomsRouter.post('/rooms', authenticate, authorize('ADMIN', 'COORDINATOR', 'TECH
   }
 });
 
-roomsRouter.get('/buildings', authenticate, async (_req, res, next) => {
+roomsRouter.patch('/rooms/:id', authenticate, authorize('ADMIN', 'COORDINATOR', 'TECHNICIAN'), async (req, res, next) => {
   try {
-    success(res, await roomService.listBuildings());
+    const body = createRoomSchema.partial().parse(req.body);
+    const room = await roomService.updateRoom(req.params.id, body, req.user!.id, req.correlationId);
+    success(res, room);
   } catch (err) {
     next(err);
   }
 });
+
+roomsRouter.delete('/rooms/:id', authenticate, authorize('ADMIN', 'COORDINATOR', 'TECHNICIAN'), async (req, res, next) => {
+  try {
+    const result = await roomService.deleteRoom(req.params.id, req.user!.id, req.correlationId);
+    success(res, result);
+  } catch (err) {
+    next(err);
+  }
+});
+

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { loadEnv } from '../config/env.js';
+import { getEnv } from '../config/env.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -17,7 +17,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       throw unauthorized();
     }
     const token = header.slice(7);
-    const env = loadEnv();
+    const env = getEnv();
     const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as JwtPayload;
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },

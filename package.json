@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "predev": "npm run db:generate && npm run build -w @smart-campus/shared-types && npm run build -w @smart-campus/validation && npm run build -w @smart-campus/api-client",
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @smart-campus/api\" \"npm run dev -w @smart-campus/web\"",
     "dev:api": "npm run dev -w @smart-campus/api",
     "dev:web": "npm run dev -w @smart-campus/web",
@@ -31,7 +32,8 @@
     "validate:render": "bash .scripts/validate-render-blueprint.sh",
     "diagnose:deploy": "bash .scripts/diagnose-deploy.sh",
     "checklist:render": "bash .scripts/render-checklist.sh",
-    "build:render:unified": "bash .scripts/render-build-unified.sh"
+    "build:render:unified": "bash .scripts/render-build-unified.sh",
+    "test:financial:isolated": "node scripts/test-financial-isolated.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -3,11 +3,11 @@ import { ModuleStatusBadge } from '../components/ModuleStatusBadge';
 import { PageIntro } from '../components/PageIntro';
 
 const items = [
-  { label: 'Edifícios', path: '/buildings', status: 'partial' as const },
+  { label: 'Edifícios', path: '/buildings', status: 'available' as const },
   { label: 'Salas', path: '/rooms', status: 'available' as const },
   { label: 'Estacionamento', path: '/parking', status: 'available' as const },
-  { label: 'Laboratórios', path: '/laboratories', status: 'development' as const },
-  { label: 'Equipamentos', path: '/equipment', status: 'development' as const },
+  { label: 'Laboratórios', path: '/laboratories', status: 'available' as const },
+  { label: 'Equipamentos', path: '/equipment', status: 'available' as const },
 ];
 
 export function CampusHubPage() {

@@ -30,7 +30,7 @@ const primaryNav = [
 export function AppLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
-  const { unread } = useNotifications(); // may be removed later if UI no longer uses them
+  const { unread, connectionState } = useNotifications(); // may be removed later if UI no longer uses them
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -163,6 +163,20 @@ export function AppLayout() {
                 aria-label={`Notificações${unread > 0 ? `, ${unread} por ler` : ''}`}
               >
                 <span aria-hidden="true">🔔</span>
+                <span
+                  aria-hidden="true"
+                  title={connectionState}
+                  className={
+                    'ml-1 inline-block h-2 w-2 rounded-full ' +
+                    (connectionState === 'open'
+                      ? 'bg-emerald-500'
+                      : connectionState === 'connecting'
+                        ? 'bg-amber-400 animate-pulse'
+                        : connectionState === 'error'
+                          ? 'bg-red-500'
+                          : 'bg-campus-deep/30')
+                  }
+                />
               </NavLink>
               <span className="rounded-lg border border-campus-teal/25 bg-campus-teal/10 px-3 py-1.5 text-xs font-medium text-campus-teal">
                 Core activo

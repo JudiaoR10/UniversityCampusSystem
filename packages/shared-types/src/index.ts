@@ -812,13 +812,14 @@ export const campusModules: CampusModule[] = [
     status: "development",
     groupHint: "Grupo IoT",
   },
-  {
+    {
     key: "alerts",
     label: "Alertas",
     path: "/alerts",
     description: "Alertas operacionais e de sensores.",
     status: "available",
     groupHint: "Grupo IoT",
+    requiredRoles: ["ADMIN", "COORDINATOR", "TECHNICIAN"],
   },
   {
     key: "notifications",

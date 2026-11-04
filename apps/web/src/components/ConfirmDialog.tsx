@@ -7,7 +7,8 @@ export type ConfirmOptions = {
   confirmLabel?: string;
 };
 
-export function ConfirmDialog({
+/** Modal usado pelo hook useConfirm (promessa de confirmação). */
+function ConfirmPrompt({
   title,
   message,
   details,
@@ -40,13 +41,13 @@ export function ConfirmDialog({
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
+        aria-labelledby="confirm-prompt-title"
         className="surface w-full max-w-md p-5"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <p className="eyebrow">Confirmação</p>
         <h2
-          id="confirm-dialog-title"
+          id="confirm-prompt-title"
           className="mt-1 font-display text-lg font-semibold text-campus-ink"
         >
           {title}
@@ -68,7 +69,12 @@ export function ConfirmDialog({
           </button>
           <button ref={confirmRef} type="button" className="btn-primary" onClick={onConfirm}>
             {confirmLabel}
-import { useEffect } from 'react';
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Modal de confirmação (substitui window.confirm). Fechar com Escape ou clicar
@@ -167,7 +173,7 @@ export function useConfirm() {
   }, []);
 
   const dialog = options ? (
-    <ConfirmDialog
+    <ConfirmPrompt
       {...options}
       onCancel={() => settle(false)}
       onConfirm={() => settle(true)}

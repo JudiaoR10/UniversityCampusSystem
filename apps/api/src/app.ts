@@ -3,7 +3,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yaml';
@@ -13,6 +12,7 @@ import { createCorsOrigin } from './config/cors.js';
 import { logger } from './lib/logger.js';
 import { correlationIdMiddleware } from './middleware/correlationId.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { configureRateLimits } from './middleware/rateLimits.js';
 import { authRouter } from './modules/auth/http/authRouter.js';
 import { usersRouter } from './modules/users/http/usersRouter.js';
 import { roomsRouter } from './modules/rooms/http/roomsRouter.js';
@@ -64,20 +64,7 @@ export function createApp() {
   );
   app.use(express.json({ limit: '100kb' }));
   app.use(correlationIdMiddleware);
-  app.use(
-    rateLimit({
-      windowMs: env.RATE_LIMIT_WINDOW_MS,
-      max: env.RATE_LIMIT_MAX,
-      standardHeaders: true,
-      legacyHeaders: false,
-      message: {
-        code: 'RATE_LIMITED',
-        message: 'Demasiados pedidos. Tente novamente mais tarde.',
-        details: [],
-        correlationId: 'rate-limit',
-      },
-    }),
-  );
+  configureRateLimits(app, env);
 
   app.get('/health', (_req, res) => {
     const mqtt = getMqttStatus();

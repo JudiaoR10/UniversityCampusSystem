@@ -170,16 +170,43 @@ export async function getAttendanceRoster(scheduleId: string, actor: Actor) {
   const schedule = await findScheduleForStaff(scheduleId, actor);
 
   const enrolments = await prisma.subjectEnrolment.findMany({
-    where: { subjectId: schedule.subjectId, status: 'ACTIVE' },
+    where: { subjectId: schedule.subjectId, status: { in: ['ACTIVE', 'PENDING'] }, student: { courseId: schedule.courseId } },
     include: { student: { include: { user: { select: { fullName: true } } } } },
     orderBy: { student: { studentNumber: 'asc' } },
   });
-  const students = enrolments.map((row) => row.student);
+  const students = [...new Map(enrolments.map((row) => [row.student.id, row.student])).values()];
 
   const records = await prisma.attendance.findMany({ where: { classScheduleId: scheduleId } });
   const byStudent = new Map(records.map((r) => [r.studentProfileId, r]));
 
+  // ClassSchedule has no academic term: use January–June and July–December.
+  const year = schedule.startsAt.getUTCFullYear();
+  const month = schedule.startsAt.getUTCMonth() < 6 ? 0 : 6;
+  const semesterSessions = await prisma.classSchedule.findMany({
+    where: {
+      subjectId: schedule.subjectId,
+      courseId: schedule.courseId,
+      startsAt: { gte: new Date(Date.UTC(year, month, 1)), lt: new Date(Date.UTC(year, month + 6, 1)) },
+      ...(actor.role === 'TEACHER' ? { teacherId: actor.id } : {}),
+    },
+    orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, title: true, startsAt: true, endsAt: true },
+  });
+  const semesterRecords = await prisma.attendance.findMany({
+    where: {
+      classScheduleId: { in: semesterSessions.map((session) => session.id) },
+      studentProfileId: { in: students.map((student) => student.id) },
+    },
+    select: { classScheduleId: true, studentProfileId: true, status: true, note: true },
+  });
+
   return {
+    semester: {
+      year,
+      number: month === 0 ? 1 : 2,
+      sessions: semesterSessions.map((session) => ({ ...session, startsAt: session.startsAt.toISOString(), endsAt: session.endsAt.toISOString() })),
+      records: semesterRecords.map((record) => ({ scheduleId: record.classScheduleId, studentId: record.studentProfileId, status: record.status, note: record.note })),
+    },
     schedule: {
       id: schedule.id,
       title: schedule.title,
@@ -220,17 +247,17 @@ export async function markAttendance(scheduleId: string, input: MarkAttendanceIn
     throw notFound('STUDENT_NOT_FOUND', `Estudantes não encontrados: ${missing.join(', ')}`);
   }
 
-  const foreign = students.filter((student) => student.courseId !== schedule.courseId);
-  if (foreign.length > 0) {
-    throw conflict('STUDENT_COURSE_MISMATCH', 'Há estudantes que não pertencem ao curso da sessão');
-  }
-
   const enrolled = await prisma.subjectEnrolment.findMany({
     where: { subjectId: schedule.subjectId, status: { in: ['ACTIVE', 'PENDING'] }, studentId: { in: studentIds } },
     select: { studentId: true },
   });
   if (enrolled.length !== studentIds.length) {
     throw conflict('STUDENT_NOT_ENROLLED', 'Há estudantes que não estão inscritos nesta disciplina');
+  }
+
+  const foreign = students.filter((student) => student.courseId !== schedule.courseId);
+  if (foreign.length > 0) {
+    throw conflict('STUDENT_COURSE_MISMATCH', 'Há estudantes que não pertencem ao curso da sessão');
   }
 
   await prisma.$transaction(

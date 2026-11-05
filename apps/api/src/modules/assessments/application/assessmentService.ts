@@ -4,7 +4,6 @@ import { AppError, conflict, forbidden, notFound } from '../../../lib/errors.js'
 import { prisma } from '../../../lib/prisma.js';
 import { audit } from '../../audit/application/auditService.js';
 import { notifyUsers } from '../../notifications/application/notificationService.js';
-import { getStudentStatus } from '../../financial/application/financialService.js';
 
 export type Actor = { id: string; role: string };
 
@@ -1158,9 +1157,10 @@ export async function assertStudentFinancialStanding(studentId: string) {
     where: { id: studentId },
     select: { userId: true },
   });
-  if (!profile) return;
-  const standing = await getStudentStatus(profile.userId);
-  if (standing.status === 'BLOCKED') {
+  const row = await prisma.financialStatus.findUnique({
+    where: { studentId: profile?.userId ?? studentId },
+  });
+  if (row?.status === 'BLOCKED') {
     throw forbidden(
       'Deve regularizar a sua situação financeira para consultar as notas',
       'FINANCIAL_BLOCKED',

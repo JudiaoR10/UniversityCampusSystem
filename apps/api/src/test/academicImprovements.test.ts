@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const db = vi.hoisted(() => ({
   studentProfile: { findUnique: vi.fn(), findMany: vi.fn() },
   teacherProfile: { findUnique: vi.fn() },
-  classSchedule: { findUnique: vi.fn(), delete: vi.fn() },
+  classSchedule: { findUnique: vi.fn(), findMany: vi.fn(), delete: vi.fn() },
   subjectEnrolment: { findMany: vi.fn(), findFirst: vi.fn() },
   subject: { findMany: vi.fn() },
   subjectExemption: { findMany: vi.fn() },
@@ -27,7 +27,7 @@ vi.mock('../modules/assessments/application/assessmentService.js', async (import
 
 import { getFinalGrades, listStudentGrades } from '../modules/assessments/application/assessmentService.js';
 import { createResult, listResults } from '../modules/assessments/application/resultService.js';
-import { attendanceSummary, listAttendance } from '../modules/attendance/application/attendanceService.js';
+import { attendanceSummary, listAttendance, getAttendanceRoster } from '../modules/attendance/application/attendanceService.js';
 import { deleteSchedule } from '../modules/schedules/application/scheduleService.js';
 import { readPagination } from '../lib/pagination.js';
 
@@ -111,6 +111,30 @@ describe('Proteção e histórico académico', () => {
 });
 
 describe('Assiduidade e paginação', () => {
+  it('inclui inscrições pendentes sem duplicar estudantes e limita o histórico ao semestre e docente', async () => {
+    const schedule = { id: 'session', subjectId: 'subject', courseId: 'course', teacherId: actor.id,
+      startsAt: new Date('2026-11-02T09:00:00Z'), endsAt: new Date('2026-11-02T10:00:00Z') };
+    db.classSchedule.findUnique.mockResolvedValue(schedule);
+    db.classSchedule.findMany.mockResolvedValue([schedule]);
+    const entry = { student: { ...student, studentNumber: '001', user: { fullName: 'Ana' } } };
+    db.subjectEnrolment.findMany.mockResolvedValue([entry, entry]);
+    db.attendance.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      { classScheduleId: 'session', studentProfileId: student.id, status: 'PRESENT' },
+    ]);
+    const roster = await getAttendanceRoster('session', actor);
+    expect(roster.entries).toHaveLength(1);
+    expect(roster.entries[0]).toMatchObject({ id: student.id, marked: false });
+    expect(roster.semester).toMatchObject({ year: 2026, number: 2,
+      records: [{ scheduleId: 'session', studentId: student.id, status: 'PRESENT' }] });
+    expect(db.subjectEnrolment.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { subjectId: 'subject', status: { in: ['ACTIVE', 'PENDING'] }, student: { courseId: 'course' } },
+    }));
+    expect(db.classSchedule.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: {
+      subjectId: 'subject', courseId: 'course', teacherId: actor.id,
+      startsAt: { gte: new Date('2026-07-01T00:00:00Z'), lt: new Date('2027-01-01T00:00:00Z') },
+    } }));
+  });
+
   it('impede apagar a sessão com presenças, dentro da transação', async () => {
     db.classSchedule.findUnique.mockResolvedValue({ id: 'session' });
     db.attendance.count.mockResolvedValue(1);

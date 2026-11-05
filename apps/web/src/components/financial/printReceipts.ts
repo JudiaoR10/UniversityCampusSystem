@@ -12,11 +12,13 @@ const methods: Record<string, string> = {
 export function printPaymentReceipt(receipt: PaymentReceiptDto) {
   printDocument({
     title: 'Comprovativo de pagamento',
+    summary: [{ label: 'Valor pago', value: money(receipt.payment.amountPaid) }],
+    signatures: ['Tesouraria', 'Recebido por'],
     subtitle: receipt.payment.code,
     eyebrow: 'Tesouraria',
     meta: [
-      receipt.student.fullName,
-      receipt.student.studentNumber ?? 'Sem matrícula',
+      `Estudante: ${receipt.student.fullName}`,
+      `Matrícula: ${receipt.student.studentNumber ?? 'Sem matrícula'}`,
     ],
     columns: ['Campo', 'Valor'],
     rows: [
@@ -36,9 +38,11 @@ export function printSalaryReceipt(receipt: SalaryReceiptDto) {
   const salary = receipt.salary;
   printDocument({
     title: 'Comprovativo de pagamento salarial',
+    summary: [{ label: 'Valor pago', value: money(salary.amount) }],
+    signatures: ['Tesouraria', 'Docente'],
     subtitle: salary.teacher.fullName,
     eyebrow: 'Tesouraria',
-    meta: [salary.teacher.employeeCode, salary.month],
+    meta: [`Código: ${salary.teacher.employeeCode}`, `Período: ${salary.month}`],
     columns: ['Campo', 'Valor'],
     rows: [
       ['Docente', salary.teacher.fullName],

@@ -56,6 +56,7 @@ function MonthlyReport({ kind, month }: { kind: 'payments' | 'salaries'; month: 
 
 function ReportContent({ report }: { report: MonthlyPaymentReportDto }) {
   return <>
+    <p className="financial-document-brand">Smart Campus · Tesouraria</p>
     <h3 className="font-display text-xl font-semibold">Smart Campus — {report.kind === 'payments' ? 'Pagamentos dos estudantes' : 'Salários pagos aos docentes'}</h3>
     <p>Mês do pagamento: <strong>{report.month}</strong> · Moçambique (UTC+02:00)</p>
     <p>{report.totalPayments} pagamento(s) · Total: <strong>{money(report.totalAmount)}</strong></p>
@@ -67,7 +68,9 @@ function ReportContent({ report }: { report: MonthlyPaymentReportDto }) {
         <td className="px-3 py-3">{reportDate(row.paidAt)}</td><td className="px-3 py-3">{row.fullName}<br />{row.identityCode ?? 'Sem matrícula'}</td>
         <td className="px-3 py-3">{row.description}</td><td className="px-3 py-3">{paymentMethods[row.paymentMethod]}</td><td className="break-all px-3 py-3">{row.referenceCode}</td><td className="whitespace-nowrap px-3 py-3 text-right">{row.amount.toFixed(2)}</td>
       </tr>)}</tbody>
+      <tfoot><tr><th colSpan={5} className="px-3 py-3 text-right">Total do mês (MZN)</th><td className="px-3 py-3 text-right font-semibold">{report.totalAmount.toFixed(2)}</td></tr></tfoot>
     </table></div>}
+    <div className="financial-document-signatures"><span>Tesouraria<small>Assinatura e carimbo</small></span><span>Responsável pela conferência<small>Assinatura e carimbo</small></span></div>
     <p className="text-sm text-campus-deep/75">{report.kind === 'payments' ? 'Inclui pagamentos confirmados; regularizações por contestação não representam entrada de dinheiro.' : 'Inclui apenas salários com pagamento registado neste mês; a descrição identifica o período salarial.'}</p>
   </>;
 }

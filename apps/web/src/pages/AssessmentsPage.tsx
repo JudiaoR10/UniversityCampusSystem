@@ -374,7 +374,7 @@ function StaffAssessments() {
       columns: ['Nº', 'Nome do Estudante', `Nota (${selectedRange})`, 'Situação Académica', 'Observações'],
       rows,
       emptyMessage: 'Não há estudantes inscritos no curso desta disciplina.',
-      footer: 'O Docente Responsável ___________________________   Data ____/____/______   Assinatura e Carimbo',
+      signatures: ['Docente responsável', 'Coordenação / Secretariado'],
     });
   }
 

@@ -12,6 +12,7 @@ function mapRoom(room: {
   capacity: number;
   floor: number;
   status: string;
+  temPlaca: boolean;
   createdAt: Date;
   updatedAt: Date;
   building: { id: string; code: string; name: string };
@@ -24,12 +25,13 @@ function mapRoom(room: {
     floor: room.floor,
     status: room.status,
     building: room.building,
+    temPlaca: room.temPlaca,
     createdAt: room.createdAt.toISOString(),
     updatedAt: room.updatedAt.toISOString(),
   };
 }
 
-export async function listRooms() {
+export async function listRooms(actorRole?: string) {
   const [rooms, occupancy] = await Promise.all([
     prisma.room.findMany({
       include: { building: { select: { id: true, code: true, name: true } } },
@@ -37,7 +39,25 @@ export async function listRooms() {
     }),
     computeOccupancyByRoom(),
   ]);
-  return rooms.map((room) => {
+  // Filter out rooms that are associated with POIs or Laboratories
+  const poiRoomCodes = new Set(
+    (await prisma.pOI.findMany({ select: { sala_codigo: true } }))
+      .map((p) => p.sala_codigo)
+      .filter((c): c is string => c !== null),
+  );
+  const labRoomCodes = new Set(
+    (await prisma.laboratory.findMany({ select: { sala_codigo: true } }))
+      .map((l) => l.sala_codigo)
+      .filter((c): c is string => c !== null),
+  );
+  const filteredRooms = rooms.filter(
+    (room) => !poiRoomCodes.has(room.code) && !labRoomCodes.has(room.code),
+  );
+  // Non-admin users only see rooms with temPlaca = true
+  const visibleRooms = actorRole === 'ADMIN'
+    ? filteredRooms
+    : filteredRooms.filter((room) => room.temPlaca);
+  return visibleRooms.map((room) => {
     const mapped = mapRoom(room);
     if (room.status === 'MAINTENANCE' || room.status === 'RESERVED') return mapped;
     const live = occupancy.byRoom.get(room.id);
@@ -48,18 +68,27 @@ export async function listRooms() {
   });
 }
 
-export async function getRoom(id: string) {
+export async function getRoom(id: string, actorRole?: string) {
   const room = await prisma.room.findUnique({
     where: { id },
     include: { building: { select: { id: true, code: true, name: true } } },
   });
   if (!room) throw notFound('ROOM_NOT_FOUND', 'Sala não encontrada');
-  return mapRoom(room);
+  // Non-admin users cannot access rooms without temPlaca
+  if (actorRole !== 'ADMIN' && !room.temPlaca) {
+    throw notFound('ROOM_NOT_FOUND', 'Sala não encontrada');
+  }
+  const mapped = mapRoom(room);
+  return mapped;
 }
 
 export async function createRoom(input: CreateRoomInput, actorId: string, correlationId: string) {
   const building = await prisma.building.findUnique({ where: { id: input.buildingId } });
   if (!building) throw notFound('BUILDING_NOT_FOUND', 'Edifício não encontrado');
+
+  if (input.status === 'OCCUPIED' || input.status === 'MAINTENANCE') {
+    throw conflict('ROOM_INVALID_STATUS', 'Não é possível criar uma sala ocupada ou em manutenção. O estado inicial deve ser AVAILABLE');
+  }
 
   const room = await prisma.room.create({
     data: {
@@ -69,6 +98,7 @@ export async function createRoom(input: CreateRoomInput, actorId: string, correl
       floor: input.floor ?? 0,
       status: input.status ?? 'AVAILABLE',
       buildingId: input.buildingId,
+      temPlaca: input.temPlaca ?? false,
     },
     include: { building: { select: { id: true, code: true, name: true } } },
   });
@@ -94,6 +124,10 @@ export async function updateRoom(
   const existing = await prisma.room.findUnique({ where: { id } });
   if (!existing) throw notFound('ROOM_NOT_FOUND', 'Sala não encontrada');
 
+  if (existing.status !== 'AVAILABLE') {
+    throw conflict('ROOM_NOT_AVAILABLE', 'Apenas salas em estado AVAILABLE podem ser manipuladas');
+  }
+
   if (input.buildingId) {
     const building = await prisma.building.findUnique({ where: { id: input.buildingId } });
     if (!building) throw notFound('BUILDING_NOT_FOUND', 'Edifício não encontrado');
@@ -109,6 +143,7 @@ export async function updateRoom(
         floor: input.floor,
         status: input.status,
         buildingId: input.buildingId,
+        temPlaca: input.temPlaca,
       },
       include: { building: { select: { id: true, code: true, name: true } } },
     });
@@ -134,6 +169,10 @@ export async function updateRoom(
 export async function deleteRoom(id: string, actorId: string, correlationId: string) {
   const existing = await prisma.room.findUnique({ where: { id } });
   if (!existing) throw notFound('ROOM_NOT_FOUND', 'Sala não encontrada');
+
+  if (existing.status !== 'AVAILABLE') {
+    throw conflict('ROOM_NOT_AVAILABLE', 'Apenas salas em estado AVAILABLE podem ser eliminadas');
+  }
 
   await prisma.room.delete({ where: { id } }).catch((err: unknown) => {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {

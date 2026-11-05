@@ -37,6 +37,7 @@ export const createRoomSchema = z.object({
   floor: z.number().int().min(-5).max(100).default(0),
   status: z.enum(['AVAILABLE', 'OCCUPIED', 'MAINTENANCE', 'RESERVED']).optional(),
   buildingId: z.string().min(1),
+  temPlaca: z.boolean().optional(),
 });
 
 export const createBuildingSchema = z.object({
@@ -53,6 +54,7 @@ export const createLaboratorySchema = z.object({
   name: z.string().min(2).max(120),
   description: z.string().max(500).optional().nullable(),
   buildingId: z.string().min(1),
+  sala_codigo: z.string().optional().nullable(),
 });
 
 export const createIncidentSchema = z.object({
@@ -637,3 +639,23 @@ export const listEnrolmentsQuerySchema = z.object({
 export type CreateEnrolmentInput = z.infer<typeof createEnrolmentSchema>;
 export type UpdateEnrolmentStatusInput = z.infer<typeof updateEnrolmentStatusSchema>;
 export type ListEnrolmentsQuery = z.infer<typeof listEnrolmentsQuerySchema>;
+
+export const createPOISchema = z.object({
+  nome: z.string().min(2).max(120),
+  descricao: z.string().max(500).optional().nullable(),
+  tipo: z.enum(['ENTRADA', 'SAIDA', 'WC', 'REFEITORIO', 'BIBLIOTECA', 'SECRETARIA', 'AUDITORIO', 'LABORATORIO', 'SALA_AULA', 'ESCADA', 'ELEVADOR', 'OUTRO']),
+  edificioId: z.string().optional().nullable(),
+  sala_codigo: z.string().optional().nullable(),
+  piso: z.number().int().min(-5).max(100).optional().nullable(),
+  mapX: z.number().int().min(0).max(1000).default(0),
+  mapY: z.number().int().min(0).max(1000).default(0),
+  ativo: z.boolean().default(true),
+});
+
+export const updatePOISchema = createPOISchema.partial().refine(
+  (data) => Object.keys(data).length > 0,
+  { message: 'Pelo menos um campo deve ser fornecido' }
+);
+
+export type CreatePOIInput = z.infer<typeof createPOISchema>;
+export type UpdatePOIInput = z.infer<typeof updatePOISchema>;

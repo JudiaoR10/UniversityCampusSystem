@@ -235,6 +235,59 @@ components:
           - RESERVED
         buildingId:
           type: string
+    CreatePOIRequest:
+      type: object
+      required:
+      - nome
+      - tipo
+      properties:
+        nome:
+          type: string
+          minLength: 2
+          maxLength: 120
+        descricao:
+          type: string
+          maxLength: 500
+          nullable: true
+        tipo:
+          type: string
+          enum:
+          - ENTRADA
+          - SAIDA
+          - WC
+          - REFEITORIO
+          - BIBLIOTECA
+          - SECRETARIA
+          - AUDITORIO
+          - LABORATORIO
+          - SALA_AULA
+          - ESCADA
+          - ELEVADOR
+          - OUTRO
+        edificioId:
+          type: string
+          nullable: true
+        sala_codigo:
+          type: string
+          nullable: true
+        piso:
+          type: integer
+          minimum: -5
+          maximum: 100
+          nullable: true
+        mapX:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          default: 0
+        mapY:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          default: 0
+        ativo:
+          type: boolean
+          default: true
     CreateDeviceRequest:
       type: object
       required:
@@ -302,6 +355,60 @@ components:
         updatedAt:
           type: string
           format: date-time
+    POIDto:
+      type: object
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
+        descricao:
+          type: string
+          nullable: true
+        tipo:
+          type: string
+        edificioId:
+          type: string
+          nullable: true
+        edificio:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            code:
+              type: string
+            name:
+              type: string
+        sala_codigo:
+          type: string
+          nullable: true
+        sala:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            code:
+              type: string
+            name:
+              type: string
+        piso:
+          type: integer
+          nullable: true
+        mapX:
+          type: integer
+        mapY:
+          type: integer
+        ativo:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
     CreateBuildingRequest:
       type: object
       required:
@@ -2636,6 +2743,82 @@ paths:
           description: Sem permissão
         '404':
           description: Sala não encontrada
+  /pois:
+    get:
+      tags:
+      - POI
+      summary: Listar pontos de interesse
+      responses:
+        '200':
+          description: Lista de pontos de interesse
+    post:
+      tags:
+      - POI
+      summary: Criar ponto de interesse
+      description: Roles ADMIN, COORDINATOR, TECHNICIAN.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePOIRequest'
+      responses:
+        '201':
+          description: Ponto de interesse criado
+  /pois/{id}:
+    get:
+      tags:
+      - POI
+      summary: Obter ponto de interesse
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Ponto de interesse
+        '404':
+          description: Não encontrado
+    patch:
+      tags:
+      - POI
+      summary: Actualizar ponto de interesse
+      description: Roles ADMIN, COORDINATOR, TECHNICIAN.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePOIRequest'
+      responses:
+        '200':
+          description: Ponto de interesse actualizado
+        '404':
+          description: Não encontrado
+    delete:
+      tags:
+      - POI
+      summary: Remover ponto de interesse
+      description: Roles ADMIN, COORDINATOR, TECHNICIAN.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Ponto de interesse removido
+        '404':
+          description: Não encontrado
   /buildings:
     get:
       tags:

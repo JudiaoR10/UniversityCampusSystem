@@ -303,6 +303,7 @@ model Building {
   updatedAt   DateTime @updatedAt
   rooms       Room[]
   laboratories Laboratory[]
+  pois        POI[]
 }
 
 model Room {
@@ -311,6 +312,7 @@ model Room {
   name        String
   capacity    Int
   floor       Int        @default(0)
+  temPlaca    Boolean    @default(false) @map("tem_placa")
   status      RoomStatus @default(AVAILABLE)
   buildingId  String
   building    Building   @relation(fields: [buildingId], references: [id])
@@ -319,6 +321,9 @@ model Room {
   equipment   Equipment[]
   incidents   Incident[]
   devices     Device[]
+  placas      Placa[]
+  pois        POI[]
+  laboratories Laboratory[]
 
   @@index([buildingId])
   @@index([status])
@@ -331,11 +336,14 @@ model Laboratory {
   description String?
   buildingId  String
   building    Building @relation(fields: [buildingId], references: [id])
+  sala_codigo String?
+  sala        Room?    @relation(fields: [sala_codigo], references: [code])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   equipment   Equipment[]
 
   @@index([buildingId])
+  @@index([sala_codigo])
 }
 
 model Equipment {
@@ -941,4 +949,71 @@ model FinancialPolicy {
   updatedAt        DateTime @updatedAt
 
   @@map("financial_policies")
+}
+
+enum PlacaTipo {
+  PORTA
+  ENTRADA
+  QUADRO_INFORMACAO
+  DIRECIONAL
+}
+
+model Placa {
+  id            String      @id @default(cuid())
+  tipo          PlacaTipo
+  edificio      String
+  piso          Int?
+  sala_codigo   String?
+  sala          Room?       @relation(fields: [sala_codigo], references: [code])
+  texto_principal String?
+  linhas_texto  Json
+  etiqueta_preta String?
+  direcao       String?
+  observacoes   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([edificio])
+  @@index([sala_codigo])
+  @@index([tipo])
+
+  @@map("placas")
+}
+
+enum POITipo {
+  ENTRADA
+  SAIDA
+  WC
+  REFEITORIO
+  BIBLIOTECA
+  SECRETARIA
+  AUDITORIO
+  LABORATORIO
+  SALA_AULA
+  ESCADA
+  ELEVADOR
+  OUTRO
+}
+
+model POI {
+  id          String   @id @default(cuid())
+  nome        String
+  descricao   String?
+  tipo        POITipo  @default(OUTRO)
+  edificioId  String?
+  edificio    Building? @relation(fields: [edificioId], references: [id])
+  sala_codigo String?
+  sala        Room?     @relation(fields: [sala_codigo], references: [code])
+  piso        Int?
+  mapX        Int       @default(0)
+  mapY        Int       @default(0)
+  ativo       Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([edificioId])
+  @@index([sala_codigo])
+  @@index([tipo])
+  @@index([piso])
+  @@map("poi")
 }

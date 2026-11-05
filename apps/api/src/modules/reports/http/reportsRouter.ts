@@ -5,9 +5,9 @@ import { getReportSummary } from '../application/reportService.js';
 
 export const reportsRouter = Router();
 
-reportsRouter.get('/reports/summary', authenticate, async (_req, res, next) => {
+reportsRouter.get('/reports/summary', authenticate, async (req, res, next) => {
   try {
-    success(res, await getReportSummary());
+    success(res, await getReportSummary(req.user!.role));
   } catch (err) {
     next(err);
   }

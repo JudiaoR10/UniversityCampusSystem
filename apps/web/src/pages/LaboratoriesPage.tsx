@@ -1,26 +1,28 @@
 import { FormEvent, useEffect, useState } from 'react';
-import type { BuildingDto, LaboratoryDto } from '@smart-campus/shared-types';
+import type { BuildingDto, LaboratoryDto, RoomDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { PageIntro } from '../components/PageIntro';
 import { SelectField } from '../components/SelectField';
 import { DeleteAction, EditAction, TableActions } from '../components/ActionButtons';
 
-type LabForm = { code: string; name: string; description: string; buildingId: string };
+type LabForm = { code: string; name: string; description: string; buildingId: string; sala_codigo: string };
 
 export function LaboratoriesPage() {
   const { api, user } = useAuth();
   const [labs, setLabs] = useState<LaboratoryDto[]>([]);
   const [buildings, setBuildings] = useState<BuildingDto[]>([]);
+  const [rooms, setRooms] = useState<RoomDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState<LabForm>({ code: '', name: '', description: '', buildingId: '' });
+  const [form, setForm] = useState<LabForm>({ code: '', name: '', description: '', buildingId: '', sala_codigo: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
   const canManage = user && ['ADMIN', 'COORDINATOR', 'TECHNICIAN'].includes(user.role);
 
   async function load() {
-    const [labsRes, buildingsRes] = await Promise.all([api.laboratories(), api.buildings()]);
+    const [labsRes, buildingsRes, roomsRes] = await Promise.all([api.laboratories(), api.buildings(), api.rooms()]);
     setLabs(labsRes.data);
     setBuildings(buildingsRes.data);
+    setRooms(roomsRes.data);
     if (!editingId && !form.buildingId && buildingsRes.data[0]) {
       setForm((f) => ({ ...f, buildingId: buildingsRes.data[0].id }));
     }
@@ -33,7 +35,7 @@ export function LaboratoriesPage() {
   }, []);
 
   function resetForm() {
-    setForm({ code: '', name: '', description: '', buildingId: buildings[0]?.id ?? '' });
+    setForm({ code: '', name: '', description: '', buildingId: buildings[0]?.id ?? '', sala_codigo: '' });
     setEditingId(null);
   }
 
@@ -44,6 +46,7 @@ export function LaboratoriesPage() {
       name: lab.name,
       description: lab.description ?? '',
       buildingId: lab.buildingId,
+      sala_codigo: lab.sala?.code ?? '',
     });
     setError(null);
   }
@@ -58,6 +61,7 @@ export function LaboratoriesPage() {
           name: form.name,
           description: form.description || null,
           buildingId: form.buildingId,
+          sala_codigo: form.sala_codigo || null,
         });
       } else {
         await api.createLaboratory({
@@ -65,6 +69,7 @@ export function LaboratoriesPage() {
           name: form.name,
           description: form.description || null,
           buildingId: form.buildingId,
+          sala_codigo: form.sala_codigo || null,
         });
       }
       resetForm();
@@ -86,6 +91,8 @@ export function LaboratoriesPage() {
     }
   }
 
+  const roomsForBuilding = rooms.filter((r) => r.building.id === form.buildingId);
+
   return (
     <div className="space-y-6">
       <PageIntro
@@ -105,10 +112,16 @@ export function LaboratoriesPage() {
           <input className="field-input !mt-0" placeholder="Descrição" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <SelectField
             value={form.buildingId}
-            onChange={(buildingId) => setForm({ ...form, buildingId })}
+            onChange={(buildingId) => setForm({ ...form, buildingId, sala_codigo: '' })}
             required
             placeholder="Seleccionar edifício"
             options={buildings.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }))}
+          />
+          <SelectField
+            value={form.sala_codigo}
+            onChange={(sala_codigo) => setForm({ ...form, sala_codigo })}
+            placeholder="Seleccionar sala (opcional)"
+            options={roomsForBuilding.map((r) => ({ value: r.code, label: `${r.code} — ${r.name}` }))}
           />
           <button type="submit" className="btn-primary w-full">
             {editingId ? 'Guardar alterações' : 'Criar laboratório'}
@@ -128,6 +141,7 @@ export function LaboratoriesPage() {
               <th className="px-4 py-3 font-semibold">Código</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 font-semibold">Edifício</th>
+              <th className="px-4 py-3 font-semibold">Sala</th>
               <th className="px-4 py-3 font-semibold">Descrição</th>
               {canManage ? <th className="px-4 py-3 font-semibold text-right">Ações</th> : null}
             </tr>
@@ -138,6 +152,7 @@ export function LaboratoriesPage() {
                 <td className="px-4 py-3 font-medium">{lab.code}</td>
                 <td className="px-4 py-3">{lab.name}</td>
                 <td className="px-4 py-3">{lab.building?.code ?? '—'}</td>
+                <td className="px-4 py-3">{lab.sala?.code ?? '—'}</td>
                 <td className="px-4 py-3">{lab.description ?? '—'}</td>
                 {canManage ? (
                   <td className="px-4 py-3">

@@ -7,7 +7,7 @@ export const dashboardRouter = Router();
 
 dashboardRouter.get('/dashboard', authenticate, async (req, res, next) => {
   try {
-    success(res, await getDashboard(req.user!.id));
+    success(res, await getDashboard(req.user!.id, req.user!.role));
   } catch (err) {
     next(err);
   }

@@ -35,6 +35,7 @@ import type {
   OpsSnapshot,
   ParkingLotOverview,
   PlateReadingDto,
+  POIDto,
   ReadingDto,
   ReportSummaryDto,
   ResultDto,
@@ -160,6 +161,12 @@ export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
     updateBuilding: (id: string, payload: unknown) =>
       request<BuildingDto>(`/buildings/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     deleteBuilding: (id: string) => request<{ id: string }>(`/buildings/${id}`, { method: 'DELETE' }),
+    pois: () => request<POIDto[]>('/pois'),
+    poi: (id: string) => request<POIDto>(`/pois/${id}`),
+    createPoi: (payload: unknown) => request<POIDto>('/pois', { method: 'POST', body: JSON.stringify(payload) }),
+    updatePoi: (id: string, payload: unknown) =>
+      request<POIDto>(`/pois/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deletePoi: (id: string) => request<{ id: string }>(`/pois/${id}`, { method: 'DELETE' }),
     laboratories: () => request<LaboratoryDto[]>('/laboratories'),
     laboratory: (id: string) => request<LaboratoryDto>(`/laboratories/${id}`),
     createLaboratory: (payload: unknown) =>

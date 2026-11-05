@@ -247,7 +247,7 @@ describe('API Estudantes', () => {
       .delete(`${api}/students/${createdStudentId}`)
       .set(bearer(coordinatorToken));
     expect(remove.status).toBe(409);
-    expect(remove.body.code).toBe('STUDENT_HAS_ENROLMENTS');
+    expect(remove.body.code).toBe('STUDENT_HAS_SUBJECT_ENROLMENTS');
 
     const deleteEnrolment = await request(app)
       .delete(`${api}/enrolments/${enrolment.body.data.id}`)
@@ -292,18 +292,50 @@ describe('API Estudantes', () => {
     expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
-  it('bloqueia remoção quando existe Enrolment do Core (409)', async () => {
+  it('permite remoção quando a inscrição em disciplina está cancelada (200)', async () => {
+    const created = await request(app)
+      .post(`${api}/students`)
+      .set(bearer(coordinatorToken))
+      .send(payload({ email: `cancelado.${tag}@test.local`, studentNumber: `CAN${suffix}` }));
+    expect(created.status).toBe(201);
+
+    const enrolment = await request(app)
+      .post(`${api}/enrolments`)
+      .set(bearer(coordinatorToken))
+      .send({ studentId: created.body.data.id, subjectId, academicYear: 2096 });
+    expect(enrolment.status).toBe(201);
+
+    const cancelled = await request(app)
+      .patch(`${api}/enrolments/${enrolment.body.data.id}/status`)
+      .set(bearer(coordinatorToken))
+      .send({ status: 'CANCELLED' });
+    expect(cancelled.status).toBe(200);
+
+    const res = await request(app)
+      .delete(`${api}/students/${created.body.data.id}`)
+      .set(bearer(coordinatorToken));
+    expect(res.status).toBe(200);
+    expect(await prisma.studentProfile.findUnique({ where: { id: created.body.data.id } })).toBeNull();
+  });
+
+  it('ignora a matrícula de curso (Enrolment legado) na remoção (200)', async () => {
+    const created = await request(app)
+      .post(`${api}/students`)
+      .set(bearer(coordinatorToken))
+      .send(payload({ email: `legado.${tag}@test.local`, studentNumber: `LEG${suffix}` }));
+    expect(created.status).toBe(201);
+    const studentId = created.body.data.id;
+
     const coreEnrolment = await prisma.enrolment.create({
-      data: { studentId: createdStudentId, courseId, academicYear: '2098' },
+      data: { studentId, courseId, academicYear: '2098' },
     });
 
     const res = await request(app)
-      .delete(`${api}/students/${createdStudentId}`)
+      .delete(`${api}/students/${studentId}`)
       .set(bearer(coordinatorToken));
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe('STUDENT_HAS_ENROLMENTS');
-
-    await prisma.enrolment.delete({ where: { id: coreEnrolment.id } });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ id: studentId, deleted: true });
+    expect(await prisma.enrolment.findUnique({ where: { id: coreEnrolment.id } })).toBeNull();
   });
 
   it('coordenador remove o perfil e mantém a conta (200)', async () => {

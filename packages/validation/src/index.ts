@@ -518,10 +518,21 @@ export const batchCreateCourseWithSubjectsSchema = z.object({
   subjects: z.array(createSubjectSchema.omit({ courseId: true })).min(1),
 });
 
+export const updateCourseSchema = createCourseSchema
+  .partial()
+  .extend({ description: z.string().max(500).nullable().optional() })
+  .refine((dados) => Object.keys(dados).length > 0, { message: 'Indique pelo menos um campo para actualizar' });
+
+export const updateSubjectSchema = createSubjectSchema
+  .partial()
+  .refine((dados) => Object.keys(dados).length > 0, { message: 'Indique pelo menos um campo para actualizar' });
+
 export type CreateDepartmentInput = z.infer<typeof createDepartmentSchema>;
 export type CreateCourseInput = z.infer<typeof createCourseSchema>;
 export type CreateSubjectInput = z.infer<typeof createSubjectSchema>;
 export type BatchCreateCourseWithSubjectsInput = z.infer<typeof batchCreateCourseWithSubjectsSchema>;
+export type UpdateCourseInput = z.infer<typeof updateCourseSchema>;
+export type UpdateSubjectInput = z.infer<typeof updateSubjectSchema>;
 
 const idSchema = z.string().trim().min(1).max(64);
 const phoneSchema = z.string().trim().min(6).max(30);

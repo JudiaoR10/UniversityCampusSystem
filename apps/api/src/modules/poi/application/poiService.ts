@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import type { CreatePOIInput, UpdatePOIInput } from '@smart-campus/validation';
-import { conflict, notFound } from '../../../lib/errors.js';
+import { notFound } from '../../../lib/errors.js';
 import { prisma } from '../../../lib/prisma.js';
 import { audit } from '../../audit/application/auditService.js';
 

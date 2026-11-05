@@ -19,7 +19,7 @@ const navGroups = [
 export function AppLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
-  const { unread } = useNotifications();
+  const { unread, connectionState } = useNotifications(); // may be removed later if UI no longer uses them
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -163,6 +163,20 @@ export function AppLayout() {
                 aria-label={`Notificações${unread > 0 ? `, ${unread} por ler` : ''}`}
               >
                 <span aria-hidden="true">🔔</span>
+                <span
+                  aria-hidden="true"
+                  title={connectionState}
+                  className={
+                    'ml-1 inline-block h-2 w-2 rounded-full ' +
+                    (connectionState === 'open'
+                      ? 'bg-emerald-500'
+                      : connectionState === 'connecting'
+                        ? 'bg-amber-400 animate-pulse'
+                        : connectionState === 'error'
+                          ? 'bg-red-500'
+                          : 'bg-campus-deep/30')
+                  }
+                />
                 {unread > 0 ? <span className="notice-badge">{unread > 9 ? '9+' : unread}</span> : null}
               </NavLink>
               <span className="hidden items-center gap-2 rounded-lg border border-campus-teal/25 bg-campus-teal/10 px-3 py-1.5 text-xs font-medium text-campus-teal md:inline-flex">

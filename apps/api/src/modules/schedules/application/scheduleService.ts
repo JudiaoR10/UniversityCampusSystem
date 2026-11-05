@@ -1,3 +1,4 @@
+import type { Pagination } from '../../../lib/pagination.js';
 import type { CreateScheduleInput, UpdateScheduleInput } from '@smart-campus/validation';
 import type { Prisma } from '@prisma/client';
 import { AppError, conflict, forbidden, notFound } from '../../../lib/errors.js';
@@ -104,7 +105,7 @@ export type ScheduleFilters = {
  * COORDINATOR/ADMIN: todos, com filtro opcional por studentId (resolve StudentProfile → curso).
  * Em qualquer papel, os filtros opcionais apenas restringem o resultado — nunca ampliam o acesso.
  */
-export async function listSchedules(actor: Actor, filters: ScheduleFilters = {}) {
+export async function listSchedules(actor: Actor, filters: ScheduleFilters = {}, page: Pagination = {}) {
   const scope: Record<string, unknown>[] = [];
 
   if (actor.role === 'STUDENT') {
@@ -140,7 +141,8 @@ export async function listSchedules(actor: Actor, filters: ScheduleFilters = {})
   const schedules = await prisma.classSchedule.findMany({
     where: conditions.length > 0 ? { AND: conditions } : {},
     include: scheduleInclude,
-    orderBy: { startsAt: 'asc' },
+    orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
+    ...page,
   });
 
   const mapped = schedules.map(mapSchedule);
@@ -321,22 +323,32 @@ function startsLabel(date: Date): string {
 export async function updateSchedule(id: string, input: UpdateScheduleInput, actor: Actor, correlationId: string) {
   await assertScheduleWriteAccess(actor);
 
-  const existing = await prisma.classSchedule.findUnique({ where: { id } });
-  if (!existing) throw notFound('SCHEDULE_NOT_FOUND', 'Horário não encontrado');
-
-  const subjectId = input.subjectId ?? existing.subjectId;
-  const courseId = input.courseId ?? existing.courseId;
-  const teacherId = input.teacherId === undefined ? existing.teacherId : input.teacherId;
-  const roomId = input.roomId === undefined ? existing.roomId : input.roomId;
-  const startsAt = input.startsAt ?? existing.startsAt;
-  const endsAt = input.endsAt ?? existing.endsAt;
-
-  if (endsAt.getTime() <= startsAt.getTime()) {
-    throw new AppError('VALIDATION_ERROR', 'endsAt deve ser posterior a startsAt', 400);
-  }
-
-  await prisma.$transaction(async (tx) => {
+  const schedule = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SCHEDULE_ADVISORY_LOCK_KEY1}::int, ${SCHEDULE_ADVISORY_LOCK_KEY2}::int)`;
+
+    const existing = await tx.classSchedule.findUnique({ where: { id } });
+    if (!existing) throw notFound('SCHEDULE_NOT_FOUND', 'Horário não encontrado');
+
+    const subjectId = input.subjectId ?? existing.subjectId;
+    const courseId = input.courseId ?? existing.courseId;
+    const teacherId = input.teacherId === undefined ? existing.teacherId : input.teacherId;
+    const roomId = input.roomId === undefined ? existing.roomId : input.roomId;
+    const startsAt = input.startsAt ?? existing.startsAt;
+    const endsAt = input.endsAt ?? existing.endsAt;
+
+    if (courseId !== existing.courseId) {
+      const attendanceCount = await tx.attendance.count({ where: { classScheduleId: id } });
+      if (attendanceCount > 0) {
+        throw conflict(
+          'SCHEDULE_HAS_ATTENDANCE',
+          'Não é possível mudar o curso de uma sessão com assiduidade registada',
+        );
+      }
+    }
+
+    if (endsAt.getTime() <= startsAt.getTime()) {
+      throw new AppError('VALIDATION_ERROR', 'endsAt deve ser posterior a startsAt', 400);
+    }
 
     await validateScheduleRefs(tx, {
       subjectId,
@@ -369,11 +381,6 @@ export async function updateSchedule(id: string, input: UpdateScheduleInput, act
     });
   });
 
-  const schedule = await prisma.classSchedule.findUniqueOrThrow({
-    where: { id },
-    include: scheduleInclude,
-  });
-
   await audit({
     action: 'SCHEDULE_UPDATE',
     resource: 'ClassSchedule',
@@ -391,10 +398,18 @@ export async function updateSchedule(id: string, input: UpdateScheduleInput, act
 export async function deleteSchedule(id: string, actor: Actor, correlationId: string) {
   await assertScheduleWriteAccess(actor);
 
-  const existing = await prisma.classSchedule.findUnique({ where: { id } });
-  if (!existing) throw notFound('SCHEDULE_NOT_FOUND', 'Horário não encontrado');
-
-  await prisma.classSchedule.delete({ where: { id } });
+  const existing = await prisma.$transaction(async (tx) => {
+    // O bloqueio também impede novas presenças entre a contagem e a eliminação.
+    await tx.$queryRaw`SELECT id FROM "ClassSchedule" WHERE id = ${id} FOR UPDATE`;
+    const schedule = await tx.classSchedule.findUnique({ where: { id } });
+    if (!schedule) throw notFound('SCHEDULE_NOT_FOUND', 'Horário não encontrado');
+    const attendanceCount = await tx.attendance.count({ where: { classScheduleId: id } });
+    if (attendanceCount > 0) {
+      throw conflict('SCHEDULE_HAS_ATTENDANCE', 'Não é possível eliminar uma sessão com assiduidade registada');
+    }
+    await tx.classSchedule.delete({ where: { id } });
+    return schedule;
+  });
 
   await audit({
     action: 'SCHEDULE_DELETE',

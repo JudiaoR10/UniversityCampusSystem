@@ -3,18 +3,25 @@ import type { NotificationDto } from '@smart-campus/shared-types';
 import { apiBaseUrl } from './apiBaseUrl';
 import { getAccessToken, useAuth } from './auth';
 
+export type ConnectionState = 'connecting' | 'open' | 'error' | 'closed';
+
 /**
  * Notificações em tempo real.
  * - SSE em `/notifications/stream?token=` (o EventSource do browser não envia
  *   headers, por isso o access token vai por query pronta ou relativa).
- * - O token expirado / EventSource fechado ⇒ fallback: polling de 60 s.
+ * - O token expirado / EventSource fechado ⇒ fallback: polling adaptativo.
+ * - Deduplicação por id: um evento SSE que seja eco de uma acção já aplicada
+ *   (mesmo id) é ignorado, evitando reaplicar uma mudança (Secção 6 do Módulo 8).
  */
 export function useNotifications() {
   const { api, user } = useAuth();
   const [items, setItems] = useState<NotificationDto[]>([]);
   const [unread, setUnread] = useState(0);
-  const [connected, setConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState<ConnectionState>('closed');
   const itemsRef = useRef<NotificationDto[]>([]);
+  const seenIds = useRef<Set<string>>(new Set());
+
+  const connected = connectionState === 'open';
 
   const load = useCallback(async () => {
     try {
@@ -22,6 +29,7 @@ export function useNotifications() {
       itemsRef.current = list.data;
       setItems(list.data);
       setUnread(list.data.filter((n) => !n.readAt).length);
+      for (const n of list.data) seenIds.current.add(n.id);
     } catch {
       // silencioso: a UI degrada para a campainha sem contagem
     }
@@ -31,6 +39,7 @@ export function useNotifications() {
     if (!user) {
       setItems([]);
       setUnread(0);
+      setConnectionState('closed');
       return;
     }
 
@@ -40,10 +49,19 @@ export function useNotifications() {
     let poll: ReturnType<typeof setInterval> | null = null;
     let cancelled = false;
 
-    const startPolling = () => {
-      if (!poll) poll = setInterval(() => void load(), 60_000);
+    const startPolling = (ms: number) => {
+      if (poll) return;
+      poll = setInterval(() => void load(), ms);
     };
 
+    const stopPolling = () => {
+      if (poll) {
+        clearInterval(poll);
+        poll = null;
+      }
+    };
+
+    setConnectionState('connecting');
     try {
       const token = getAccessToken();
       if (token) {
@@ -51,11 +69,17 @@ export function useNotifications() {
           `${apiBaseUrl}/notifications/stream?token=${encodeURIComponent(token)}`,
         );
         es.addEventListener('ready', () => {
-          if (!cancelled) setConnected(true);
+          if (!cancelled) {
+            setConnectionState('open');
+            stopPolling();
+          }
         });
         es.addEventListener('notification', (ev) => {
           try {
             const dto = JSON.parse((ev as MessageEvent).data) as NotificationDto;
+            // Deduplicação por id: ignora eco da própria acção.
+            if (seenIds.current.has(dto.id)) return;
+            seenIds.current.add(dto.id);
             itemsRef.current = [dto, ...itemsRef.current].slice(0, 50);
             setItems(itemsRef.current);
             setUnread((u) => u + 1);
@@ -64,19 +88,24 @@ export function useNotifications() {
           }
         });
         es.onerror = () => {
-          setConnected(false);
-          startPolling(); // fallback quando o token expira ou SSE cai
+          if (cancelled) return;
+          setConnectionState('error');
+          startPolling(15_000);
         };
+      } else {
+        setConnectionState('closed');
+        startPolling(15_000);
       }
     } catch {
-      startPolling();
+      setConnectionState('error');
+      startPolling(15_000);
     }
 
     return () => {
       cancelled = true;
       es?.close();
       if (poll) clearInterval(poll);
-      setConnected(false);
+      setConnectionState('closed');
     };
   }, [user, load]);
 
@@ -92,5 +121,5 @@ export function useNotifications() {
     }
   }
 
-  return { items, unread, connected, refresh: load, markRead };
+  return { items, unread, connected, connectionState, refresh: load, markRead };
 }

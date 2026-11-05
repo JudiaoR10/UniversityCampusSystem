@@ -1,3 +1,5 @@
+import type { AttendanceStatus, Prisma } from '@prisma/client';
+import type { Pagination } from '../../../lib/pagination.js';
 import type { MarkAttendanceInput } from '@smart-campus/validation';
 import { conflict, forbidden, notFound } from '../../../lib/errors.js';
 import { prisma } from '../../../lib/prisma.js';
@@ -63,7 +65,7 @@ function assertStaff(actor: Actor) {
 export type AttendanceFilters = {
   studentId?: string;
   scheduleId?: string;
-  status?: string;
+  status?: AttendanceStatus;
 };
 
 /**
@@ -71,8 +73,8 @@ export type AttendanceFilters = {
  * STUDENT: apenas os próprios registos; TEACHER: sessões que leciona;
  * COORDINATOR/ADMIN: todos. Os filtros opcionais nunca ampliam o acesso.
  */
-export async function listAttendance(actor: Actor, filters: AttendanceFilters = {}) {
-  const scope: Record<string, unknown>[] = [];
+async function attendanceWhere(actor: Actor, filters: AttendanceFilters): Promise<Prisma.AttendanceWhereInput> {
+  const scope: Prisma.AttendanceWhereInput[] = [];
 
   if (actor.role === 'STUDENT') {
     const profile = await prisma.studentProfile.findUnique({ where: { userId: actor.id } });
@@ -87,54 +89,59 @@ export async function listAttendance(actor: Actor, filters: AttendanceFilters = 
     scope.push({ studentProfileId: filters.studentId });
   }
 
-  const filter: Record<string, unknown> = {};
+  const filter: Prisma.AttendanceWhereInput = {};
+  if (filters.studentId) filter.studentProfileId = filters.studentId;
   if (filters.scheduleId) filter.classScheduleId = filters.scheduleId;
   if (filters.status) filter.status = filters.status;
 
   const conditions = Object.keys(filter).length > 0 ? [...scope, filter] : scope;
 
+  return conditions.length > 0 ? { AND: conditions } : {};
+}
+
+export async function listAttendance(actor: Actor, filters: AttendanceFilters = {}, page: Pagination = {}) {
   const records = await prisma.attendance.findMany({
-    where: conditions.length > 0 ? { AND: conditions } : {},
+    where: await attendanceWhere(actor, filters),
     include: attendanceInclude,
-    orderBy: { recordedAt: 'desc' },
+    orderBy: [{ recordedAt: 'desc' }, { id: 'desc' }],
+    ...page,
   });
   return records.map(mapAttendance);
 }
 
-/**
- * GET /attendance/summary — total por estudante (presenças, faltas, atrasos,
- * justificações) e taxa de assiduidade. (PRESENT + LATE) / total.
- */
+/** A taxa considera presenças e atrasos; as contagens são feitas no banco. */
 export async function attendanceSummary(actor: Actor, filters: AttendanceFilters = {}) {
-  const records = await listAttendance(actor, filters);
-  const byStudent = new Map<string, { student?: AttendanceRecord['studentProfile']; counts: Record<string, number> }>();
-
-  for (const record of records) {
-    const entry = byStudent.get(record.studentProfileId) ?? {
-      student: {
-        id: record.studentProfileId,
-        studentNumber: record.student?.studentNumber ?? '',
-        user: { fullName: record.student?.fullName ?? '' },
-      },
-      counts: { PRESENT: 0, ABSENT: 0, LATE: 0, JUSTIFIED: 0 },
-    };
-    entry.counts[record.status] = (entry.counts[record.status] ?? 0) + 1;
-    byStudent.set(record.studentProfileId, entry);
+  const groups = await prisma.attendance.groupBy({
+    by: ['studentProfileId', 'status'],
+    where: await attendanceWhere(actor, filters),
+    _count: { _all: true },
+  });
+  const studentIds = [...new Set(groups.map((group) => group.studentProfileId))];
+  if (studentIds.length === 0) return [];
+  const students = await prisma.studentProfile.findMany({
+    where: { id: { in: studentIds } },
+    select: { id: true, studentNumber: true, user: { select: { fullName: true } } },
+    orderBy: [{ studentNumber: 'asc' }, { id: 'asc' }],
+  });
+  const counts = new Map<string, Record<string, number>>();
+  for (const group of groups) {
+    const entry = counts.get(group.studentProfileId) ?? { PRESENT: 0, ABSENT: 0, LATE: 0, JUSTIFIED: 0 };
+    entry[group.status] = group._count._all;
+    counts.set(group.studentProfileId, entry);
   }
-
-  return [...byStudent.entries()].map(([studentProfileId, entry]) => {
-    const total = entry.counts.PRESENT + entry.counts.ABSENT + entry.counts.LATE + entry.counts.JUSTIFIED;
-    const attended = entry.counts.PRESENT + entry.counts.LATE;
+  return students.map((student) => {
+    const entry = counts.get(student.id)!;
+    const total = entry.PRESENT + entry.ABSENT + entry.LATE + entry.JUSTIFIED;
     return {
-      studentProfileId,
-      studentNumber: entry.student?.studentNumber ?? '',
-      fullName: entry.student?.user?.fullName,
-      present: entry.counts.PRESENT,
-      absent: entry.counts.ABSENT,
-      late: entry.counts.LATE,
-      justified: entry.counts.JUSTIFIED,
+      studentProfileId: student.id,
+      studentNumber: student.studentNumber,
+      fullName: student.user.fullName,
+      present: entry.PRESENT,
+      absent: entry.ABSENT,
+      late: entry.LATE,
+      justified: entry.JUSTIFIED,
       total,
-      attendanceRate: total > 0 ? Math.round((attended / total) * 10000) / 100 : 0,
+      attendanceRate: total > 0 ? Math.round(((entry.PRESENT + entry.LATE) / total) * 10000) / 100 : 0,
     };
   });
 }
@@ -163,16 +170,43 @@ export async function getAttendanceRoster(scheduleId: string, actor: Actor) {
   const schedule = await findScheduleForStaff(scheduleId, actor);
 
   const enrolments = await prisma.subjectEnrolment.findMany({
-    where: { subjectId: schedule.subjectId, status: 'ACTIVE' },
+    where: { subjectId: schedule.subjectId, status: { in: ['ACTIVE', 'PENDING'] }, student: { courseId: schedule.courseId } },
     include: { student: { include: { user: { select: { fullName: true } } } } },
     orderBy: { student: { studentNumber: 'asc' } },
   });
-  const students = enrolments.map((row) => row.student);
+  const students = [...new Map(enrolments.map((row) => [row.student.id, row.student])).values()];
 
   const records = await prisma.attendance.findMany({ where: { classScheduleId: scheduleId } });
   const byStudent = new Map(records.map((r) => [r.studentProfileId, r]));
 
+  // ClassSchedule has no academic term: use January–June and July–December.
+  const year = schedule.startsAt.getUTCFullYear();
+  const month = schedule.startsAt.getUTCMonth() < 6 ? 0 : 6;
+  const semesterSessions = await prisma.classSchedule.findMany({
+    where: {
+      subjectId: schedule.subjectId,
+      courseId: schedule.courseId,
+      startsAt: { gte: new Date(Date.UTC(year, month, 1)), lt: new Date(Date.UTC(year, month + 6, 1)) },
+      ...(actor.role === 'TEACHER' ? { teacherId: actor.id } : {}),
+    },
+    orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, title: true, startsAt: true, endsAt: true },
+  });
+  const semesterRecords = await prisma.attendance.findMany({
+    where: {
+      classScheduleId: { in: semesterSessions.map((session) => session.id) },
+      studentProfileId: { in: students.map((student) => student.id) },
+    },
+    select: { classScheduleId: true, studentProfileId: true, status: true, note: true },
+  });
+
   return {
+    semester: {
+      year,
+      number: month === 0 ? 1 : 2,
+      sessions: semesterSessions.map((session) => ({ ...session, startsAt: session.startsAt.toISOString(), endsAt: session.endsAt.toISOString() })),
+      records: semesterRecords.map((record) => ({ scheduleId: record.classScheduleId, studentId: record.studentProfileId, status: record.status, note: record.note })),
+    },
     schedule: {
       id: schedule.id,
       title: schedule.title,
@@ -214,11 +248,16 @@ export async function markAttendance(scheduleId: string, input: MarkAttendanceIn
   }
 
   const enrolled = await prisma.subjectEnrolment.findMany({
-    where: { subjectId: schedule.subjectId, status: 'ACTIVE', studentId: { in: studentIds } },
+    where: { subjectId: schedule.subjectId, status: { in: ['ACTIVE', 'PENDING'] }, studentId: { in: studentIds } },
     select: { studentId: true },
   });
   if (enrolled.length !== studentIds.length) {
     throw conflict('STUDENT_NOT_ENROLLED', 'Há estudantes que não estão inscritos nesta disciplina');
+  }
+
+  const foreign = students.filter((student) => student.courseId !== schedule.courseId);
+  if (foreign.length > 0) {
+    throw conflict('STUDENT_COURSE_MISMATCH', 'Há estudantes que não pertencem ao curso da sessão');
   }
 
   await prisma.$transaction(

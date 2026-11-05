@@ -203,8 +203,8 @@ export async function remove(id: string, ctx: AuditContext) {
 
   if (!removed) {
     throw conflict(
-      'STUDENT_HAS_ENROLMENTS',
-      'Não é possível remover um estudante com inscrições associadas',
+      'STUDENT_HAS_SUBJECT_ENROLMENTS',
+      'Não é possível remover um estudante com inscrições activas em disciplinas — cancele ou elimine-as em Inscrições antes de remover o perfil',
     );
   }
 

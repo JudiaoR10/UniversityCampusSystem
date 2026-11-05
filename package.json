@@ -33,7 +33,9 @@
     "diagnose:deploy": "bash .scripts/diagnose-deploy.sh",
     "checklist:render": "bash .scripts/render-checklist.sh",
     "build:render:unified": "bash .scripts/render-build-unified.sh",
-    "test:financial:isolated": "node scripts/test-financial-isolated.mjs"
+    "test:financial:isolated": "node scripts/test-financial-isolated.mjs",
+    "iot:sim": "npm run iot:sim -w @smart-campus/api",
+    "lpr:sim": "npm run lpr:sim -w @smart-campus/api"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

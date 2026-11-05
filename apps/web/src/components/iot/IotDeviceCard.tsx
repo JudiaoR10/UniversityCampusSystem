@@ -42,10 +42,10 @@ export function IotDeviceCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full rounded-2xl border p-4 text-left transition duration-200 ${
+      className={`surface w-full p-4 text-left transition duration-200 ${
         selected
-          ? 'border-campus-teal bg-white shadow-panel ring-2 ring-campus-teal/20'
-          : 'border-campus-line/80 bg-white/90 shadow-soft hover:-translate-y-0.5 hover:border-campus-teal/35'
+          ? 'border-campus-teal ring-2 ring-campus-teal/20'
+          : 'hover:-translate-y-0.5 hover:border-campus-teal/35'
       }`}
     >
       <div className="flex items-start justify-between gap-3">

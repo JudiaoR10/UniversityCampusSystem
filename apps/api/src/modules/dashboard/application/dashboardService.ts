@@ -1,6 +1,7 @@
 import { campusModules } from '@smart-campus/shared-types';
 import { prisma } from '../../../lib/prisma.js';
 import { getMe } from '../../auth/application/authService.js';
+import { getAdminStatus } from '../../admin/application/adminService.js';
 
 export async function getDashboard(userId: string) {
   const viewer = await prisma.user.findUnique({
@@ -9,7 +10,7 @@ export async function getDashboard(userId: string) {
   });
   const canSeeAlerts = viewer?.role.code !== 'STUDENT';
 
-  const [currentUser, roomsCount, openIncidents, devicesCount, recentAlerts, recentActivity] = await Promise.all([
+  const [currentUser, roomsCount, openIncidents, devicesCount, recentAlerts, recentActivity, core] = await Promise.all([
     getMe(userId),
     prisma.room.count(),
     prisma.incident.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
@@ -18,11 +19,12 @@ export async function getDashboard(userId: string) {
       ? prisma.alert.findMany({ orderBy: { createdAt: 'desc' }, take: 5 })
       : Promise.resolve([]),
     prisma.auditEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 8 }),
+    getAdminStatus(),
   ]);
 
   return {
     currentUser,
-    coreStatus: 'healthy' as const,
+    coreStatus: core.coreStatus,
     roomsCount,
     openIncidents,
     devicesCount,

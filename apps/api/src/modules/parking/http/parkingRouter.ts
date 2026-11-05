@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { createPlateReadingSchema, updateParkingSpotSchema } from '@smart-campus/validation';
-import { authenticate, authorize } from '../../../middleware/auth.js';
+import { createPlateReadingSchema, ingestPlateReadingSchema, updateParkingSpotSchema } from '@smart-campus/validation';
+import { authenticate, authenticateIngest, authorize } from '../../../middleware/auth.js';
 import { success } from '../../../middleware/errorHandler.js';
 import * as parkingService from '../application/parkingService.js';
 
@@ -18,6 +18,22 @@ parkingRouter.get('/parking/readings', authenticate, async (req, res, next) => {
   try {
     const limit = Number(req.query.limit ?? 30);
     success(res, await parkingService.listPlateReadings(limit));
+  } catch (err) {
+    next(err);
+  }
+});
+
+parkingRouter.post('/parking/ingest', authenticateIngest, async (req, res, next) => {
+  try {
+    const body = ingestPlateReadingSchema.parse(req.body);
+    const ingest = req.ingest!;
+    const reading = await parkingService.ingestPlateReading(
+      body,
+      ingest.actorId,
+      req.correlationId,
+      ingest.sensorCode,
+    );
+    success(res, reading, 201);
   } catch (err) {
     next(err);
   }

@@ -1,5 +1,9 @@
-import type { StudentProfileStatus } from '@prisma/client';
+import type { EnrolmentStatus, StudentProfileStatus } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
+
+// Estados que representam um vínculo académico activo; os restantes (CANCELLED, COMPLETED)
+// são histórico e não devem impedir a remoção do perfil.
+const ACTIVE_SUBJECT_ENROLMENT_STATUSES: EnrolmentStatus[] = ['PENDING', 'ACTIVE'];
 
 const courseRef = { select: { id: true, code: true, name: true } } as const;
 const userRef = { select: { id: true, fullName: true } } as const;
@@ -55,6 +59,26 @@ export async function findUserByEmail(email: string) {
   return prisma.user.findUnique({ where: { email }, select: { id: true } });
 }
 
+export async function findUserForStudentLink(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    include: { role: true, studentProfile: { select: { id: true } } },
+  });
+}
+
+export async function createStudentProfileForUser(data: {
+  userId: string;
+  studentNumber: string;
+  courseId: string;
+  yearOfStudy?: number | null;
+  phone?: string | null;
+}) {
+  return prisma.studentProfile.create({
+    data,
+    include: { course: courseRef, user: userRef },
+  });
+}
+
 export async function findRoleByCode(code: 'STUDENT') {
   return prisma.role.findUnique({ where: { code }, select: { id: true, code: true } });
 }
@@ -92,16 +116,21 @@ export async function updateStudent(id: string, data: UpdateStudentData) {
 }
 
 // Remove a conta (User) e o perfil em conjunto: a conta não pode ficar órfã a permitir login.
-// O perfil é apagado por cascade; devolve null quando o estudante tem inscrições.
-export async function deleteStudentAccount(id: string) {
+// Devolve null quando o estudante tem inscrições activas em disciplinas.
+// A matrícula no curso (StudentProfile.courseId) e o legado Enrolment são apagados por cascade
+// com o perfil: a matrícula não é um vínculo independente neste sistema.
+export async function deleteStudentProfile(id: string) {
   return prisma.$transaction(async (tx) => {
     const profile = await tx.studentProfile.findFirst({
-      where: { id, enrolments: { none: {} }, subjectEnrolments: { none: {} } },
+      where: {
+        id,
+        subjectEnrolments: { none: { status: { in: ACTIVE_SUBJECT_ENROLMENT_STATUSES } } },
+      },
       select: { id: true, userId: true },
     });
     if (!profile) return null;
 
-    await tx.user.delete({ where: { id: profile.userId } });
+    await tx.studentProfile.delete({ where: { id: profile.id } });
     return profile;
   });
 }

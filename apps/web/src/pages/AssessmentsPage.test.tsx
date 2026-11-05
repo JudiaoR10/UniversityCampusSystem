@@ -20,6 +20,7 @@ vi.mock('../lib/print', () => ({
 }));
 
 import { AssessmentsPage } from './AssessmentsPage';
+import { changeSelect } from '../test/selectField';
 
 const sampleAssessment: AssessmentDto = {
   id: 'assessment-1',
@@ -501,7 +502,8 @@ describe('AssessmentsPage', () => {
 
     expect(await screen.findAllByRole('tab')).toHaveLength(5);
     fireEvent.click(screen.getByRole('tab', { name: 'Frequência e Dispensa' }));
-    fireEvent.change(await screen.findByLabelText('Disciplina do quadro'), { target: { value: 'subject-1' } });
+    await screen.findByLabelText('Disciplina do quadro');
+    changeSelect('Disciplina do quadro', 'subject-1');
 
     await waitFor(() => expect(api.subjectBoard).toHaveBeenCalledWith('subject-1'));
     expect(await screen.findByText('Dispensados: 1')).toBeInTheDocument();
@@ -517,7 +519,8 @@ describe('AssessmentsPage', () => {
     render(<AssessmentsPage />);
 
     fireEvent.click(await screen.findByRole('tab', { name: 'Exame Normal' }));
-    fireEvent.change(await screen.findByLabelText('Disciplina do quadro'), { target: { value: 'subject-1' } });
+    await screen.findByLabelText('Disciplina do quadro');
+    changeSelect('Disciplina do quadro', 'subject-1');
 
     expect(await screen.findByText('Dispensado — sem exame/recorrência')).toBeInTheDocument();
     expect(screen.queryByLabelText('Nota de exame de EST-2026-001')).not.toBeInTheDocument();
@@ -529,7 +532,8 @@ describe('AssessmentsPage', () => {
     render(<AssessmentsPage />);
 
     fireEvent.click(await screen.findByRole('tab', { name: 'Recorrência' }));
-    fireEvent.change(await screen.findByLabelText('Disciplina do quadro'), { target: { value: 'subject-1' } });
+    await screen.findByLabelText('Disciplina do quadro');
+    changeSelect('Disciplina do quadro', 'subject-1');
 
     // Aparece na legenda e na célula bloqueada do estudante aprovado no exame.
     expect(
@@ -544,7 +548,8 @@ describe('AssessmentsPage', () => {
     render(<AssessmentsPage />);
 
     fireEvent.click(await screen.findByRole('tab', { name: 'Resultados Finais' }));
-    fireEvent.change(await screen.findByLabelText('Disciplina do quadro'), { target: { value: 'subject-1' } });
+    await screen.findByLabelText('Disciplina do quadro');
+    changeSelect('Disciplina do quadro', 'subject-1');
     await waitFor(() => expect(api.subjectBoard).toHaveBeenCalled());
 
     fireEvent.click(await screen.findByRole('button', { name: 'Publicar resultados' }));
@@ -557,7 +562,8 @@ describe('AssessmentsPage', () => {
     render(<AssessmentsPage />);
 
     fireEvent.click(await screen.findByRole('tab', { name: 'Frequência e Dispensa' }));
-    fireEvent.change(await screen.findByLabelText('Disciplina do quadro'), { target: { value: 'subject-1' } });
+    await screen.findByLabelText('Disciplina do quadro');
+    changeSelect('Disciplina do quadro', 'subject-1');
     await waitFor(() => expect(api.subjectBoard).toHaveBeenCalled());
 
     // Espera o formulário de regras sincronizado com o quadro carregado.
@@ -624,7 +630,8 @@ describe('AssessmentsPage', () => {
     render(<AssessmentsPage />);
 
     fireEvent.click(await screen.findByRole('tab', { name: 'Frequência e Dispensa' }));
-    fireEvent.change(await screen.findByLabelText('Disciplina do quadro'), { target: { value: 'subject-1' } });
+    await screen.findByLabelText('Disciplina do quadro');
+    changeSelect('Disciplina do quadro', 'subject-1');
     await waitFor(() => expect(api.subjectBoard).toHaveBeenCalled());
     // Espera o quadro renderizado com o input de dispensa pré-preenchido com a admissão (12).
     await screen.findByDisplayValue('12');
@@ -658,7 +665,8 @@ describe('AssessmentsPage', () => {
     render(<AssessmentsPage />);
 
     fireEvent.click(await screen.findByRole('tab', { name: 'Frequência e Dispensa' }));
-    fireEvent.change(await screen.findByLabelText('Disciplina do quadro'), { target: { value: 'subject-1' } });
+    await screen.findByLabelText('Disciplina do quadro');
+    changeSelect('Disciplina do quadro', 'subject-1');
     await waitFor(() => expect(api.subjectBoard).toHaveBeenCalled());
 
     fireEvent.click(await screen.findByRole('button', { name: 'Anular dispensa' }));

@@ -109,6 +109,123 @@ async function main() {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Dados reais — Edital de Admissão aos cursos de Graduação da UJAC (ano lectivo 2026)
+  // Unidades orgânicas (Faculdade e Institutos) modeladas como Department.
+  // O schema não tem campos para vagas/regime/mensalidade; ficam na descrição.
+  // Taxas gerais do edital: inscrição 800,00 MT · matrícula 3.000,00 MT.
+  // ---------------------------------------------------------------------------
+  const unidadesUjac = [
+    {
+      code: 'FACISH',
+      name: 'Faculdade de Ciências Sociais e Humanas',
+      description: 'Unidade orgânica da UJAC. Mensalidade: 5.000,00 MT.',
+    },
+    {
+      code: 'ISET',
+      name: 'Instituto Superior de Engenharias e Tecnologias',
+      description: 'Unidade orgânica da UJAC. Mensalidade: 8.500,00 MT.',
+    },
+    {
+      code: 'ISCEG',
+      name: 'Instituto Superior de Ciências Económicas e de Gestão',
+      description: 'Unidade orgânica da UJAC. Mensalidade: 6.500,00 MT.',
+    },
+  ];
+
+  const unidadeIds: Record<string, string> = {};
+  for (const unidade of unidadesUjac) {
+    const registo = await prisma.department.upsert({
+      where: { code: unidade.code },
+      update: { name: unidade.name, description: unidade.description },
+      create: unidade,
+    });
+    unidadeIds[unidade.code] = registo.id;
+  }
+
+  const vagas = 'Vagas: 35 no período matutino e 35 no vespertino (total 70).';
+  const posLaboral = ' Regime: Pós-Laboral (On-line).';
+  const cursosUjac = [
+    {
+      code: 'LCE',
+      unidade: 'FACISH',
+      name: 'Licenciatura em Ciências da Educação',
+      description:
+        'Habilidade em: Gestão de Projectos Educativos; Educação de Infância; Tecnologia Educacional. ' +
+        vagas +
+        posLaboral,
+    },
+    {
+      code: 'LEI',
+      unidade: 'ISET',
+      name: 'Licenciatura em Engenharia Informática',
+      description: vagas,
+    },
+    {
+      code: 'LIACD',
+      unidade: 'ISET',
+      name: 'Licenciatura em Inteligência Artificial e Ciência de Dados',
+      description: vagas,
+    },
+    {
+      code: 'LGE',
+      unidade: 'ISCEG',
+      name: 'Licenciatura em Gestão de Empresas',
+      description: 'Habilitação em: Transporte e Logística; Ciências Atuariais. ' + vagas + posLaboral,
+    },
+    {
+      code: 'LCA',
+      unidade: 'ISCEG',
+      name: 'Licenciatura em Contabilidade e Auditoria',
+      description: vagas,
+    },
+    {
+      code: 'LGFB',
+      unidade: 'ISCEG',
+      name: 'Licenciatura em Gestão Financeira e Bancária',
+      description: vagas,
+    },
+    {
+      code: 'LGRH',
+      unidade: 'ISCEG',
+      name: 'Licenciatura em Gestão de Recursos Humanos',
+      description: vagas + posLaboral,
+    },
+  ];
+
+  // O curso demo LEI é a mesma Engenharia Informática do edital: passa para o ISET em vez de duplicar.
+  for (const curso of cursosUjac) {
+    const dados = {
+      name: curso.name,
+      description: curso.description,
+      departmentId: unidadeIds[curso.unidade],
+    };
+    await prisma.course.upsert({
+      where: { code: curso.code },
+      update: dados,
+      create: { code: curso.code, ...dados },
+    });
+  }
+
+  // Disciplinas de Engenharia Informática (LEI). A PTP3 já foi criada acima.
+  const cursoLei = await prisma.course.findUniqueOrThrow({ where: { code: 'LEI' } });
+  const disciplinasLei = [
+    { code: 'LP', name: 'Linguagem de Programação', credits: 1 },
+    { code: 'MD', name: 'Matemática Discreta', credits: 5 },
+    { code: 'MN', name: 'Métodos Numéricos', credits: 4 },
+    { code: 'PE', name: 'Probabilidade e Estatística', credits: 8 },
+    { code: 'RC', name: 'Redes de Comunicação', credits: 7 },
+    { code: 'SD', name: 'Sistemas Distribuídos', credits: 3 },
+    { code: 'SGDB', name: 'Gestão e Administração de Base de Dados', credits: 2 },
+  ];
+  for (const disciplina of disciplinasLei) {
+    await prisma.subject.upsert({
+      where: { code: disciplina.code },
+      update: { name: disciplina.name, credits: disciplina.credits, courseId: cursoLei.id },
+      create: { ...disciplina, courseId: cursoLei.id },
+    });
+  }
+
   const studentProfile = await prisma.studentProfile.upsert({
     where: { userId: studentAId },
     update: {},
@@ -154,7 +271,7 @@ async function main() {
         academicYear: 2026,
       },
     },
-    update: {},
+    update: { status: 'ACTIVE' },
     create: {
       studentId: studentProfile.id,
       subjectId: subject.id,
@@ -176,17 +293,36 @@ async function main() {
   const studentA = await prisma.studentProfile.findUnique({ where: { userId: studentAId } });
   const studentB = await prisma.studentProfile.findUnique({ where: { userId: studentBId } });
 
+  if (studentB) {
+    await prisma.subjectEnrolment.upsert({
+      where: {
+        studentId_subjectId_academicYear: {
+          studentId: studentB.id,
+          subjectId: subject.id,
+          academicYear: 2026,
+        },
+      },
+      update: { status: 'ACTIVE' },
+      create: {
+        studentId: studentB.id,
+        subjectId: subject.id,
+        academicYear: 2026,
+        status: 'ACTIVE',
+      },
+    });
+  }
+
   if (studentA) {
     await prisma.enrolment.upsert({
       where: { studentId_courseId_academicYear: { studentId: studentA.id, courseId: course.id, academicYear: '2026' } },
-      update: {},
+      update: { status: 'ACTIVE' },
       create: { studentId: studentA.id, courseId: course.id, academicYear: '2026', status: 'ACTIVE' },
     });
   }
   if (studentB) {
     await prisma.enrolment.upsert({
       where: { studentId_courseId_academicYear: { studentId: studentB.id, courseId: course.id, academicYear: '2026' } },
-      update: {},
+      update: { status: 'ACTIVE' },
       create: { studentId: studentB.id, courseId: course.id, academicYear: '2026', status: 'ACTIVE' },
     });
   }
@@ -215,8 +351,8 @@ async function main() {
 
   const buildingD2 = await prisma.building.upsert({
     where: { code: 'D2' },
-    update: { name: 'Edifício D2 - UJAC', description: 'Edifício principal da UJAC', floors: 2 },
-    create: { code: 'D2', name: 'Edifício D2 - UJAC', floors: 2, description: 'Edifício principal da UJAC' },
+    update: { name: 'Edifício D2 - UJAC', description: 'Edifício principal da UJAC', floors: 2, mapX: 48, mapY: 46 },
+    create: { code: 'D2', name: 'Edifício D2 - UJAC', floors: 2, description: 'Edifício principal da UJAC', mapX: 48, mapY: 46 },
   });
 
   // Piso 1
@@ -256,27 +392,123 @@ async function main() {
 
   const device = await prisma.device.upsert({
     where: { code: 'ESP32-A101-01' },
-    update: {},
+    update: {
+      name: 'Sensor ambiental D2-101',
+      roomId: roomD2101.id,
+      mqttTopic: 'campus/d2/d2-101/env',
+    },
     create: {
       code: 'ESP32-A101-01',
-      name: 'Sensor ambiental A-101',
+      name: 'Sensor ambiental D2-101',
       type: 'ESP32',
       status: 'ONLINE',
       roomId: roomD2101.id,
-      mqttTopic: 'campus/building-a/room-a101/env',
+      mqttTopic: 'campus/d2/d2-101/env',
+    },
+  });
+
+  await prisma.device.upsert({
+    where: { code: 'CAM-LPR-D2-01' },
+    update: { ingestToken: 'dev-lpr-cam-01', name: 'Câmara LPR D2' },
+    create: {
+      code: 'CAM-LPR-D2-01',
+      name: 'Câmara LPR D2',
+      type: 'LPR_CAMERA',
+      status: 'ONLINE',
+      ingestToken: 'dev-lpr-cam-01',
     },
   });
 
   const tempSensor = await prisma.sensor.upsert({
     where: { code: 'TEMP-A101' },
-    update: {},
+    update: { warningMin: 18, warningMax: 27, criticalMax: 32 },
     create: {
       code: 'TEMP-A101',
-      name: 'Temperatura A-101',
+      name: 'Temperatura D2-101',
       metric: 'temperature',
       unit: '°C',
       deviceId: device.id,
+      warningMin: 18,
+      warningMax: 27,
+      criticalMax: 32,
     },
+  });
+
+  await prisma.sensor.upsert({
+    where: { code: 'HUM-A101' },
+    update: { warningMin: 30, warningMax: 65, deviceId: device.id },
+    create: {
+      code: 'HUM-A101',
+      name: 'Humidade D2-101',
+      metric: 'humidity',
+      unit: '%',
+      deviceId: device.id,
+      warningMin: 30,
+      warningMax: 65,
+    },
+  });
+
+  await prisma.sensor.upsert({
+    where: { code: 'CO2-A101' },
+    update: { warningMax: 800, criticalMax: 1000, deviceId: device.id },
+    create: {
+      code: 'CO2-A101',
+      name: 'CO₂ D2-101',
+      metric: 'co2',
+      unit: 'ppm',
+      deviceId: device.id,
+      warningMax: 800,
+      criticalMax: 1000,
+    },
+  });
+
+  await prisma.sensor.upsert({
+    where: { code: 'OCC-D2101' },
+    update: { deviceId: device.id },
+    create: {
+      code: 'OCC-D2101',
+      name: 'Ocupação D2-101',
+      metric: 'occupancy',
+      unit: 'pessoas',
+      deviceId: device.id,
+    },
+  });
+  await prisma.sensor.upsert({
+    where: { code: 'PPL-D2101' },
+    update: { deviceId: device.id },
+    create: {
+      code: 'PPL-D2101',
+      name: 'Pessoas D2-101',
+      metric: 'people',
+      unit: 'pessoas',
+      deviceId: device.id,
+    },
+  });
+
+  await prisma.systemSetting.upsert({
+    where: { key: 'parkingLabMode' },
+    update: {},
+    create: { key: 'parkingLabMode', value: 'false' },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'tempWarningMax' },
+    update: {},
+    create: { key: 'tempWarningMax', value: '27' },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'co2WarningMax' },
+    update: {},
+    create: { key: 'co2WarningMax', value: '800' },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'co2CriticalMax' },
+    update: {},
+    create: { key: 'co2CriticalMax', value: '1000' },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'readingRetentionDays' },
+    update: {},
+    create: { key: 'readingRetentionDays', value: '30' },
   });
 
   const readingCount = await prisma.reading.count({ where: { sensorId: tempSensor.id } });
@@ -325,10 +557,8 @@ async function main() {
     },
   });
 
-  // Recria vagas/leituras para garantir matrículas moçambicanas de demonstração
-  await prisma.plateReading.deleteMany({ where: { lotId: lot.id } });
-  await prisma.parkingSpot.deleteMany({ where: { lotId: lot.id } });
-  {
+  const existingSpots = await prisma.parkingSpot.count({ where: { lotId: lot.id } });
+  if (existingSpots === 0) {
     const rows = ['A', 'B', 'C', 'D'];
     const occupiedPlates = [
       'AIT 954 MC',
@@ -357,7 +587,8 @@ async function main() {
     await prisma.parkingSpot.createMany({ data: spots });
   }
 
-  {
+  const existingReadings = await prisma.plateReading.count({ where: { lotId: lot.id } });
+  if (existingReadings === 0) {
     const occupied = await prisma.parkingSpot.findMany({
       where: { lotId: lot.id, status: 'OCCUPIED' },
       take: 5,
@@ -399,7 +630,61 @@ async function main() {
     });
   }
 
+  const teacherProfile = await prisma.teacherProfile.findUnique({ where: { userId: teacherId } });
+  if (studentA) {
+    await prisma.debt.upsert({
+      where: { code: 'DEMO-PROP-2026' },
+      update: {},
+      create: {
+        code: 'DEMO-PROP-2026',
+        studentId: studentA.userId,
+        title: 'Propina 1.º semestre 2026',
+        amount: 8500,
+        origin: 'TUITION',
+        dueDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
+        status: 'PENDENTE',
+      },
+    });
+  }
+  if (teacherProfile) {
+    const month = new Date().toISOString().slice(0, 7);
+    await prisma.teacherSalary.upsert({
+      where: { teacherId_month: { teacherId: teacherProfile.id, month } },
+      update: {},
+      create: {
+        teacherId: teacherProfile.id,
+        month,
+        amount: 45000,
+        notes: 'Salário de demonstração',
+        status: 'PENDING',
+      },
+    });
+  }
+
   const dayMs = 24 * 60 * 60 * 1000;
+  const liveStarts = new Date(Date.now() - 15 * 60 * 1000);
+  const liveEnds = new Date(Date.now() + 75 * 60 * 1000);
+  const liveTitle = 'Aula PTP3 — sessão em curso';
+  const live = await prisma.classSchedule.findFirst({ where: { title: liveTitle } });
+  if (live) {
+    await prisma.classSchedule.update({
+      where: { id: live.id },
+      data: { startsAt: liveStarts, endsAt: liveEnds, roomId: roomD2101.id, subjectId: subject.id },
+    });
+  } else {
+    await prisma.classSchedule.create({
+      data: {
+        title: liveTitle,
+        subjectId: subject.id,
+        courseId: course.id,
+        teacherId,
+        roomId: roomD2101.id,
+        startsAt: liveStarts,
+        endsAt: liveEnds,
+      },
+    });
+  }
+
   const scheduleSpecs = [
     {
       title: 'Aula PTP3 — Integración Tecnológica',

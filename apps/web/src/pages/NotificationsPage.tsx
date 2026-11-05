@@ -1,5 +1,10 @@
 import { useState } from 'react';
 import { useNotifications } from '../lib/useNotifications';
+import { PageIntro } from '../components/PageIntro';
+import { AlertMessage } from '../components/AlertMessage';
+import { EmptyState, StatusPill } from '../components/ui';
+import { relativeTime } from '../lib/labels';
+import { CheckIcon, IconActionButton } from '../components/ActionButtons';
 
 export function NotificationsPage() {
   const { items, unread, connected, markRead } = useNotifications();
@@ -20,55 +25,48 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-campus-line bg-white/85 p-5 shadow-panel">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-2xl">Notificações</h2>
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
-              connected
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-campus-line bg-campus-mist/60 text-campus-deep/60'
-            }`}
-            title={connected ? 'Ligado em tempo real (SSE)' : 'Sem ligação em tempo real — a actualizar a cada 60 s'}
-          >
-            <span
-              className={`inline-block h-2 w-2 rounded-full ${connected ? 'animate-pulse bg-emerald-500' : 'bg-campus-deep/30'}`}
-            />
-            {connected ? 'Ligado em tempo real' : 'Sem ligação'}
-          </span>
-        </div>
-        <p className="mt-1 text-sm text-campus-deep/75">
-          {unread > 0
+      <PageIntro
+        eyebrow="Comunicação"
+        title="Notificações"
+        description={
+          unread > 0
             ? `${unread} por ler, das ${items.length} mais recentes.`
-            : 'As tuas notificações, da mais recente para a mais antiga.'}
-        </p>
-      </section>
+            : 'As suas notificações, da mais recente para a mais antiga.'
+        }
+        actions={
+          <StatusPill tone={connected ? 'success' : 'muted'}>
+            {connected ? 'Ligado em tempo real' : 'Sem ligação'}
+          </StatusPill>
+        }
+      />
 
-      {error ? <p className="text-red-700">{error}</p> : null}
+      {error ? <AlertMessage tone="error" message={error} /> : null}
 
       {items.length === 0 ? (
-        <p className="text-sm text-campus-deep/70">Não tens notificações.</p>
+        <EmptyState title="Caixa vazia" description="Ainda não tem notificações." />
       ) : (
         <div className="space-y-3">
-          {items.map((n) => (
+          {items.map((item) => (
             <article
-              key={n.id}
-              className={`rounded-2xl border p-4 shadow-panel ${
-                n.readAt ? 'border-campus-line bg-white' : 'border-campus-teal bg-white ring-2 ring-campus-teal/15'
-              }`}
+              key={item.id}
+              className={`surface p-4 sm:p-5 ${item.readAt ? '' : 'ring-2 ring-campus-teal/15'}`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="font-medium">{n.title}</h3>
-                <span className="text-xs text-campus-deep/60">{new Date(n.createdAt).toLocaleString('pt-PT')}</span>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h3 className="font-display text-lg font-semibold text-campus-ink">{item.title}</h3>
+                <span className="text-xs text-campus-deep/60">{relativeTime(item.createdAt)}</span>
               </div>
-              <p className="mt-1 text-sm text-campus-deep/75">{n.body}</p>
-              <div className="mt-3 text-xs">
-                {n.readAt ? (
-                  <span className="text-campus-deep/60">Lida</span>
+              <p className="mt-1 text-sm leading-relaxed text-campus-deep/75">{item.body}</p>
+              <div className="mt-4">
+                {item.readAt ? (
+                  <StatusPill>Lida</StatusPill>
                 ) : (
-                  <button type="button" disabled={busyId === n.id} onClick={() => onRead(n.id)} className="btn-primary">
-                    {busyId === n.id ? 'A marcar…' : 'Marcar como lida'}
-                  </button>
+                  <IconActionButton
+                    label="Marcar como lida"
+                    icon={<CheckIcon />}
+                    tone="success"
+                    busy={busyId === item.id}
+                    onClick={() => void onRead(item.id)}
+                  />
                 )}
               </div>
             </article>

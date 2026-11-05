@@ -5,6 +5,7 @@ import { canViewAlerts } from '../lib/roles';
 import { mapApiDevices, type IotDeviceView } from '../lib/iotDemo';
 import { IotDeviceCard } from '../components/iot/IotDeviceCard';
 import { PageIntro } from '../components/PageIntro';
+import { LoadingState, PageBanner } from '../components/ui';
 import type { AlertDto } from '@smart-campus/shared-types';
 
 const pipeline = ['Sensor', 'ESP32', 'Wi-Fi', 'MQTT', 'API', 'Dashboard'];
@@ -22,10 +23,23 @@ export function IotHubPage() {
   const [alertsError, setAlertsError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .devices()
-      .then((res) => {
-        const mapped = mapApiDevices(res.data as Array<Record<string, unknown>>);
+    Promise.all([api.devices(), api.readings({ includeDemo: true, limit: 300 })])
+      .then(([res, readingRes]) => {
+        const bySensor = new Map<string, Array<{ value: number; recordedAt: string }>>();
+        for (const reading of readingRes.data) {
+          const list = bySensor.get(reading.sensorId) ?? [];
+          if (list.length < 12) list.push({ value: reading.value, recordedAt: reading.recordedAt });
+          bySensor.set(reading.sensorId, list);
+        }
+        const mapped = mapApiDevices(
+          res.data.map((device) => ({
+            ...device,
+            sensors: device.sensors.map((sensor) => ({
+              ...sensor,
+              readings: bySensor.get(sensor.id) ?? [],
+            })),
+          })) as Array<Record<string, unknown>>,
+        );
         setDevices(mapped);
         setSelectedId(mapped[0]?.id ?? null);
       })
@@ -68,29 +82,37 @@ export function IotHubPage() {
   const online = devices.filter((d) => d.status === 'ONLINE').length;
 
   if (loading) {
-    return <div className="grid min-h-[40vh] place-items-center text-campus-deep/70">A sincronizar a malha IoT…</div>;
+    return <LoadingState label="A sincronizar a malha IoT…" />;
   }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-campus-brass/25 bg-gradient-to-r from-campus-teal/10 via-white/80 to-campus-brass/10 px-4 py-3 text-sm text-campus-ink">
-        Hub IoT com os dispositivos registados no Core. A telemetria em tempo real (MQTT) fica para o grupo IoT.
-      </div>
+      <PageBanner>
+        Hub IoT com dispositivos, sensores e leituras MQTT persistidas. Sem telemetria, os valores mostram-se vazios em vez de números fictícios.
+      </PageBanner>
 
       <PageIntro
         eyebrow="Campus inteligente"
         title="Rede IoT"
         description={`${online} online · ${devices.length} nós visíveis · pulso #${pulse + 1}`}
         actions={
-          <Link to="/devices" className="btn-secondary">
-            Inventário
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/devices" className="btn-secondary">
+              Inventário
+            </Link>
+            <Link to="/sensors" className="btn-ghost">
+              Sensores
+            </Link>
+            <Link to="/readings" className="btn-ghost">
+              Leituras
+            </Link>
+          </div>
         }
       />
 
       <section className="surface relative overflow-hidden p-5 sm:p-6">
         <div className="pointer-events-none absolute -right-10 top-0 h-40 w-40 rounded-full bg-campus-teal/10" />
-        <p className="eyebrow">Fluxo futuro</p>
+        <p className="eyebrow">Fluxo de telemetria</p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {pipeline.map((step, idx) => (
             <div key={step} className="flex items-center gap-2">
@@ -109,7 +131,7 @@ export function IotHubPage() {
         </div>
       </section>
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="alert-error">{error}</p> : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.7fr)]">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -213,20 +235,16 @@ export function IotHubPage() {
 
       <section className="surface overflow-hidden p-0">
         <div className="border-b border-campus-line/70 px-5 py-4">
-          <h3 className="font-display text-xl font-semibold text-campus-ink">Mapa da malha (conceptual)</h3>
-          <p className="text-sm text-campus-deep/70">Disposição ilustrativa dos nós; não representa localizações reais</p>
+          <h3 className="font-display text-xl font-semibold text-campus-ink">Mapa da malha</h3>
+          <p className="text-sm text-campus-deep/70">Posição aproximada pela sala / tópico MQTT de cada dispositivo</p>
         </div>
         <div className="relative h-52 sm:h-64 md:h-72 bg-[radial-gradient(circle_at_30%_40%,rgba(26,107,92,0.12),transparent_40%),radial-gradient(circle_at_70%_55%,rgba(138,106,61,0.12),transparent_35%),linear-gradient(160deg,#eef4f1,#f7f9fb)]">
-          {devices.slice(0, 6).map((d, i) => {
-            const positions = [
-              { left: '18%', top: '30%' },
-              { left: '42%', top: '22%' },
-              { left: '68%', top: '34%' },
-              { left: '28%', top: '62%' },
-              { left: '55%', top: '58%' },
-              { left: '78%', top: '64%' },
-            ];
-            const pos = positions[i];
+          {devices.map((d, i) => {
+            const hash = Array.from(d.mqttTopic + d.roomLabel).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+            const pos = {
+              left: `${18 + (hash % 62)}%`,
+              top: `${22 + ((hash * 3) % 52)}%`,
+            };
             const active = d.id === selectedId;
             return (
               <button

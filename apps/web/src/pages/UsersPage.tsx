@@ -1,55 +1,247 @@
-import { useEffect, useState } from 'react';
-import type { AuthUser } from '@smart-campus/shared-types';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import type { AuthUser, RoleCode } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
+import { PageIntro } from '../components/PageIntro';
+import { AlertMessage } from '../components/AlertMessage';
+import { ChipTabs, EmptyState, FormField, LoadingState, StatusPill } from '../components/ui';
+import { SelectField } from '../components/SelectField';
+import { BanIcon, CheckIcon, IconActionButton, TableActions } from '../components/ActionButtons';
+import { StatCard } from '../components/StatCard';
+import { ModuleGlyph } from '../components/ModuleGlyph';
+import { roleLabels } from '../lib/labels';
+
+function roleTone(role: AuthUser['role']) {
+  if (role === 'ADMIN') return 'danger' as const;
+  if (role === 'STUDENT') return 'success' as const;
+  if (role === 'TECHNICIAN' || role === 'FINANCE') return 'warning' as const;
+  return 'info' as const;
+}
+
+const roles: RoleCode[] = ['STUDENT', 'TEACHER', 'TECHNICIAN', 'COORDINATOR', 'ADMIN', 'FINANCE'];
+type RoleFilter = 'ALL' | RoleCode;
 
 export function UsersPage() {
   const { api, user } = useAuth();
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('ALL');
+  const [form, setForm] = useState({ email: '', password: '', fullName: '', role: 'STUDENT' as RoleCode });
   const allowed = !!user && ['ADMIN', 'COORDINATOR'].includes(user.role);
+  const canCreate = user?.role === 'ADMIN';
+
+  async function load() {
+    const res = await api.users();
+    setUsers(res.data);
+  }
 
   useEffect(() => {
     if (!allowed) return;
-    api
-      .users()
-      .then((res) => setUsers(res.data))
-      .catch((err: Error) => setError(err.message));
+    load()
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
   }, [api, allowed]);
+
+  const stats = useMemo(() => {
+    const withoutProfile = users.filter(
+      (item) =>
+        (item.role === 'STUDENT' && !item.hasStudentProfile) ||
+        (item.role === 'TEACHER' && !item.hasTeacherProfile),
+    ).length;
+    return {
+      total: users.length,
+      active: users.filter((item) => item.isActive).length,
+      withoutProfile,
+    };
+  }, [users]);
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return users.filter((item) => {
+      if (roleFilter !== 'ALL' && item.role !== roleFilter) return false;
+      if (!needle) return true;
+      return `${item.fullName} ${item.email} ${roleLabels[item.role]}`.toLowerCase().includes(needle);
+    });
+  }, [users, query, roleFilter]);
 
   if (user && !allowed) {
     return <Navigate to="/dashboard" replace />;
   }
 
+  async function onCreate(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.createUser(form);
+      setForm({ email: '', password: '', fullName: '', role: 'STUDENT' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao criar conta');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleActive(item: AuthUser) {
+    setError(null);
+    try {
+      await api.updateUser(item.id, { isActive: !item.isActive });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao actualizar conta');
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-campus-line bg-white/85 p-5 shadow-panel">
-        <h2 className="font-display text-2xl">Utilizadores e perfis</h2>
-        <p className="mt-1 text-sm text-campus-deep/75">Gestão Core de contas e roles.</p>
+      <PageIntro
+        eyebrow="Identidade"
+        title="Utilizadores e perfis"
+        description="Crie a conta aqui. Depois ligue o perfil académico em Estudantes ou Docentes — sem repetir email e password."
+      />
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <StatCard label="Contas" value={stats.total} hint="Acessos à plataforma" icon={<ModuleGlyph name="users" />} />
+        <StatCard label="Activas" value={stats.active} hint="Podem entrar agora" icon={<ModuleGlyph name="dashboard" />} />
+        <StatCard
+          label="Sem perfil"
+          value={stats.withoutProfile}
+          hint="Estudantes ou docentes por completar"
+          to="/students"
+          icon={<ModuleGlyph name="students" />}
+        />
       </section>
-      {error ? <p className="text-red-700">{error}</p> : null}
-      <div className="table-scroll rounded-2xl border border-campus-line bg-white shadow-panel">
-        <table className="min-w-[560px] text-left text-sm">
-          <thead className="bg-campus-mist">
-            <tr>
-              <th className="px-4 py-3">Nome</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-t border-campus-line/70">
-                <td className="px-4 py-3">{u.fullName}</td>
-                <td className="px-4 py-3">{u.email}</td>
-                <td className="px-4 py-3">{u.role}</td>
-                <td className="px-4 py-3">{u.isActive ? 'Activo' : 'Inactivo'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+      {error ? <AlertMessage tone="error" message={error} /> : null}
+
+      {canCreate ? (
+        <form onSubmit={onCreate} className="hero-panel grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <h2 className="section-title md:col-span-2 xl:col-span-5">Nova conta de acesso</h2>
+          <FormField label="Nome completo">
+            <input className="field-input" placeholder="Ex.: Ana Silva" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required />
+          </FormField>
+          <FormField label="Email">
+            <input className="field-input" type="email" placeholder="ana@ujac.ac.mz" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+          </FormField>
+          <FormField label="Password">
+            <input className="field-input" type="password" minLength={8} placeholder="Mínimo 8 caracteres" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+          </FormField>
+          <FormField label="Papel">
+            <SelectField
+              value={form.role}
+              onChange={(role) => setForm({ ...form, role: role as RoleCode })}
+              options={roles.map((role) => ({ value: role, label: roleLabels[role] }))}
+            />
+          </FormField>
+          <div className="flex items-end">
+            <button type="submit" className="btn-primary w-full" disabled={saving}>
+              {saving ? 'A criar…' : 'Criar conta'}
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <label className="search-field flex-1">
+          <span className="text-campus-teal" aria-hidden>
+            <ModuleGlyph name="users" />
+          </span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Procurar por nome, email ou papel"
+            aria-label="Procurar utilizadores"
+          />
+        </label>
+        <ChipTabs
+          items={[{ id: 'ALL' as RoleFilter, label: 'Todos' }, ...roles.map((role) => ({ id: role as RoleFilter, label: roleLabels[role] }))]}
+          value={roleFilter}
+          onChange={setRoleFilter}
+          ariaLabel="Filtrar por papel"
+          className="lg:max-w-[62%]"
+        />
       </div>
+
+      {loading ? (
+        <LoadingState label="A carregar utilizadores…" />
+      ) : visible.length === 0 ? (
+        <EmptyState
+          title={users.length === 0 ? 'Ainda não há contas' : 'Nenhum resultado'}
+          description={users.length === 0 ? 'Crie a primeira conta para abrir acesso à plataforma.' : 'Ajuste a pesquisa ou o filtro de papel.'}
+        />
+      ) : (
+        <div className="table-scroll surface">
+          <table className="min-w-[760px]">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Email</th>
+                <th>Papel</th>
+                <th>Perfil</th>
+                <th>Estado</th>
+                {canCreate ? <th className="text-right">Acções</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((item) => {
+                const needsStudent = item.role === 'STUDENT' && !item.hasStudentProfile;
+                const needsTeacher = item.role === 'TEACHER' && !item.hasTeacherProfile;
+                return (
+                  <tr key={item.id}>
+                    <td className="font-medium text-campus-ink">{item.fullName}</td>
+                    <td className="text-campus-deep/80">{item.email}</td>
+                    <td>
+                      <StatusPill tone={roleTone(item.role)}>{roleLabels[item.role]}</StatusPill>
+                    </td>
+                    <td>
+                      {item.hasStudentProfile ? (
+                        <Link to={`/students?userId=${item.id}`} className="text-sm font-semibold text-campus-teal">
+                          Estudante
+                        </Link>
+                      ) : item.hasTeacherProfile ? (
+                        <Link to={`/teachers?userId=${item.id}`} className="text-sm font-semibold text-campus-teal">
+                          Docente
+                        </Link>
+                      ) : needsStudent ? (
+                        <Link to={`/students?userId=${item.id}`} className="text-sm font-semibold text-campus-accent">
+                          Completar perfil
+                        </Link>
+                      ) : needsTeacher ? (
+                        <Link to={`/teachers?userId=${item.id}`} className="text-sm font-semibold text-campus-accent">
+                          Completar perfil
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-campus-deep/55">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <StatusPill tone={item.isActive ? 'success' : 'muted'}>
+                        {item.isActive ? 'Activo' : 'Inactivo'}
+                      </StatusPill>
+                    </td>
+                    {canCreate ? (
+                      <td className="text-right">
+                        <TableActions>
+                          <IconActionButton
+                            label={item.isActive ? 'Desactivar' : 'Activar'}
+                            icon={item.isActive ? <BanIcon /> : <CheckIcon />}
+                            tone={item.isActive ? 'danger' : 'success'}
+                            onClick={() => void toggleActive(item)}
+                          />
+                        </TableActions>
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createUserSchema } from '@smart-campus/validation';
+import { createUserSchema, updateUserSchema } from '@smart-campus/validation';
 import { authenticate, authorize } from '../../../middleware/auth.js';
 import { success } from '../../../middleware/errorHandler.js';
 import * as authService from '../../auth/application/authService.js';
@@ -29,6 +29,16 @@ usersRouter.post('/users', authenticate, authorize('ADMIN'), async (req, res, ne
     const body = createUserSchema.parse(req.body);
     const user = await authService.createUser(body, req.user!.id, req.correlationId);
     success(res, user, 201);
+  } catch (err) {
+    next(err);
+  }
+});
+
+usersRouter.patch('/users/:id', authenticate, authorize('ADMIN'), async (req, res, next) => {
+  try {
+    const body = updateUserSchema.parse(req.body);
+    const user = await authService.updateUser(req.params.id, body, req.user!.id, req.correlationId);
+    success(res, user);
   } catch (err) {
     next(err);
   }

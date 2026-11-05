@@ -24,7 +24,7 @@ describe('Contrato financeiro e Swagger do Core', () => {
           .map((method) => `${method} ${path}`),
       );
     expect(documented.sort()).toEqual(implemented.sort());
-    expect(implemented).toHaveLength(24);
+    expect(implemented).toHaveLength(31);
   });
 
   it('resolve as referências internas da especificação', () => {
@@ -53,6 +53,10 @@ describe('Contrato financeiro e Swagger do Core', () => {
       status: 'ok',
       service: 'smart-campus-api',
       timestamp: expect.any(String),
+      mqtt: expect.objectContaining({
+        connected: expect.any(Boolean),
+        url: expect.any(String),
+      }),
     });
     expect(Number.isNaN(Date.parse(response.body.timestamp))).toBe(false);
   });

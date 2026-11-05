@@ -50,6 +50,12 @@ enum AlertSeverity {
   CRITICAL
 }
 
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+}
+
 model Role {
   id          String   @id @default(cuid())
   code        RoleCode @unique
@@ -255,7 +261,7 @@ model Enrolment {
   courseId  String
   course    Course         @relation(fields: [courseId], references: [id])
   academicYear String
-  status    String         @default("ACTIVE")
+  status    EnrolmentStatus @default(ACTIVE)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 
@@ -291,6 +297,8 @@ model Building {
   name        String
   description String?
   floors      Int      @default(1)
+  mapX        Float?
+  mapY        Float?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   rooms       Room[]
@@ -374,15 +382,18 @@ model Incident {
 }
 
 model MaintenanceAction {
-  id          String   @id @default(cuid())
+  id          String            @id @default(cuid())
   incidentId  String
-  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  incident    Incident          @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   performedBy String
-  performer   User     @relation(fields: [performedBy], references: [id])
+  performer   User              @relation(fields: [performedBy], references: [id])
   notes       String
-  createdAt   DateTime @default(now())
+  status      MaintenanceStatus @default(OPEN)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   @@index([incidentId])
+  @@index([status])
 }
 
 model Device {
@@ -394,6 +405,7 @@ model Device {
   roomId      String?
   room        Room?        @relation(fields: [roomId], references: [id])
   mqttTopic   String?
+  ingestToken String?      @unique
   lastSeenAt DateTime?
   signal     Int?
   battery    Int?
@@ -407,19 +419,30 @@ model Device {
 }
 
 model Sensor {
-  id        String    @id @default(cuid())
-  code      String    @unique
-  name      String
-  metric    String
-  unit      String?
-  deviceId  String
-  device    Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  readings  Reading[]
-  alerts    Alert[]
+  id          String    @id @default(cuid())
+  code        String    @unique
+  name        String
+  metric      String
+  unit        String?
+  deviceId    String
+  device      Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  warningMin  Float?
+  warningMax  Float?
+  criticalMin Float?
+  criticalMax Float?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  readings    Reading[]
+  alerts      Alert[]
 
   @@index([deviceId])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
 }
 
 model Reading {

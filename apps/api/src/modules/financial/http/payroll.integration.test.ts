@@ -130,7 +130,7 @@ describe('Salários e relatórios mensais', () => {
       ['2041-01-31T21:59:59.999Z', 20.2], ['2041-01-31T22:00:00Z', 999],
     ] as const;
     for (const [paidAt, amount] of fixtures) {
-      const debt = await request(app).post(`${base}/debts`).set('Authorization', auth('FINANCE')).send({ studentId, title: 'Propina relatório mensal', amount, origin: 'TEST', dueDate: '2099-01-01T00:00:00Z' });
+      const debt = await request(app).post(`${base}/debts`).set('Authorization', auth('FINANCE')).send({ studentId, title: 'Propina relatório mensal', amount, origin: 'TUITION', dueDate: '2099-01-01T00:00:00Z' });
       expect(debt.status).toBe(201);
       const payment = await request(app).post(`${base}/payments`).set('Authorization', auth('FINANCE')).send({ debtId: debt.body.data.id, amountPaid: amount, paymentMethod: 'BANK_TRANSFER', referenceCode: randomUUID() });
       expect(payment.status).toBe(201);

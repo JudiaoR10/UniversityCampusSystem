@@ -42,6 +42,7 @@ export function toDebtDto(debt: {
   status: string;
   createdAt: Date;
   updatedAt: Date;
+  student?: DebtDto['student'];
 }): DebtDto {
   return {
     id: debt.id,
@@ -55,6 +56,7 @@ export function toDebtDto(debt: {
     status: debt.status as DebtDto['status'],
     createdAt: debt.createdAt.toISOString(),
     updatedAt: debt.updatedAt.toISOString(),
+    student: debt.student,
   };
 }
 

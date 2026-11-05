@@ -1,16 +1,22 @@
-export type AlertTone = 'success' | 'error';
+export type AlertTone = 'success' | 'error' | 'info';
 
 export type AlertState = { tone: AlertTone; message: string };
 
-export function AlertMessage({ tone, message }: AlertState) {
-  const palette =
-    tone === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700';
+const roleByTone = {
+  success: 'status',
+  error: 'alert',
+  info: 'status',
+} as const;
 
+const classByTone = {
+  success: 'alert-success',
+  error: 'alert-error',
+  info: 'alert-info',
+} as const;
+
+export function AlertMessage({ tone, message }: AlertState) {
   return (
-    <p
-      role={tone === 'success' ? 'status' : 'alert'}
-      className={`rounded-xl px-3 py-2 text-sm ${palette}`}
-    >
+    <p role={roleByTone[tone]} className={classByTone[tone]}>
       {message}
     </p>
   );

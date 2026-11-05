@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { PageIntro } from '../components/PageIntro';
+import { AlertMessage } from '../components/AlertMessage';
+import { EmptyState, LoadingState } from '../components/ui';
 
 export function AuditPage() {
   const { api, user } = useAuth();
   const [events, setEvents] = useState<Array<Record<string, unknown>>>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const allowed = !!user && ['ADMIN', 'COORDINATOR'].includes(user.role);
 
   useEffect(() => {
@@ -13,7 +17,8 @@ export function AuditPage() {
     api
       .auditEvents()
       .then((res) => setEvents(res.data as Array<Record<string, unknown>>))
-      .catch((err: Error) => setError(err.message));
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
   }, [api, allowed]);
 
   if (user && !allowed) {
@@ -22,33 +27,40 @@ export function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-campus-line bg-white/85 p-5 shadow-panel">
-        <h2 className="font-display text-2xl">Auditoria</h2>
-        <p className="mt-1 text-sm text-campus-deep/75">Eventos relevantes com correlationId no backend.</p>
-      </section>
-      {error ? <p className="text-red-700">{error}</p> : null}
-      <div className="table-scroll rounded-2xl border border-campus-line bg-white shadow-panel">
-        <table className="min-w-[640px] text-left text-sm">
-          <thead className="bg-campus-mist">
-            <tr>
-              <th className="px-4 py-3">Acção</th>
-              <th className="px-4 py-3">Recurso</th>
-              <th className="px-4 py-3">Correlation</th>
-              <th className="px-4 py-3">Quando</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((e) => (
-              <tr key={String(e.id)} className="border-t border-campus-line/70">
-                <td className="px-4 py-3">{String(e.action)}</td>
-                <td className="px-4 py-3">{String(e.resource)}</td>
-                <td className="px-4 py-3 font-mono text-xs">{String(e.correlationId)}</td>
-                <td className="px-4 py-3">{new Date(String(e.createdAt)).toLocaleString('pt-PT')}</td>
+      <PageIntro
+        eyebrow="Governação"
+        title="Auditoria"
+        description="Registo de acções relevantes, com correlationId partilhado entre o pedido HTTP e o evento."
+      />
+      {error ? <AlertMessage tone="error" message={error} /> : null}
+      {loading ? (
+        <LoadingState label="A carregar eventos…" />
+      ) : events.length === 0 ? (
+        <EmptyState title="Sem eventos" description="Ainda não há actividade auditável para mostrar." />
+      ) : (
+        <div className="table-scroll surface">
+          <table className="min-w-[640px]">
+            <thead>
+              <tr>
+                <th>Acção</th>
+                <th>Recurso</th>
+                <th>Correlation</th>
+                <th>Quando</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {events.map((event) => (
+                <tr key={String(event.id)}>
+                  <td className="font-medium text-campus-ink">{String(event.action)}</td>
+                  <td>{String(event.resource)}</td>
+                  <td className="font-mono text-xs text-campus-deep/70">{String(event.correlationId)}</td>
+                  <td className="text-campus-deep/70">{new Date(String(event.createdAt)).toLocaleString('pt-PT')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

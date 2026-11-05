@@ -1,4 +1,4 @@
-import type { CreatePlateReadingInput, UpdateParkingSpotInput } from '@smart-campus/validation';
+import type { CreatePlateReadingInput, IngestPlateReadingInput, UpdateParkingSpotInput } from '@smart-campus/validation';
 import { normalizeMozambiquePlate } from '@smart-campus/validation';
 import { notFound } from '../../../lib/errors.js';
 import { prisma } from '../../../lib/prisma.js';
@@ -66,9 +66,36 @@ export async function listPlateReadings(limit = 30) {
   }));
 }
 
+export async function ingestPlateReading(
+  input: IngestPlateReadingInput,
+  actorId: string | null,
+  correlationId: string,
+  sensorCode: string,
+) {
+  const lot = input.lotId
+    ? await prisma.parkingLot.findUnique({ where: { id: input.lotId } })
+    : await prisma.parkingLot.findUnique({ where: { code: input.lotCode } });
+  if (!lot) throw notFound('PARKING_LOT_NOT_FOUND', 'Parque não encontrado');
+
+  return createPlateReading(
+    {
+      lotId: lot.id,
+      plate: input.plate,
+      direction: input.direction,
+      sensorCode: input.sensorCode ?? sensorCode,
+      confidence: input.confidence ?? 0.9,
+      photoUrl: input.photoUrl,
+      spotCode: input.spotCode,
+      isDemo: false,
+    },
+    actorId,
+    correlationId,
+  );
+}
+
 export async function createPlateReading(
   input: CreatePlateReadingInput,
-  actorId: string,
+  actorId: string | null,
   correlationId: string,
 ) {
   const lot = await prisma.parkingLot.findUnique({ where: { id: input.lotId } });
@@ -121,7 +148,7 @@ export async function createPlateReading(
       confidence: input.confidence ?? 0.9,
       photoUrl: input.photoUrl ?? null,
       sensorCode: input.sensorCode ?? 'CAM-LPR-SIM',
-      isDemo: true,
+      isDemo: input.isDemo ?? true,
     },
     include: {
       lot: { select: { id: true, code: true, name: true } },

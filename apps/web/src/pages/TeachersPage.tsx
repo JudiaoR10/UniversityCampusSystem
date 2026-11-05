@@ -1,9 +1,12 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import type { DepartmentDto, TeacherProfileDto } from '@smart-campus/shared-types';
+import type { AuthUser, DepartmentDto, TeacherProfileDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { AlertMessage, type AlertState } from '../components/AlertMessage';
 import { useConfirm } from '../components/ConfirmDialog';
 import { PageIntro } from '../components/PageIntro';
+import { EmptyState, StatusPill } from '../components/ui';
+import { SelectField } from '../components/SelectField';
+import { DeleteAction, TableActions } from '../components/ActionButtons';
 
 const statusLabel: Record<TeacherProfileDto['status'], string> = {
   ACTIVE: 'Activo',
@@ -29,7 +32,11 @@ export function TeachersPage() {
   const [ownAlert, setOwnAlert] = useState<AlertState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { confirm, dialog } = useConfirm();
+  const prefillUserId = new URLSearchParams(window.location.search).get('userId') ?? '';
+  const [accounts, setAccounts] = useState<AuthUser[]>([]);
+  const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [form, setForm] = useState({
+    userId: prefillUserId,
     email: '',
     password: '',
     fullName: '',
@@ -41,10 +48,12 @@ export function TeachersPage() {
 
   async function load() {
     try {
-      const [resTeachers, resDepartments] = await Promise.all([
+      const [resTeachers, resDepartments, resUsers] = await Promise.all([
         api.teachers.list(),
         api.departments(),
+        api.users().catch(() => ({ data: [] as AuthUser[] })),
       ]);
+      setAccounts(resUsers.data);
       setTeachers(resTeachers.data);
       setDepartments(resDepartments.data);
       const first = resDepartments.data[0];
@@ -85,10 +94,8 @@ export function TeachersPage() {
     const department = departments.find((item) => item.id === form.departmentId);
     const confirmed = await confirm({
       title: 'Criar docente',
-      message: 'Confirma a criação da conta de acesso e do perfil de docente com estes dados?',
+      message: mode === 'existing' ? 'Ligar esta conta existente ao perfil de docente?' : 'Criar conta e perfil de docente?',
       details: [
-        { label: 'Nome', value: form.fullName },
-        { label: 'Email', value: form.email },
         { label: 'Código', value: form.employeeCode },
         { label: 'Departamento', value: department ? `${department.code} — ${department.name}` : '—' },
       ],
@@ -98,20 +105,31 @@ export function TeachersPage() {
     setAlert(null);
     setSubmitting(true);
     try {
-      await api.teachers.create({
-        email: form.email,
-        password: form.password,
-        fullName: form.fullName,
-        employeeCode: form.employeeCode,
-        departmentId: form.departmentId,
-        title: form.title || undefined,
-        phone: form.phone || undefined,
-      });
+      await api.teachers.create(
+        mode === 'existing'
+          ? {
+              userId: form.userId,
+              employeeCode: form.employeeCode,
+              departmentId: form.departmentId,
+              title: form.title || undefined,
+              phone: form.phone || undefined,
+            }
+          : {
+              email: form.email,
+              password: form.password,
+              fullName: form.fullName,
+              employeeCode: form.employeeCode,
+              departmentId: form.departmentId,
+              title: form.title || undefined,
+              phone: form.phone || undefined,
+            },
+      );
       setAlert({
         tone: 'success',
         message: 'Docente criado com sucesso.',
       });
       setForm({
+        userId: '',
         email: '',
         password: '',
         fullName: '',
@@ -154,7 +172,7 @@ export function TeachersPage() {
   async function remove(teacher: TeacherProfileDto) {
     const confirmed = await confirm({
       title: 'Remover docente',
-      message: 'O perfil e a conta de acesso associada serão eliminados em definitivo.',
+      message: 'O perfil de docente será removido. A conta de acesso permanece activa.',
       details: [
         { label: 'Código', value: teacher.employeeCode },
         { label: 'Nome', value: teacher.user.fullName },
@@ -208,6 +226,31 @@ export function TeachersPage() {
 
       {isAdmin ? (
         <form onSubmit={create} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="md:col-span-2 xl:col-span-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="section-title">Novo perfil de docente</h2>
+            <div className="flex gap-2">
+              <button type="button" className={mode === 'existing' ? 'btn-primary' : 'btn-ghost'} onClick={() => setMode('existing')}>
+                Conta existente
+              </button>
+              <button type="button" className={mode === 'new' ? 'btn-primary' : 'btn-ghost'} onClick={() => setMode('new')}>
+                Criar conta
+              </button>
+            </div>
+          </div>
+          {mode === 'existing' ? (
+            <SelectField
+              className="md:col-span-2"
+              value={form.userId}
+              onChange={(userId) => setForm({ ...form, userId })}
+              required
+              aria-label="Conta TEACHER sem perfil"
+              placeholder="Seleccionar conta de docente sem perfil"
+              options={accounts
+                .filter((item) => item.role === 'TEACHER' && item.isActive && !item.hasTeacherProfile)
+                .map((item) => ({ value: item.id, label: `${item.fullName} · ${item.email}` }))}
+            />
+          ) : (
+            <>
           <input
             className="field-input !mt-0"
             type="email"
@@ -232,6 +275,8 @@ export function TeachersPage() {
             onChange={(event) => setForm({ ...form, fullName: event.target.value })}
             required
           />
+            </>
+          )}
           <input
             className="field-input !mt-0"
             placeholder="Código de docente"
@@ -239,22 +284,17 @@ export function TeachersPage() {
             onChange={(event) => setForm({ ...form, employeeCode: event.target.value })}
             required
           />
-          <select
-            className="field-input !mt-0"
+          <SelectField
             aria-label="Departamento"
             value={form.departmentId}
-            onChange={(event) => setForm({ ...form, departmentId: event.target.value })}
+            onChange={(departmentId) => setForm({ ...form, departmentId })}
             required
-          >
-            <option value="" disabled>
-              {departments.length === 0 ? 'Sem departamentos disponíveis' : 'Selecionar departamento'}
-            </option>
-            {departments.map((department) => (
-              <option key={department.id} value={department.id}>
-                {department.code} — {department.name}
-              </option>
-            ))}
-          </select>
+            placeholder={departments.length === 0 ? 'Sem departamentos disponíveis' : 'Seleccionar departamento'}
+            options={departments.map((department) => ({
+              value: department.id,
+              label: `${department.code} — ${department.name}`,
+            }))}
+          />
           <input
             className="field-input !mt-0"
             placeholder="Título (opcional)"
@@ -267,7 +307,7 @@ export function TeachersPage() {
             value={form.phone}
             onChange={(event) => setForm({ ...form, phone: event.target.value })}
           />
-          <button type="submit" className="btn-primary" disabled={submitting || !form.departmentId}>
+          <button type="submit" className="btn-primary" disabled={submitting || !form.departmentId || (mode === 'existing' && !form.userId)}>
             {submitting ? 'A criar…' : 'Criar perfil'}
           </button>
         </form>
@@ -280,7 +320,7 @@ export function TeachersPage() {
       {loading ? (
         <p className="text-campus-deep/70">A carregar docentes…</p>
       ) : teachers.length === 0 ? (
-        <p className="surface p-5 text-sm text-campus-deep/70">Ainda não há docentes registados.</p>
+        <EmptyState title="Ainda não há docentes" description="Crie o primeiro perfil para o ver neste directório." />
       ) : (
         <div className="table-scroll surface">
           <table className="min-w-[720px] w-full text-left text-sm">
@@ -301,16 +341,16 @@ export function TeachersPage() {
                   <td className="px-4 py-3">{teacher.user.fullName}</td>
                   <td className="px-4 py-3">{teacher.department?.code ?? '—'}</td>
                   <td className="px-4 py-3">{teacher.title ?? '—'}</td>
-                  <td className="px-4 py-3">{statusLabel[teacher.status]}</td>
+                  <td className="px-4 py-3">
+                    <StatusPill tone={teacher.status === 'ACTIVE' ? 'success' : teacher.status === 'ON_LEAVE' ? 'warning' : 'muted'}>
+                      {statusLabel[teacher.status]}
+                    </StatusPill>
+                  </td>
                   {isAdmin ? (
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        className="rounded-lg border border-campus-line px-2.5 py-1 text-xs hover:bg-campus-mist"
-                        onClick={() => void remove(teacher)}
-                      >
-                        Remover
-                      </button>
+                      <TableActions>
+                        <DeleteAction label="Remover" title={`Remover ${teacher.user.fullName}`} onClick={() => void remove(teacher)} />
+                      </TableActions>
                     </td>
                   ) : null}
                 </tr>

@@ -1,10 +1,8 @@
 import mqtt from 'mqtt';
 import { prisma } from '../../../lib/prisma.js';
-import { raiseDeviceAlert } from '../../devices/application/alertService.js';
+import { getEnv } from '../../../config/env.js';
+import { raiseDeviceAlert, raiseMetricAlert } from '../../devices/application/alertService.js';
 
-const MQTT_URL = process.env.MQTT_URL ?? 'mqtt://localhost:1883';
-/** Sem mensagens durante este tempo -> o device passa a OFFLINE (por omissão 2 min). */
-const OFFLINE_AFTER_MS = Number(process.env.DEVICE_OFFLINE_AFTER_MS ?? 120_000);
 const WATCHDOG_EVERY_MS = 30_000;
 const REFRESH_TOPICS_EVERY_MS = 60_000;
 
@@ -14,8 +12,18 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 /** RSSI (dBm) -> percentagem aproximada: -100 dBm = 0 %, -50 dBm = 100 %. */
 const rssiToPercent = (rssi: number) => Math.round(clamp(2 * (rssi + 100), 0, 100));
 
+let mqttConnected = false;
+let mqttUrl = 'mqtt://localhost:1883';
+
+export function getMqttStatus() {
+  return { connected: mqttConnected, url: mqttUrl };
+}
+
 export function startMqttIngest() {
-  const client = mqtt.connect(MQTT_URL);
+  const env = getEnv();
+  mqttUrl = env.MQTT_URL;
+  const offlineAfterMs = env.DEVICE_OFFLINE_AFTER_MS;
+  const client = mqtt.connect(mqttUrl);
   const topicToDevice = new Map<string, string>();
 
   async function refreshSubscriptions() {
@@ -62,7 +70,7 @@ export function startMqttIngest() {
 
     const readings = device.sensors.flatMap((s) => {
       const value = payload[s.metric];
-      return isNum(value) ? [{ sensorId: s.id, value, isDemo: false }] : [];
+      return isNum(value) ? [{ sensor: s, value }] : [];
     });
 
     const signal = isNum(payload.rssi)
@@ -73,7 +81,11 @@ export function startMqttIngest() {
     const battery = isNum(payload.battery) ? Math.round(clamp(payload.battery, 0, 100)) : undefined;
 
     await prisma.$transaction(async (tx) => {
-      if (readings.length > 0) await tx.reading.createMany({ data: readings });
+      if (readings.length > 0) {
+        await tx.reading.createMany({
+          data: readings.map((r) => ({ sensorId: r.sensor.id, value: r.value, isDemo: false })),
+        });
+      }
 
       await tx.device.update({
         where: { id: device.id },
@@ -84,19 +96,31 @@ export function startMqttIngest() {
         },
       });
 
-      // MAINTENANCE é decisão humana: a telemetria não a altera.
-      // A transição é atómica: só a mensagem que muda mesmo o estado cria o alerta.
       const res = await tx.device.updateMany({
         where: { id: device.id, status: { in: ['OFFLINE', 'UNKNOWN'] } },
         data: { status: 'ONLINE' },
       });
       if (res.count > 0) await raiseDeviceAlert(tx, device, device.status, 'ONLINE');
+
+      for (const reading of readings) {
+        await raiseMetricAlert(tx, reading.sensor, reading.value);
+      }
     });
   }
 
+  async function pruneReadings() {
+    try {
+      const setting = await prisma.systemSetting.findUnique({ where: { key: 'readingRetentionDays' } });
+      const days = Number(setting?.value ?? 30);
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      await prisma.reading.deleteMany({ where: { recordedAt: { lt: cutoff } } });
+    } catch (err) {
+      console.error('[mqtt] retenção falhou', err);
+    }
+  }
+
   async function watchdog() {
-    const cutoff = new Date(Date.now() - OFFLINE_AFTER_MS);
-    // lastSeenAt null = nunca enviou telemetria (ex.: ONLINE posto à mão): não mexer
+    const cutoff = new Date(Date.now() - offlineAfterMs);
     const stale = await prisma.device.findMany({
       where: { status: 'ONLINE', lastSeenAt: { lt: cutoff } },
     });
@@ -113,10 +137,23 @@ export function startMqttIngest() {
   }
 
   client.on('connect', () => {
-    console.log(`[mqtt] ligado a ${MQTT_URL}`);
+    mqttConnected = true;
+    console.log(`[mqtt] ligado a ${mqttUrl}`);
     refreshSubscriptions().catch((e) => console.error('[mqtt] refresh falhou', e));
   });
-  client.on('error', (e) => console.error('[mqtt] erro', e.message));
+  client.on('reconnect', () => {
+    mqttConnected = client.connected;
+  });
+  client.on('offline', () => {
+    mqttConnected = false;
+  });
+  client.on('close', () => {
+    mqttConnected = false;
+  });
+  client.on('error', (e) => {
+    mqttConnected = client.connected;
+    console.error('[mqtt] erro', e.message);
+  });
   client.on('message', (topic, raw) => {
     handleMessage(topic, raw).catch((e) => console.error('[mqtt] mensagem falhou', e));
   });
@@ -127,10 +164,15 @@ export function startMqttIngest() {
   const watchdogTimer = setInterval(() => {
     watchdog().catch((e) => console.error('[mqtt] watchdog falhou', e));
   }, WATCHDOG_EVERY_MS);
+  const pruneTimer = setInterval(() => {
+    pruneReadings().catch((e) => console.error('[mqtt] retenção falhou', e));
+  }, 60 * 60 * 1000);
 
   return () => {
+    mqttConnected = false;
     clearInterval(refreshTimer);
     clearInterval(watchdogTimer);
+    clearInterval(pruneTimer);
     client.end();
   };
 }

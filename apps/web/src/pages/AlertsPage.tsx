@@ -3,6 +3,17 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { canViewAlerts } from '../lib/roles';
 import type { AlertDto } from '@smart-campus/shared-types';
+import { PageIntro } from '../components/PageIntro';
+import { AlertMessage } from '../components/AlertMessage';
+import { EmptyState, LoadingState, PageBanner, StatusPill } from '../components/ui';
+import { CheckIcon, IconActionButton } from '../components/ActionButtons';
+
+function severityTone(severity: string) {
+  const value = severity.toUpperCase();
+  if (value === 'CRITICAL' || value === 'HIGH') return 'danger' as const;
+  if (value === 'MEDIUM' || value === 'WARNING') return 'warning' as const;
+  return 'muted' as const;
+}
 
 export function AlertsPage() {
   const { api, user } = useAuth();
@@ -23,7 +34,6 @@ export function AlertsPage() {
     setAlerts(res.data);
   }
 
-  // Carrega os alertas (todos, ou só os do dispositivo indicado em ?deviceId=)
   useEffect(() => {
     if (!canSee) return;
     let cancelled = false;
@@ -45,7 +55,6 @@ export function AlertsPage() {
     };
   }, [api, deviceId, canSee]);
 
-  // Nome do dispositivo para o aviso de filtro
   useEffect(() => {
     if (!deviceId) {
       setDeviceLabel(null);
@@ -56,8 +65,8 @@ export function AlertsPage() {
       .devices()
       .then((res) => {
         if (cancelled) return;
-        const d = res.data.find((x) => x.id === deviceId);
-        setDeviceLabel(d ? `${d.code} — ${d.name}` : deviceId);
+        const match = res.data.find((item) => item.id === deviceId);
+        setDeviceLabel(match ? `${match.code} — ${match.name}` : deviceId);
       })
       .catch(() => {
         if (!cancelled) setDeviceLabel(deviceId);
@@ -84,51 +93,55 @@ export function AlertsPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-campus-line bg-white/85 p-5 shadow-panel">
-        <h2 className="font-display text-2xl">Alertas</h2>
-        <p className="mt-1 text-sm text-campus-deep/75">Alertas fictícios estão claramente marcados como demonstração.</p>
-        {deviceId ? (
-          <p className="mt-3 text-sm text-campus-ink">
-            A mostrar só os alertas de <span className="font-semibold">{deviceLabel ?? '…'}</span>.{' '}
-            <Link to="/alerts" className="underline">
-              Ver todos os alertas
-            </Link>
-          </p>
-        ) : null}
-      </section>
+      <PageIntro
+        eyebrow="Operações"
+        title="Alertas"
+        description="Eventos operacionais do campus. Os dados fictícios estão identificados como demonstração."
+      />
 
-      {error ? <p className="text-red-700">{error}</p> : null}
+      {deviceId ? (
+        <PageBanner>
+          A mostrar só os alertas de <strong>{deviceLabel ?? '…'}</strong>.{' '}
+          <Link to="/alerts" className="font-semibold text-campus-teal underline decoration-campus-teal/30 underline-offset-2">
+            Ver todos os alertas
+          </Link>
+        </PageBanner>
+      ) : null}
+
+      {error ? <AlertMessage tone="error" message={error} /> : null}
 
       {loading ? (
-        <p className="text-sm text-campus-deep/70">A carregar alertas…</p>
+        <LoadingState label="A carregar alertas…" />
       ) : alerts.length === 0 ? (
-        <p className="text-sm text-campus-deep/70">
-          {deviceId ? 'Nenhum alerta associado a este dispositivo.' : 'Nenhum alerta para mostrar.'}
-        </p>
+        <EmptyState
+          title="Sem alertas"
+          description={deviceId ? 'Nenhum alerta associado a este dispositivo.' : 'Nenhum alerta para mostrar.'}
+        />
       ) : (
         <div className="space-y-3">
-          {alerts.map((a) => (
-            <article key={a.id} className="rounded-2xl border border-campus-line bg-white p-4 shadow-panel">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="font-medium">{a.title}</h3>
-                <span className="text-xs">{a.severity}</span>
+          {alerts.map((alert) => (
+            <article key={alert.id} className="surface p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-display text-lg font-semibold text-campus-ink">{alert.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-campus-deep/75">{alert.message}</p>
+                </div>
+                <StatusPill tone={severityTone(alert.severity)}>{alert.severity}</StatusPill>
               </div>
-              <p className="mt-1 text-sm text-campus-deep/75">{a.message}</p>
-              {a.isDemo ? <p className="mt-2 text-xs text-campus-accent">Dados de demonstração</p> : null}
-              <div className="mt-3 flex items-center gap-3 text-xs">
-                {a.acknowledged ? (
-                  <span className="font-semibold text-emerald-700">Confirmado</span>
+              {alert.isDemo ? <p className="mt-2 text-xs font-medium text-campus-accent">Dados de demonstração</p> : null}
+              <div className="mt-4 flex items-center gap-3 text-xs">
+                {alert.acknowledged ? (
+                  <StatusPill tone="success">Confirmado</StatusPill>
                 ) : canManage ? (
-                  <button
-                    type="button"
-                    disabled={busyId === a.id}
-                    onClick={() => onAck(a.id)}
-                    className="btn-primary"
-                  >
-                    {busyId === a.id ? 'A confirmar…' : 'Confirmar alerta'}
-                  </button>
+                  <IconActionButton
+                    label="Confirmar alerta"
+                    icon={<CheckIcon />}
+                    tone="success"
+                    busy={busyId === alert.id}
+                    onClick={() => onAck(alert.id)}
+                  />
                 ) : (
-                  <span className="text-campus-deep/60">Por confirmar</span>
+                  <StatusPill>Por confirmar</StatusPill>
                 )}
               </div>
             </article>

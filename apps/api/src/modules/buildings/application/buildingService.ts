@@ -11,6 +11,8 @@ function mapBuilding(b: {
     name: string;
     description: string | null;
     floors: number;
+    mapX: number | null;
+    mapY: number | null;
     _count?: { rooms: number };
     createdAt: Date;
     updatedAt: Date;
@@ -21,6 +23,8 @@ function mapBuilding(b: {
       name: b.name,
       description: b.description,
       floors: b.floors,
+      mapX: b.mapX,
+      mapY: b.mapY,
       roomsCount: b._count?.rooms ?? 0,
       createdAt: b.createdAt.toISOString(),
       updatedAt: b.updatedAt.toISOString(),
@@ -52,6 +56,8 @@ export async function createBuilding(input: CreateBuildingInput, actorId: string
         name: input.name,
         description: input.description ?? null,
         floors: input.floors,
+        mapX: input.mapX ?? null,
+        mapY: input.mapY ?? null,
       },
       include: { _count: { select: { rooms: true } } },
     });
@@ -83,6 +89,8 @@ export async function updateBuilding(id: string, input: Partial<CreateBuildingIn
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.floors !== undefined ? { floors: input.floors } : {}),
+        ...(input.mapX !== undefined ? { mapX: input.mapX } : {}),
+        ...(input.mapY !== undefined ? { mapY: input.mapY } : {}),
       },
       include: { _count: { select: { rooms: true } } },
     });

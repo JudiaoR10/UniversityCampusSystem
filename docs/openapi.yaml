@@ -1756,6 +1756,43 @@ components:
         updatedAt:
           type: string
           format: date-time
+    UpdateCourseRequest:
+      type: object
+      minProperties: 1
+      description: Todos os campos são opcionais, mas é preciso indicar pelo menos um.
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 10
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        departmentId:
+          type: string
+    UpdateSubjectRequest:
+      type: object
+      minProperties: 1
+      description: Todos os campos são opcionais, mas é preciso indicar pelo menos um.
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 10
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        credits:
+          type: integer
+          minimum: 1
+        courseId:
+          type: string
     BatchCreateCourseWithSubjectsRequest:
       type: object
       required:
@@ -1890,7 +1927,6 @@ components:
       - studentId
       - title
       - amount
-      - origin
       - dueDate
       properties:
         studentId:
@@ -1916,9 +1952,9 @@ components:
           example: 3500
         origin:
           type: string
-          minLength: 2
-          maxLength: 60
-          example: TUITION_2026
+          enum: [TUITION, FEE, FINE, OTHER]
+          default: TUITION
+          example: TUITION
         dueDate:
           type: string
           format: date-time
@@ -2059,6 +2095,7 @@ components:
       - updatedAt
       - student
       - debt
+      - slaOverdue
       properties:
         id: *id001
         code: *id001
@@ -2094,6 +2131,8 @@ components:
             title: *id001
             amount:
               type: number
+        slaOverdue:
+          type: boolean
     TeacherIdentitySummary:
       type: object
       required:
@@ -2272,33 +2311,49 @@ components:
         subjectId: { type: string, description: 'Obtém-se de GET /subjects' }
         academicYear: { type: integer, minimum: 2000, maximum: 2100, example: 2026 }
     CreateStudentProfileRequest:
-      type: object
+      oneOf:
+        - type: object
+          required: [userId, studentNumber, courseId]
+          properties:
+            userId: { type: string, description: 'Conta User já criada em POST /users' }
+            studentNumber: { type: string, minLength: 2, maxLength: 30, example: '20240123' }
+            courseId: { type: string }
+            yearOfStudy: { type: integer, minimum: 1, maximum: 10 }
+            phone: { type: string }
+        - type: object
+          required: [email, password, fullName, studentNumber, courseId]
+          properties:
+            email: { type: string, format: email, example: aluno@ujac.ac.mz }
+            password: { type: string, format: password, minLength: 8, maxLength: 128 }
+            fullName: { type: string, minLength: 2, maxLength: 120, example: 'Ana Maria Silva' }
+            studentNumber: { type: string, minLength: 2, maxLength: 30, example: '20240123' }
+            courseId: { type: string, description: 'Obtém-se de GET /courses' }
+            yearOfStudy: { type: integer, minimum: 1, maximum: 10, nullable: true, example: 2 }
+            phone: { type: string, minLength: 6, maxLength: 30, example: '+258840000000' }
       description: >-
-        Conta (User) e perfil criados na mesma transacção atómica. Não envie
-        `userId` nem `role`: a role STUDENT é resolvida pelo servidor.
-      required: [email, password, fullName, studentNumber, courseId]
-      properties:
-        email: { type: string, format: email, example: aluno@ujac.ac.mz }
-        password: { type: string, format: password, minLength: 8, maxLength: 128 }
-        fullName: { type: string, minLength: 2, maxLength: 120, example: 'Ana Maria Silva' }
-        studentNumber: { type: string, minLength: 2, maxLength: 30, example: '20240123' }
-        courseId: { type: string, description: 'Obtém-se de GET /courses' }
-        yearOfStudy: { type: integer, minimum: 1, maximum: 10, nullable: true, example: 2 }
-        phone: { type: string, minLength: 6, maxLength: 30, example: '+258840000000' }
+        Liga um `userId` existente (papel STUDENT, activo, sem perfil) ou cria
+        conta+perfil no atalho ADMIN. 409 se duplicado.
     CreateTeacherProfileRequest:
-      type: object
-      description: >-
-        Conta (User) e perfil criados na mesma transacção atómica. Não envie
-        `userId` nem `role`: a role TEACHER é resolvida pelo servidor.
-      required: [email, password, fullName, employeeCode, departmentId]
-      properties:
-        email: { type: string, format: email, example: docente@ujac.ac.mz }
-        password: { type: string, format: password, minLength: 8, maxLength: 128 }
-        fullName: { type: string, minLength: 2, maxLength: 120, example: 'João Paulo Macuácua' }
-        employeeCode: { type: string, minLength: 2, maxLength: 30, example: 'DOC-0042' }
-        departmentId: { type: string, description: 'Obtém-se de GET /departments' }
-        title: { type: string, minLength: 2, maxLength: 80, example: Professor Auxiliar }
-        phone: { type: string, minLength: 6, maxLength: 30, example: '+258840000000' }
+      oneOf:
+        - type: object
+          required: [userId, employeeCode, departmentId]
+          properties:
+            userId: { type: string, description: 'Conta User já criada em POST /users' }
+            employeeCode: { type: string, minLength: 2, maxLength: 30, example: 'DOC-0042' }
+            departmentId: { type: string }
+            title: { type: string }
+            phone: { type: string }
+        - type: object
+          required: [email, password, fullName, employeeCode, departmentId]
+          properties:
+            email: { type: string, format: email, example: docente@ujac.ac.mz }
+            password: { type: string, format: password, minLength: 8, maxLength: 128 }
+            fullName: { type: string, minLength: 2, maxLength: 120, example: 'João Paulo Macuácua' }
+            employeeCode: { type: string, minLength: 2, maxLength: 30, example: 'DOC-0042' }
+            departmentId: { type: string, description: 'Obtém-se de GET /departments' }
+            title: { type: string, minLength: 2, maxLength: 80, example: Professor Auxiliar }
+            phone: { type: string, minLength: 6, maxLength: 30, example: '+258840000000' }
+      description: Liga um `userId` existente (papel TEACHER) ou cria conta+perfil.
     DeletedResult:
       type: object
       properties:
@@ -4599,6 +4654,122 @@ paths:
           description: Curso não encontrado (COURSE_NOT_FOUND)
         '409':
           description: Código já existe (SUBJECT_CODE_EXISTS)
+  /courses/{id}:
+    patch:
+      tags:
+      - Academic
+      summary: Editar curso
+      description: Roles ADMIN, COORDINATOR. Actualização parcial.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCourseRequest'
+      responses:
+        '200':
+          description: Curso actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CourseDto'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Dados inválidos ou corpo vazio (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Curso ou departamento não encontrado (COURSE_NOT_FOUND, DEPARTMENT_NOT_FOUND)
+        '409':
+          description: Código já existe (COURSE_CODE_EXISTS)
+    delete:
+      tags:
+      - Academic
+      summary: Eliminar curso
+      description: >-
+        Roles ADMIN, COORDINATOR. Rejeita com `400 BUSINESS_RULE_VIOLATION`
+        se existirem disciplinas, estudantes ou matrículas associados.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Curso eliminado
+        '400':
+          description: Regra de negócio bloqueou a eliminação (BUSINESS_RULE_VIOLATION)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Não encontrado (COURSE_NOT_FOUND)
+  /subjects/{id}:
+    patch:
+      tags:
+      - Academic
+      summary: Editar disciplina
+      description: Roles ADMIN, COORDINATOR. Actualização parcial; `courseId` permite mudar a disciplina de curso.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSubjectRequest'
+      responses:
+        '200':
+          description: Disciplina actualizada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SubjectDto'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Dados inválidos ou corpo vazio (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Disciplina ou curso não encontrado (SUBJECT_NOT_FOUND, COURSE_NOT_FOUND)
+        '409':
+          description: Código já existe (SUBJECT_CODE_EXISTS)
+    delete:
+      tags:
+      - Academic
+      summary: Eliminar disciplina
+      description: Roles ADMIN, COORDINATOR.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Disciplina eliminada
+        '403':
+          description: Sem permissão
+        '404':
+          description: Não encontrada (SUBJECT_NOT_FOUND)
   /financial/notifications/{notificationId}/delivery:
     get:
       tags:
@@ -4747,6 +4918,21 @@ paths:
         schema:
           type: string
         description: Filtrar por ID de estudante (apenas FINANCE/ADMIN). STUDENT recebe 403 se tentar consultar outro estudante.
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum: [PENDENTE, VENCIDA, REGULARIZADA, CANCELADA]
+      - name: origin
+        in: query
+        schema:
+          type: string
+          enum: [TUITION, FEE, FINE, OTHER]
+      - name: dueBefore
+        in: query
+        schema:
+          type: string
+          format: date-time
       responses:
         '200':
           description: Lista de dívidas filtrada conforme o perfil RBAC
@@ -4921,6 +5107,76 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /financial/debts/from-enrolments:
+    post:
+      summary: 'Emitir propinas a partir de matrículas activas [RBAC: FINANCE e ADMIN]'
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Número de dívidas criadas e ignoradas por duplicado }
+        '400': { description: Entrada inválida }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão }
+        '404': { description: Curso não encontrado }
+  /financial/debts/{id}/cancel:
+    post:
+      summary: 'Cancelar dívida aberta [RBAC: FINANCE e ADMIN]'
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      responses:
+        '200': { description: Dívida cancelada }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão }
+        '404': { description: Dívida não encontrada }
+        '409': { description: Já regularizada, já cancelada ou com contestação pendente }
+  /financial/payments/{id}/receipt:
+    get:
+      summary: 'Comprovativo de pagamento [RBAC: STUDENT próprio, FINANCE, ADMIN]'
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      responses:
+        '200': { description: Comprovativo para impressão interna }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão }
+        '404': { description: Pagamento não encontrado }
+  /financial/students/blocked:
+    get:
+      summary: 'Estudantes bloqueados pela política [RBAC: FINANCE e ADMIN]'
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Lista paginada de estudantes BLOCKED }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão }
+  /financial/notifications:
+    get:
+      summary: 'Fila de avisos financeiros do campus [RBAC: FINANCE e ADMIN]'
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Avisos com estado de entrega }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão }
+  /financial/notifications/retry-failed:
+    post:
+      summary: 'Reenviar avisos falhados [RBAC: FINANCE e ADMIN]'
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Tentativas de reenvio }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão }
+        '503': { description: API de notificações não configurada }
   /financial/payments:
     post:
       summary: 'Registar Pagamento e Regularizar Dívida via Transação ACID [RBAC: Apenas FINANCE e ADMIN]'
@@ -5528,7 +5784,7 @@ paths:
       - bearerAuth: []
       responses:
         '200':
-          description: Contagens de dividas por estado, pagamentos e estudantes bloqueados pela politica; sem totais monetarios
+          description: Contagens de dívidas por estado, totais em MZN (aberto, vencido, recebido no mês de Maputo) e estudantes bloqueados pela política
         '400':
           description: Entrada ou JSON invalido
           content:
@@ -5928,6 +6184,19 @@ paths:
         '409': *id016
         '422': *id017
         '500': *id018
+  /financial/salaries/{id}/receipt:
+    get:
+      summary: Comprovativo salarial de um pagamento PAID (FINANCE/ADMIN)
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      parameters:
+      - *id019
+      responses:
+        '200': { description: Comprovativo para impressão interna }
+        '401': *id013
+        '403': *id014
+        '404': *id015
+        '409': { description: Salário ainda não pago }
   /financial/reports/payments:
     get:
       summary: Relatório mensal de pagamentos dos estudantes (FINANCE/ADMIN)
@@ -6553,3 +6822,62 @@ paths:
           description: Não encontrada (ENROLMENT_NOT_FOUND)
         '409':
           description: Transição inválida (INVALID_STATUS_TRANSITION)
+  /ops/snapshot:
+    get:
+      tags: [Ops]
+      summary: Instantâneo operacional
+      description: Ocupação por horários/sensores, edifícios e salas do D2.
+      responses:
+        '200':
+          description: Snapshot
+        '401':
+          description: Não autenticado
+  /reports/summary:
+    get:
+      tags: [Reports]
+      summary: Resumo de indicadores
+      responses:
+        '200':
+          description: Agregação em tempo real
+  /admin/status:
+    get:
+      tags: [Admin]
+      summary: Saúde do Core
+      responses:
+        '200':
+          description: Estado healthy ou degraded
+  /parking/ingest:
+    post:
+      tags: [Parking]
+      summary: Ingestão LPR por dispositivo
+      description: >-
+        Autenticado por `X-Device-Token` (Device.ingestToken) ou `INGEST_API_KEY`.
+        Payload de câmara: plate, direction, confidence, photoUrl opcional, lotId ou lotCode.
+        Sempre grava `isDemo: false`.
+      security: []
+      parameters:
+        - in: header
+          name: X-Device-Token
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plate, direction]
+              properties:
+                lotId: { type: string }
+                lotCode: { type: string, example: PARK-B }
+                plate: { type: string, example: 'AIT 954 MC' }
+                direction: { type: string, enum: [IN, OUT] }
+                confidence: { type: number, minimum: 0, maximum: 1 }
+                photoUrl: { type: string, format: uri }
+                sensorCode: { type: string }
+                spotCode: { type: string }
+      responses:
+        '201':
+          description: Leitura gravada (isDemo false)
+        '401':
+          description: Token de dispositivo inválido

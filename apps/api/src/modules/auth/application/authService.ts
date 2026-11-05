@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import type { RoleCode, User } from '@prisma/client';
 import { getEnv } from '../../../config/env.js';
 import { prisma } from '../../../lib/prisma.js';
-import { conflict, forbidden, unauthorized } from '../../../lib/errors.js';
+import { conflict, forbidden, notFound, unauthorized } from '../../../lib/errors.js';
 import { audit } from '../../audit/application/auditService.js';
 
 const BCRYPT_ROUNDS = process.env.NODE_ENV === 'test' ? 4 : 12;
@@ -205,10 +205,51 @@ export async function createUser(input: {
 
 export async function listUsers() {
   const users = await prisma.user.findMany({
-    include: { role: true },
+    include: { role: true, studentProfile: { select: { id: true } }, teacherProfile: { select: { id: true } } },
     orderBy: { fullName: 'asc' },
   });
-  return users.map(toAuthUser);
+  return users.map((user) => ({
+    ...toAuthUser(user),
+    hasStudentProfile: Boolean(user.studentProfile),
+    hasTeacherProfile: Boolean(user.teacherProfile),
+  }));
+}
+
+export async function updateUser(
+  id: string,
+  input: { fullName?: string; isActive?: boolean },
+  actorId: string,
+  correlationId: string,
+) {
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    include: { role: true, studentProfile: { select: { id: true } }, teacherProfile: { select: { id: true } } },
+  });
+  if (!existing) throw notFound('USER_NOT_FOUND', 'Utilizador não encontrado');
+
+  const user = await prisma.user.update({
+    where: { id },
+    data: {
+      ...(input.fullName !== undefined ? { fullName: input.fullName } : {}),
+      ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+    },
+    include: { role: true, studentProfile: { select: { id: true } }, teacherProfile: { select: { id: true } } },
+  });
+
+  await audit({
+    action: 'USER_UPDATE',
+    resource: 'User',
+    resourceId: user.id,
+    actorId,
+    correlationId,
+    metadata: input,
+  });
+
+  return {
+    ...toAuthUser(user),
+    hasStudentProfile: Boolean(user.studentProfile),
+    hasTeacherProfile: Boolean(user.teacherProfile),
+  };
 }
 
 export async function getMe(userId: string) {

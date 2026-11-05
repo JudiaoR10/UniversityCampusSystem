@@ -9,6 +9,8 @@
 | Gerir salas | Não | Não | Parcial | Sim | Sim |
 | Gerir utilizadores | Não | Não | Não | Parcial (listar) | Sim |
 | Consultar auditoria | Não | Não | Não | Sim | Sim |
+| Consultar departamentos, cursos e disciplinas | Sim | Sim | Sim | Sim | Sim |
+| Gerir departamentos, cursos e disciplinas (criar e eliminar; editar cursos e disciplinas) | Não | Não | Não | Sim | Sim |
 
 A autorização é aplicada no backend (`authenticate` + `authorize`).
 
@@ -19,7 +21,11 @@ FINANCE é um perfil acrescentado pelo módulo financeiro. Não recebe permissõ
 | Operação financeira | STUDENT | FINANCE | ADMIN | Outros perfis |
 |---|---|---|---|---|
 | Consultar dívida, estado, histórico e avisos | Apenas próprios | Sim | Sim | Não |
-| Criar dívida e confirmar pagamento | Não | Sim | Sim | Não |
+| Listar dívidas do campus, bloqueados e fila de avisos | Não | Sim | Sim | Não |
+| Criar dívida, emitir propina por matrícula e confirmar pagamento | Não | Sim | Sim | Não |
+| Cancelar dívida aberta | Não | Sim | Sim | Não |
+| Imprimir comprovativo de pagamento | Próprio | Sim | Sim | Não |
+| Imprimir comprovativo salarial | Não | Sim | Sim | Não |
 | Contestar dívida | Apenas própria | Não | Não | Não |
 | Resolver contestação, consultar relatório, entrega e reenvio | Não | Sim | Sim | Não |
 | Consultar/alterar política | Não | Não | Sim | Não |
@@ -30,13 +36,13 @@ A criação de utilizadores pertence exclusivamente ao Core. O módulo financeir
 
 | Acção na interface | STUDENT | FINANCE | ADMIN |
 |---|---|---|---|
-| Dívidas, histórico de pagamentos paginado, situação e avisos | Próprios | Estudante seleccionado | Estudante seleccionado |
+| Dívidas, histórico de pagamentos paginado, situação e avisos | Próprios | Campus ou estudante seleccionado | Campus ou estudante seleccionado |
 | Pesquisar estudante por nome ou matrícula | Não | Sim | Sim |
-| Registar dívida e pagamento integral | Não | Sim | Sim |
+| Registar dívida, cancelar, emitir propina e pagamento integral | Não | Sim | Sim |
 | Submeter contestação | Própria | Não | Não |
 | Consultar contestações e decisões | Próprias | Todas ou do estudante seleccionado | Todas ou do estudante seleccionado |
 | Decidir contestação pendente com justificação | Não | Sim | Sim |
-| Resumo de contagens do campus; estado/reenvio de avisos | Não | Sim | Sim |
+| Resumo com totais MZN, bloqueados e fila/reenvio de avisos | Não | Sim | Sim |
 | Engrenagem de políticas: tolerância, limite vencido e bloqueio automático | Não | Não | Sim |
 
 TEACHER, TECHNICIAN e COORDINATOR continuam sem acesso financeiro. A interface apresenta as acções autorizadas; a API mantém a verificação de perfil e propriedade, incluindo nas novas consultas de contestações.

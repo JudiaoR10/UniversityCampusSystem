@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createDeviceSchema, updateDeviceStatusSchema } from '@smart-campus/validation';
+import { createDeviceSchema, updateDeviceSchema, updateDeviceStatusSchema } from '@smart-campus/validation';
 import { authenticate, authorize } from '../../../middleware/auth.js';
 import * as deviceService from '../application/deviceService.js';
 import { success } from '../../../middleware/errorHandler.js';
@@ -26,6 +26,15 @@ devicesRouter.post('/devices', authenticate, authorize('ADMIN', 'COORDINATOR', '
     const body = createDeviceSchema.parse(req.body);
     const device = await deviceService.createDevice(body, req.user!.id, req.correlationId);
     success(res, device, 201);
+  } catch (err) {
+    next(err);
+  }
+});
+
+devicesRouter.patch('/devices/:id', authenticate, authorize('ADMIN', 'COORDINATOR', 'TECHNICIAN'), async (req, res, next) => {
+  try {
+    const body = updateDeviceSchema.parse(req.body);
+    success(res, await deviceService.updateDevice(req.params.id, body, req.user!.id, req.correlationId));
   } catch (err) {
     next(err);
   }

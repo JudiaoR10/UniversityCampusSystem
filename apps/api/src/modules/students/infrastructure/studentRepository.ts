@@ -111,15 +111,24 @@ export async function updateStudent(id: string, data: UpdateStudentData) {
   });
 }
 
+// Mantém a conta e protege todos os registos académicos que seriam apagados em cascata.
 export async function deleteStudentProfile(id: string) {
   return prisma.$transaction(async (tx) => {
     const profile = await tx.studentProfile.findFirst({
-      where: { id, enrolments: { none: {} }, subjectEnrolments: { none: {} } },
+      where: {
+        id,
+        enrolments: { none: {} },
+        subjectEnrolments: { none: {} },
+        grades: { none: {} },
+        attendance: { none: {} },
+        periodResults: { none: {} },
+        exemptions: { none: {} },
+      },
       select: { id: true, userId: true },
     });
     if (!profile) return null;
 
     await tx.studentProfile.delete({ where: { id: profile.id } });
     return profile;
-  });
+  }, { isolationLevel: 'Serializable' });
 }

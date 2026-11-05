@@ -292,18 +292,72 @@ describe('API Estudantes', () => {
     expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
-  it('bloqueia remoção quando existe Enrolment do Core (409)', async () => {
-    const coreEnrolment = await prisma.enrolment.create({
-      data: { studentId: createdStudentId, courseId, academicYear: '2098' },
-    });
+  it('preserva a inscrição cancelada e bloqueia a remoção (409)', async () => {
+    const created = await request(app)
+      .post(`${api}/students`)
+      .set(bearer(coordinatorToken))
+      .send(payload({ email: `cancelado.${tag}@test.local`, studentNumber: `CAN${suffix}` }));
+    expect(created.status).toBe(201);
+
+    const enrolment = await request(app)
+      .post(`${api}/enrolments`)
+      .set(bearer(coordinatorToken))
+      .send({ studentId: created.body.data.id, subjectId, academicYear: 2096 });
+    expect(enrolment.status).toBe(201);
+
+    const cancelled = await request(app)
+      .patch(`${api}/enrolments/${enrolment.body.data.id}/status`)
+      .set(bearer(coordinatorToken))
+      .send({ status: 'CANCELLED' });
+    expect(cancelled.status).toBe(200);
 
     const res = await request(app)
-      .delete(`${api}/students/${createdStudentId}`)
+      .delete(`${api}/students/${created.body.data.id}`)
       .set(bearer(coordinatorToken));
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('STUDENT_HAS_ENROLMENTS');
+    expect(await prisma.studentProfile.findUnique({ where: { id: created.body.data.id } })).not.toBeNull();
+    expect(await prisma.subjectEnrolment.findUnique({ where: { id: enrolment.body.data.id } })).not.toBeNull();
+  });
 
-    await prisma.enrolment.delete({ where: { id: coreEnrolment.id } });
+  it('preserva a matrícula de curso e bloqueia a remoção (409)', async () => {
+    const created = await request(app)
+      .post(`${api}/students`)
+      .set(bearer(coordinatorToken))
+      .send(payload({ email: `legado.${tag}@test.local`, studentNumber: `LEG${suffix}` }));
+    expect(created.status).toBe(201);
+    const studentId = created.body.data.id;
+
+    const coreEnrolment = await prisma.enrolment.create({
+      data: { studentId, courseId, academicYear: '2098' },
+    });
+
+    const res = await request(app)
+      .delete(`${api}/students/${studentId}`)
+      .set(bearer(coordinatorToken));
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('STUDENT_HAS_ENROLMENTS');
+    expect(await prisma.studentProfile.findUnique({ where: { id: studentId } })).not.toBeNull();
+    expect(await prisma.enrolment.findUnique({ where: { id: coreEnrolment.id } })).not.toBeNull();
+  });
+
+  it('preserva outros registos académicos mesmo sem inscrições (409)', async () => {
+    const created = await request(app)
+      .post(`${api}/students`)
+      .set(bearer(coordinatorToken))
+      .send(payload({ email: `dispensa.${tag}@test.local`, studentNumber: `DIS${suffix}` }));
+    expect(created.status).toBe(201);
+    const author = await prisma.user.findUniqueOrThrow({ where: { email: 'docente@smartcampus.demo' } });
+    const exemption = await prisma.subjectExemption.create({
+      data: { studentId: created.body.data.id, subjectId, exemptedById: author.id },
+    });
+
+    const res = await request(app)
+      .delete(`${api}/students/${created.body.data.id}`)
+      .set(bearer(coordinatorToken));
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('STUDENT_HAS_ENROLMENTS');
+    expect(await prisma.subjectExemption.findUnique({ where: { id: exemption.id } })).not.toBeNull();
   });
 
   it('coordenador remove o perfil e mantém a conta (200)', async () => {

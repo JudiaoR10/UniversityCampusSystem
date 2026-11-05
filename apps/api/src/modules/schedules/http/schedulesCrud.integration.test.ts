@@ -45,7 +45,7 @@ describe('CRUD e filtros de /schedules (módulo API HORARIO)', () => {
     const subject = await prisma.subject.findUnique({ where: { code: 'PTP3' } });
     const teacher2 = await prisma.user.findUnique({ where: { email: 'docente2@smartcampus.demo' } });
     const student = await prisma.user.findUnique({ where: { email: 'estudante@smartcampus.demo' } });
-    const room = await prisma.room.findFirst({ where: { code: 'A-101' } });
+    const room = await prisma.room.findFirst({ where: { code: 'D2-101' } });
     const department = await prisma.department.findFirst();
     if (!subject || !teacher2 || !student || !room || !department) {
       throw new Error('Seed necessário antes dos testes (npm run db:seed)');
@@ -115,7 +115,7 @@ describe('CRUD e filtros de /schedules (módulo API HORARIO)', () => {
         });
       expect(res.status).toBe(201);
       createdId = res.body.data.id;
-      expect(res.body.data.room?.code).toBe('A-101');
+      expect(res.body.data.room?.code).toBe('D2-101');
     });
 
     it('filtra por curso, docente e sala', async () => {

@@ -7,8 +7,10 @@ import {
   financialNotificationIdSchema,
   financialPageSchema,
   financialDebtQuerySchema,
+  financialNotificationQueueQuerySchema,
   retryFinancialNotificationSchema,
   createDebtSchema,
+  createDebtsFromEnrolmentsSchema,
   createPaymentSchema,
   createAnalysisRequestSchema,
   resolveAnalysisRequestSchema,
@@ -76,6 +78,12 @@ router.post('/salaries/:id/payment', authenticate, authorize('FINANCE'), async (
     success(res, await payroll.paySalary(req.user!, id, salaryPaymentSchema.parse(req.body), req.correlationId));
   } catch (error) { next(error); }
 });
+router.get('/salaries/:id/receipt', authenticate, authorize('FINANCE', 'ADMIN'), async (req, res, next) => {
+  try {
+    const { id } = financialAnalysisIdSchema.parse(req.params);
+    success(res, await payroll.getSalaryReceipt(req.user!, id));
+  } catch (error) { next(error); }
+});
 router.get('/reports/payments', authenticate, authorize('FINANCE', 'ADMIN'), async (req, res, next) => {
   try {
     const { month } = monthlyReportQuerySchema.parse(req.query);
@@ -110,6 +118,18 @@ router.get('/analysis-requests/:id', authenticate, authorize('STUDENT', 'FINANCE
   } catch (error) { next(error); }
 });
 
+router.get('/notifications', authenticate, authorize('FINANCE', 'ADMIN'), async (req, res, next) => {
+  try {
+    const result = await financialService.listNotificationQueue(financialNotificationQueueQuerySchema.parse(req.query));
+    success(res, result.data, 200, result.meta);
+  } catch (error) { next(error); }
+});
+router.post('/notifications/retry-failed', authenticate, authorize('FINANCE', 'ADMIN'), async (req, res, next) => {
+  try {
+    retryFinancialNotificationSchema.parse(req.body ?? {});
+    sendSuccess(res, await financialService.retryFailedNotifications(req.user!.id, req.correlationId));
+  } catch (error) { next(error); }
+});
 router.get(
   "/notifications/:notificationId/delivery",
   authenticate,
@@ -170,13 +190,12 @@ router.get(
   authorize("STUDENT", "FINANCE", "ADMIN"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { studentId: requestedStudentId, ...page } =
-        financialDebtQuerySchema.parse(req.query);
+      const query = financialDebtQuerySchema.parse(req.query);
 
       if (
         req.user!.role === "STUDENT" &&
-        requestedStudentId &&
-        requestedStudentId !== req.user!.id
+        query.studentId &&
+        query.studentId !== req.user!.id
       ) {
         sendError(
           res,
@@ -187,9 +206,10 @@ router.get(
         return;
       }
 
-      const studentId =
-        req.user!.role === "STUDENT" ? req.user!.id : requestedStudentId;
-      const debts = await financialService.listDebts(studentId, page);
+      const debts = await financialService.listDebts({
+        ...query,
+        studentId: req.user!.role === "STUDENT" ? req.user!.id : query.studentId,
+      });
       sendSuccess(res, debts, 200, debts.length);
     } catch (error) {
       next(error);
@@ -251,6 +271,44 @@ router.post(
   },
 );
 
+router.post(
+  "/debts/from-enrolments",
+  authenticate,
+  authorize("FINANCE", "ADMIN"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = createDebtsFromEnrolmentsSchema.parse(req.body);
+      sendSuccess(
+        res,
+        await financialService.createDebtsFromEnrolments(
+          input,
+          req.user!.id,
+          req.correlationId,
+        ),
+        201,
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/debts/:id/cancel",
+  authenticate,
+  authorize("FINANCE", "ADMIN"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(
+        res,
+        await financialService.cancelDebt(req.params.id, req.user!.id, req.correlationId),
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 // =============================================================================
 // PAYMENTS — Pagamentos
 // Exercicio 5: Transaccao ACID dentro do service
@@ -279,6 +337,20 @@ router.post(
   },
 );
 
+router.get(
+  "/payments/:id/receipt",
+  authenticate,
+  authorize("STUDENT", "FINANCE", "ADMIN"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = financialAnalysisIdSchema.parse(req.params);
+      sendSuccess(res, await financialService.getPaymentReceipt(id, req.user!));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 // =============================================================================
 // FINANCIAL STATUS — Estado Financeiro do Estudante
 // =============================================================================
@@ -288,6 +360,13 @@ router.post(
  * Consultar estado financeiro de um estudante (ponto de integracao inter-modulos).
  * STUDENT so ve o proprio; FINANCE e ADMIN podem consultar outros estudantes.
  */
+router.get('/students/blocked', authenticate, authorize('FINANCE', 'ADMIN'), async (req, res, next) => {
+  try {
+    const result = await financialService.listBlockedStudents(financialPageSchema.parse(req.query));
+    success(res, result.data, 200, result.meta);
+  } catch (error) { next(error); }
+});
+
 router.get(
   "/students/:studentId/status",
   authenticate,

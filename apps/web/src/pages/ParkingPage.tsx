@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import type { ParkingLotOverview, ParkingSpotDto, PlateReadingDto } from '@smart-campus/shared-types';
+import type { AdminSettingsDto, ParkingLotOverview, ParkingSpotDto, PlateReadingDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { PageIntro } from '../components/PageIntro';
+import { PageBanner } from '../components/ui';
 
 const statusStyle: Record<ParkingSpotDto['status'], string> = {
   FREE: 'bg-emerald-500 border-emerald-600 text-white',
@@ -26,7 +27,10 @@ export function ParkingPage() {
   const [loading, setLoading] = useState(true);
   const [plate, setPlate] = useState('AIT 954 MC');
   const [submitting, setSubmitting] = useState(false);
+  const [settings, setSettings] = useState<AdminSettingsDto | null>(null);
   const canManage = user && ['TECHNICIAN', 'COORDINATOR', 'ADMIN'].includes(user.role);
+  const isAdmin = user?.role === 'ADMIN';
+  const labMode = Boolean(isAdmin && settings?.parkingLabMode);
 
   const lot = lots[0] ?? null;
 
@@ -34,6 +38,14 @@ export function ParkingPage() {
     const [overview, plateRes] = await Promise.all([api.parkingOverview(), api.parkingReadings()]);
     setLots(overview.data);
     setReadings(plateRes.data);
+    if (isAdmin) {
+      try {
+        const settingsRes = await api.adminSettings();
+        setSettings(settingsRes.data);
+      } catch {
+        setSettings(null);
+      }
+    }
     if (selectedSpot) {
       const refreshed = overview.data[0]?.spots.find((s) => s.id === selectedSpot.id) ?? null;
       setSelectedSpot(refreshed);
@@ -61,9 +73,12 @@ export function ParkingPage() {
         lotId: lot.id,
         plate,
         direction: 'IN',
-        sensorCode: 'CAM-LPR-B-01',
-        confidence: 0.93,
-        photoUrl: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=800&q=80',
+        sensorCode: labMode ? 'CAM-LPR-B-01' : 'CAM-LPR-LIVE',
+        confidence: labMode ? 0.93 : 0.98,
+        photoUrl: labMode
+          ? 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=800&q=80'
+          : null,
+        isDemo: labMode,
       });
       await load();
     } catch (err) {
@@ -82,9 +97,12 @@ export function ParkingPage() {
         lotId: lot.id,
         plate: selectedSpot.plate,
         direction: 'OUT',
-        sensorCode: 'CAM-LPR-B-02',
-        confidence: 0.95,
-        photoUrl: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
+        sensorCode: labMode ? 'CAM-LPR-B-02' : 'CAM-LPR-LIVE',
+        confidence: labMode ? 0.95 : 0.98,
+        photoUrl: labMode
+          ? 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80'
+          : null,
+        isDemo: labMode,
       });
       await load();
     } catch (err) {
@@ -100,10 +118,11 @@ export function ParkingPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-campus-brass/25 bg-gradient-to-r from-campus-teal/10 via-white/80 to-campus-brass/10 px-4 py-3 text-sm text-campus-ink">
-        Controlo de parque com sensores de vaga e câmaras LPR. Fotografias e algumas matrículas são{' '}
-        <strong>DEMO</strong> para a PTP III.
-      </div>
+      <PageBanner>
+        {labMode
+          ? 'Modo laboratório activo: as entradas LPR ficam marcadas como DEMO.'
+          : 'Entradas e saídas LPR são registadas como telemetria real. O modo laboratório só está disponível para administradores.'}
+      </PageBanner>
 
       <PageIntro
         eyebrow="Mobilidade no campus"
@@ -115,7 +134,7 @@ export function ParkingPage() {
         }
       />
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="alert-error">{error}</p> : null}
 
       {lot ? (
         <>
@@ -189,9 +208,9 @@ export function ParkingPage() {
                     <p className="mt-3 font-mono text-lg font-semibold tracking-wide text-campus-ink">
                       {selectedSpot.plate ?? 'Sem matrícula'}
                     </p>
-                    {canManage && selectedSpot.status === 'OCCUPIED' && selectedSpot.plate ? (
+                    {labMode && selectedSpot.status === 'OCCUPIED' && selectedSpot.plate ? (
                       <button type="button" disabled={submitting} onClick={() => void simulateExit()} className="btn-secondary mt-4 w-full">
-                        Simular saída LPR
+                        {labMode ? 'Simular saída LPR' : 'Registar saída LPR'}
                       </button>
                     ) : null}
                   </>
@@ -200,10 +219,24 @@ export function ParkingPage() {
                 )}
               </div>
 
-              {canManage ? (
+              {labMode ? (
                 <form onSubmit={simulateEntry} className="surface space-y-3 p-4 sm:p-5">
-                  <p className="eyebrow">Simular sensor / câmara</p>
+                  <p className="eyebrow">{labMode ? 'Laboratório LPR' : 'Câmara LPR'}</p>
                   <h3 className="font-display text-lg font-semibold text-campus-ink">Entrada de viatura</h3>
+                  {isAdmin ? (
+                    <label className="flex items-center gap-2 text-sm text-campus-deep/80">
+                      <input
+                        type="checkbox"
+                        checked={labMode}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          setSettings((s) => (s ? { ...s, parkingLabMode: next } : s));
+                          void api.updateAdminSettings({ parkingLabMode: next }).then((res) => setSettings(res.data));
+                        }}
+                      />
+                      Modo laboratório (DEMO)
+                    </label>
+                  ) : null}
                   <label className="block text-sm font-medium text-campus-ink">
                     Matrícula (MZ)
                     <input
@@ -219,7 +252,7 @@ export function ParkingPage() {
                     (começam por A) ou <span className="font-mono">AAA 12 34</span>
                   </p>
                   <button type="submit" disabled={submitting} className="btn-primary w-full">
-                    {submitting ? 'A processar…' : 'Registar entrada (DEMO)'}
+                    {submitting ? 'A processar…' : labMode ? 'Registar entrada (DEMO)' : 'Registar entrada'}
                   </button>
                 </form>
               ) : null}
@@ -232,9 +265,15 @@ export function ParkingPage() {
                 <h2 className="font-display text-xl font-semibold text-campus-ink">Leituras de matrícula</h2>
                 <p className="text-sm text-campus-deep/70">Câmaras LPR · confiança · foto capturada</p>
               </div>
-              <span className="rounded-md bg-campus-accent/10 px-2 py-1 text-xs font-semibold text-campus-accent">
-                Fotos DEMO
-              </span>
+              {readings.some((r) => r.isDemo) ? (
+                <span className="rounded-md bg-campus-accent/10 px-2 py-1 text-xs font-semibold text-campus-accent">
+                  Inclui DEMO
+                </span>
+              ) : (
+                <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                  Leituras reais
+                </span>
+              )}
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

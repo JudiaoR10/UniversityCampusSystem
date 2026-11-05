@@ -54,7 +54,7 @@ describe('Módulo Assiduidade — /attendance', () => {
     const studentB = studentBUser
       ? await prisma.studentProfile.findUnique({ where: { userId: studentBUser.id } })
       : null;
-    const room = await prisma.room.findFirst({ where: { code: 'A-101' } });
+    const room = await prisma.room.findFirst({ where: { code: 'D2-101' } });
     const department = await prisma.department.findFirst();
     if (!subject || !teacher2 || !studentA || !studentB || !room || !department) {
       throw new Error('Seed necessário antes dos testes (npm run db:seed)');
@@ -163,7 +163,7 @@ describe('Módulo Assiduidade — /attendance', () => {
       expect(owner.status).toBe(200);
       expect(owner.body.data.schedule.course.id).toBe(courseId);
       expect(owner.body.data.entries.length).toBeGreaterThanOrEqual(2);
-      expect(owner.body.data.entries.every((e: { status: string | null }) => e.status === null)).toBe(true);
+      expect(owner.body.data.entries.every((e: { status: string | null; marked?: boolean }) => e.status === 'ABSENT' && e.marked === false)).toBe(true);
       expect(owner.body.data.entries.some((e: { studentNumber: string }) => e.studentNumber === 'EST-2026-001')).toBe(true);
       expect(owner.body.data.entries.some((e: { studentNumber: string }) => e.studentNumber === 'EST-2026-002')).toBe(true);
 
@@ -243,7 +243,7 @@ describe('Módulo Assiduidade — /attendance', () => {
         .set('Authorization', `Bearer ${coordinatorToken}`)
         .send({ records: [{ studentId: studentAProfileId, status: 'PRESENT' }] });
       expect(res.status).toBe(409);
-      expect(res.body.code).toBe('STUDENT_COURSE_MISMATCH');
+      expect(res.body.code).toBe('STUDENT_NOT_ENROLLED');
     });
 
     it('docente titular registra presenças e a pauta reflecte o estado', async () => {

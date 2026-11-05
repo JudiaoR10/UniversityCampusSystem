@@ -23,6 +23,13 @@ export const createUserSchema = z.object({
   role: z.enum(['STUDENT', 'TEACHER', 'TECHNICIAN', 'COORDINATOR', 'ADMIN', 'FINANCE']),
 });
 
+export const updateUserSchema = z
+  .object({
+    fullName: z.string().min(2).max(120).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: 'Pelo menos um campo deve ser fornecido' });
+
 export const createRoomSchema = z.object({
   code: z.string().min(2).max(32),
   name: z.string().min(2).max(120),
@@ -37,6 +44,8 @@ export const createBuildingSchema = z.object({
   name: z.string().min(2).max(120),
   description: z.string().max(500).optional().nullable(),
   floors: z.number().int().min(0).max(200).default(1),
+  mapX: z.number().min(0).max(100).optional().nullable(),
+  mapY: z.number().min(0).max(100).optional().nullable(),
 });
 
 export const createLaboratorySchema = z.object({
@@ -83,7 +92,23 @@ export const createPlateReadingSchema = z.object({
   confidence: z.number().min(0).max(1).default(0.9),
   photoUrl: z.string().url().optional().nullable(),
   spotCode: z.string().min(2).max(16).optional().nullable(),
+  isDemo: z.boolean().optional().default(true),
 });
+
+export const ingestPlateReadingSchema = z
+  .object({
+    lotId: z.string().min(1).optional(),
+    lotCode: z.string().min(2).max(32).optional(),
+    plate: mozambiquePlateSchema,
+    direction: z.enum(['IN', 'OUT']),
+    sensorCode: z.string().min(2).max(64).optional(),
+    confidence: z.number().min(0).max(1).default(0.9),
+    photoUrl: z.string().url().optional().nullable(),
+    spotCode: z.string().min(2).max(16).optional().nullable(),
+  })
+  .refine((data) => Boolean(data.lotId || data.lotCode), {
+    message: 'Indique lotId ou lotCode',
+  });
 
 export const updateParkingSpotSchema = z.object({
   status: z.enum(['FREE', 'OCCUPIED', 'RESERVED', 'OUT_OF_SERVICE']),
@@ -113,6 +138,52 @@ export const updateDeviceSchema = z
 
 export const updateDeviceStatusSchema = z.object({
   status: z.enum(['ONLINE', 'OFFLINE', 'MAINTENANCE', 'UNKNOWN']),
+});
+
+export const createSensorSchema = z.object({
+  code: z.string().min(2).max(32),
+  name: z.string().min(2).max(120),
+  metric: z.string().min(2).max(40),
+  unit: z.string().max(16).optional().nullable(),
+  deviceId: z.string().min(1),
+  warningMin: z.number().optional().nullable(),
+  warningMax: z.number().optional().nullable(),
+  criticalMin: z.number().optional().nullable(),
+  criticalMax: z.number().optional().nullable(),
+});
+
+export const updateSensorSchema = createSensorSchema
+  .omit({ deviceId: true, code: true })
+  .partial()
+  .extend({
+    code: z.string().min(2).max(32).optional(),
+    deviceId: z.string().min(1).optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, {
+    message: 'Envie pelo menos um campo para actualizar',
+  });
+
+export const createMaintenanceSchema = z.object({
+  incidentId: z.string().min(1),
+  notes: z.string().min(3).max(2000),
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'DONE']).optional().default('OPEN'),
+});
+
+export const updateMaintenanceSchema = z
+  .object({
+    notes: z.string().min(3).max(2000).optional(),
+    status: z.enum(['OPEN', 'IN_PROGRESS', 'DONE']).optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, {
+    message: 'Envie pelo menos um campo para actualizar',
+  });
+
+export const updateAdminSettingsSchema = z.object({
+  parkingLabMode: z.boolean().optional(),
+  tempWarningMax: z.number().min(0).max(80).optional(),
+  co2WarningMax: z.number().min(0).max(5000).optional(),
+  co2CriticalMax: z.number().min(0).max(10000).optional(),
+  readingRetentionDays: z.number().int().min(1).max(3650).optional(),
 });
 
 const assessmentTypeSchema = z.enum(['TEST','EXAM','ASSIGNMENT','PRACTICAL','ORAL','OTHER','RECURRENCE']);
@@ -146,10 +217,12 @@ export const setSubjectRulesSchema = z
   .object({
     requiredTestCount: z.number().int().min(1).max(20).nullable().optional(),
     recurrenceMinAdmission: z.number().min(0).max(20).nullable().optional(),
+    exemptionMinGrade: z.number().min(0).max(20).nullable().optional(),
   })
-  .refine((v) => v.requiredTestCount !== undefined || v.recurrenceMinAdmission !== undefined, {
-    message: 'Indique requiredTestCount e/ou recurrenceMinAdmission',
-  });
+  .refine(
+    (v) => v.requiredTestCount !== undefined || v.recurrenceMinAdmission !== undefined || v.exemptionMinGrade !== undefined,
+    { message: 'Indique requiredTestCount, recurrenceMinAdmission e/ou exemptionMinGrade' },
+  );
 
 export const publishResultsSchema = z.object({
   published: z.boolean(),
@@ -227,6 +300,8 @@ export const markAttendanceSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type IngestPlateReadingInput = z.infer<typeof ingestPlateReadingSchema>;
 export type CreateRoomInput = z.infer<typeof createRoomSchema>;
 export type CreateBuildingInput = z.infer<typeof createBuildingSchema>;
 export type CreateLaboratoryInput = z.infer<typeof createLaboratorySchema>;
@@ -245,6 +320,11 @@ export type CreateResultInput = z.infer<typeof createResultSchema>;
 export type CreateScheduleInput = z.infer<typeof createScheduleSchema>;
 export type UpdateScheduleInput = z.infer<typeof updateScheduleSchema>;
 export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;
+export type CreateSensorInput = z.infer<typeof createSensorSchema>;
+export type UpdateSensorInput = z.infer<typeof updateSensorSchema>;
+export type CreateMaintenanceInput = z.infer<typeof createMaintenanceSchema>;
+export type UpdateMaintenanceInput = z.infer<typeof updateMaintenanceSchema>;
+export type UpdateAdminSettingsInput = z.infer<typeof updateAdminSettingsSchema>;
 
 const financialAmountSchema = z
   .number()
@@ -253,16 +333,28 @@ const financialAmountSchema = z
   .refine((value) => value === Math.round(value * 100) / 100, 'Use no maximo duas casas decimais');
 
 // Schema de criacao de Divida (usado em POST /api/v1/financial/debts)
+export const debtOriginSchema = z.enum(['TUITION', 'FEE', 'FINE', 'OTHER'], {
+  errorMap: () => ({ message: 'Origem invalida: use TUITION, FEE, FINE ou OTHER' }),
+});
+
 export const createDebtSchema = z.object({
   studentId: z.string().min(1, 'O ID do estudante e obrigatorio'),
   title: z.string().trim().min(3, 'Titulo deve ter pelo menos 3 caracteres').max(120),
   description: z.string().trim().max(500).optional(),
   amount: financialAmountSchema,
-  origin: z.string().trim().min(2, 'Origem e obrigatoria').max(60),
+  origin: debtOriginSchema.default('TUITION'),
   dueDate: z
     .string()
     .datetime({ message: 'Data de vencimento invalida (formato ISO 8601 obrigatorio)' }),
 });
+
+export const createDebtsFromEnrolmentsSchema = z.object({
+  courseId: z.string().trim().min(1).max(200),
+  academicYear: z.string().trim().min(4).max(20),
+  amount: financialAmountSchema,
+  dueDate: z.string().datetime({ message: 'Data de vencimento invalida (formato ISO 8601 obrigatorio)' }),
+  title: z.string().trim().min(3).max(120).optional(),
+}).strict();
 
 // Schema de registo de Pagamento (usado em POST /api/v1/financial/payments)
 export const createPaymentSchema = z.object({
@@ -308,6 +400,9 @@ export const updateFinancialPolicySchema = z.object({
 
 // Inferred types — modulo financeiro
 export type CreateDebtInput = z.infer<typeof createDebtSchema>;
+export type CreateDebtsFromEnrolmentsInput = z.infer<typeof createDebtsFromEnrolmentsSchema>;
+export type FinancialDebtQuery = z.infer<typeof financialDebtQuerySchema>;
+export type FinancialNotificationQueueQuery = z.infer<typeof financialNotificationQueueQuerySchema>;
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export type CreateAnalysisRequestInput = z.infer<typeof createAnalysisRequestSchema>;
 export type ResolveAnalysisRequestInput = z.infer<typeof resolveAnalysisRequestSchema>;
@@ -339,10 +434,16 @@ export const paginationQuerySchema = z.object({
 export const financialPageSchema = paginationQuerySchema;
 export const financialDebtQuerySchema = financialPageSchema.extend({
   studentId: z.string().trim().min(1).max(200).optional(),
+  status: z.enum(['PENDENTE', 'VENCIDA', 'REGULARIZADA', 'CANCELADA']).optional(),
+  origin: debtOriginSchema.optional(),
+  dueBefore: z.string().datetime().optional(),
 });
 
 const financialReadPageSchema = paginationQuerySchema.extend({
   limit: paginationQuerySchema.shape.limit.default('20'),
+});
+export const financialNotificationQueueQuerySchema = financialReadPageSchema.extend({
+  deliveryStatus: z.enum(['PENDING', 'FAILED', 'PROCESSING', 'SENT', 'LOCAL_ONLY']).optional(),
 });
 export const financialStudentQuerySchema = financialReadPageSchema.extend({
   q: z.string().trim().min(2).max(100).optional(),
@@ -424,15 +525,24 @@ const accountPasswordSchema = z
   .max(128);
 const accountNameSchema = z.string().trim().min(2).max(120);
 
-export const createStudentProfileSchema = z.object({
-  email: accountEmailSchema,
-  password: accountPasswordSchema,
-  fullName: accountNameSchema,
+const studentAcademicFields = {
   studentNumber: z.string().trim().min(2).max(30),
   courseId: idSchema,
   yearOfStudy: z.number().int().min(1).max(10).optional(),
   phone: phoneSchema.optional(),
-});
+};
+
+export const createStudentProfileSchema = z.union([
+  z.object({ userId: idSchema, ...studentAcademicFields }).strict(),
+  z
+    .object({
+      email: accountEmailSchema,
+      password: accountPasswordSchema,
+      fullName: accountNameSchema,
+      ...studentAcademicFields,
+    })
+    .strict(),
+]);
 
 export const updateStudentProfileSchema = z
   .object({
@@ -457,15 +567,24 @@ export type ListStudentsQuery = z.infer<typeof listStudentsQuerySchema>;
 
 export const teacherProfileStatusEnum = z.enum(['ACTIVE', 'ON_LEAVE', 'INACTIVE']);
 
-export const createTeacherProfileSchema = z.object({
-  email: accountEmailSchema,
-  password: accountPasswordSchema,
-  fullName: accountNameSchema,
+const teacherAcademicFields = {
   employeeCode: z.string().trim().min(2).max(30),
   departmentId: idSchema,
   title: z.string().trim().min(2).max(80).optional(),
   phone: phoneSchema.optional(),
-});
+};
+
+export const createTeacherProfileSchema = z.union([
+  z.object({ userId: idSchema, ...teacherAcademicFields }).strict(),
+  z
+    .object({
+      email: accountEmailSchema,
+      password: accountPasswordSchema,
+      fullName: accountNameSchema,
+      ...teacherAcademicFields,
+    })
+    .strict(),
+]);
 
 export const updateTeacherProfileSchema = z
   .object({

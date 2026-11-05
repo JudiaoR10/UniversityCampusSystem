@@ -50,6 +50,16 @@ describe('API Estudantes', () => {
   });
 
   afterAll(async () => {
+    const users = await prisma.user.findMany({
+      where: { email: { contains: tag } },
+      select: { id: true },
+    });
+    const studentIds = users.map((user) => user.id);
+    await prisma.financialNotification.deleteMany({ where: { studentId: { in: studentIds } } });
+    await prisma.analysisRequest.deleteMany({ where: { studentId: { in: studentIds } } });
+    await prisma.payment.deleteMany({ where: { studentId: { in: studentIds } } });
+    await prisma.debt.deleteMany({ where: { studentId: { in: studentIds } } });
+    await prisma.financialStatus.deleteMany({ where: { studentId: { in: studentIds } } });
     await prisma.user.deleteMany({ where: { email: { contains: tag } } });
   });
 
@@ -328,7 +338,7 @@ describe('API Estudantes', () => {
     expect(await prisma.enrolment.findUnique({ where: { id: coreEnrolment.id } })).toBeNull();
   });
 
-  it('coordenador remove estudante e conta de acesso (200)', async () => {
+  it('coordenador remove o perfil e mantém a conta (200)', async () => {
     const res = await request(app)
       .delete(`${api}/students/${createdStudentId}`)
       .set(bearer(coordinatorToken));
@@ -336,29 +346,12 @@ describe('API Estudantes', () => {
     expect(res.body.data).toEqual({ id: createdStudentId, deleted: true });
 
     expect(await prisma.studentProfile.findUnique({ where: { id: createdStudentId } })).toBeNull();
-    expect(await prisma.user.findUnique({ where: { id: createdStudentUserId } })).toBeNull();
+    expect(await prisma.user.findUnique({ where: { id: createdStudentUserId } })).not.toBeNull();
 
     const login = await request(app)
       .post(`${api}/auth/login`)
       .send({ email: studentEmail, password: PASSWORD });
-    expect(login.status).toBe(401);
-    expect(login.body.code).toBe('INVALID_CREDENTIALS');
-
-    const audit = await prisma.auditEvent.findFirst({
-      where: { action: 'USER_DELETE', resourceId: createdStudentUserId },
-    });
-    expect(audit).not.toBeNull();
-  });
-
-  it('permite recriar o estudante com o mesmo email e número após a remoção', async () => {
-    const res = await request(app)
-      .post(`${api}/students`)
-      .set(bearer(coordinatorToken))
-      .send(payload({ email: studentEmail, fullName: 'Aluno Teste' }));
-
-    expect(res.status).toBe(201);
-    expect(res.body.data.studentNumber).toBe(`TS${suffix}`);
-    expect(res.body.data.user.fullName).toBe('Aluno Teste');
+    expect(login.status).toBe(200);
   });
 
   it('admin consulta by-user de conta sem perfil (404)', async () => {
@@ -367,5 +360,20 @@ describe('API Estudantes', () => {
       .set(bearer(adminToken));
     expect(res.status).toBe(404);
     expect(res.body.code).toBe('STUDENT_NOT_FOUND');
+  });
+
+  it('permite recriar o perfil na conta existente via userId', async () => {
+    const res = await request(app)
+      .post(`${api}/students`)
+      .set(bearer(coordinatorToken))
+      .send({
+        userId: createdStudentUserId,
+        studentNumber: `TS${suffix}`,
+        courseId,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.studentNumber).toBe(`TS${suffix}`);
+    expect(res.body.data.userId).toBe(createdStudentUserId);
   });
 });

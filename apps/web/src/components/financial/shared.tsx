@@ -25,8 +25,8 @@ export function useFinancialLoad<T>(load: () => Promise<T>) {
 
 export function LoadState({ loading, error, reload }: { loading: boolean; error: string; reload: () => void }) {
   return <>
-    {loading && <p role="status">A carregar...</p>}
-    {error && <div role="alert" className="space-y-2 text-red-700"><p>{error}</p><button className="btn-secondary" onClick={reload}>Tentar novamente</button></div>}
+    {loading && <p role="status" className="text-sm text-campus-deep/70">A carregar...</p>}
+    {error && <div role="alert" className="space-y-2"><p className="alert-error">{error}</p><button className="btn-secondary" onClick={reload}>Tentar novamente</button></div>}
   </>;
 }
 

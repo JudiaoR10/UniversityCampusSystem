@@ -92,6 +92,11 @@ export async function updateIncidentStatus(
         incidentId: incident.id,
         performedBy: actor.id,
         notes: input.notes,
+        status: ['RESOLVED', 'CLOSED'].includes(input.status)
+          ? 'DONE'
+          : input.status === 'IN_PROGRESS'
+            ? 'IN_PROGRESS'
+            : 'OPEN',
       },
     });
   }

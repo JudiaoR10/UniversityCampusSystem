@@ -10,6 +10,7 @@ import { audit } from '../../audit/application/auditService.js';
 import { assertActiveForEnrolment } from '../../students/domain/studentProfile.js';
 import { assertCanTransition } from '../domain/enrolment.js';
 import * as enrolmentRepository from '../infrastructure/enrolmentRepository.js';
+import { assertUserFinanciallyClear } from '../../financial/application/financialService.js';
 
 type AuditContext = {
   actorId: string;
@@ -100,6 +101,7 @@ export async function create(input: CreateEnrolmentInput, requester: Requester, 
   if (!subject) throw notFound('SUBJECT_NOT_FOUND', 'Disciplina não encontrada');
 
   assertActiveForEnrolment(student.status);
+  await assertUserFinanciallyClear(student.userId);
 
   if (!student.courseId) {
     throw conflict(
@@ -169,6 +171,11 @@ export async function updateStatus(
   if (!existing) throw notFound('ENROLMENT_NOT_FOUND', 'Inscrição não encontrada');
 
   assertCanTransition(existing.status, input.status);
+
+  if (input.status === 'ACTIVE') {
+    const student = await enrolmentRepository.findStudentById(existing.studentId);
+    if (student) await assertUserFinanciallyClear(student.userId);
+  }
 
   const row = await enrolmentRepository.updateEnrolmentStatus(id, input.status);
 

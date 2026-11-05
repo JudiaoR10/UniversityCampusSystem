@@ -154,7 +154,7 @@ async function main() {
         academicYear: 2026,
       },
     },
-    update: {},
+    update: { status: 'ACTIVE' },
     create: {
       studentId: studentProfile.id,
       subjectId: subject.id,
@@ -176,17 +176,36 @@ async function main() {
   const studentA = await prisma.studentProfile.findUnique({ where: { userId: studentAId } });
   const studentB = await prisma.studentProfile.findUnique({ where: { userId: studentBId } });
 
+  if (studentB) {
+    await prisma.subjectEnrolment.upsert({
+      where: {
+        studentId_subjectId_academicYear: {
+          studentId: studentB.id,
+          subjectId: subject.id,
+          academicYear: 2026,
+        },
+      },
+      update: { status: 'ACTIVE' },
+      create: {
+        studentId: studentB.id,
+        subjectId: subject.id,
+        academicYear: 2026,
+        status: 'ACTIVE',
+      },
+    });
+  }
+
   if (studentA) {
     await prisma.enrolment.upsert({
       where: { studentId_courseId_academicYear: { studentId: studentA.id, courseId: course.id, academicYear: '2026' } },
-      update: {},
+      update: { status: 'ACTIVE' },
       create: { studentId: studentA.id, courseId: course.id, academicYear: '2026', status: 'ACTIVE' },
     });
   }
   if (studentB) {
     await prisma.enrolment.upsert({
       where: { studentId_courseId_academicYear: { studentId: studentB.id, courseId: course.id, academicYear: '2026' } },
-      update: {},
+      update: { status: 'ACTIVE' },
       create: { studentId: studentB.id, courseId: course.id, academicYear: '2026', status: 'ACTIVE' },
     });
   }
@@ -213,119 +232,166 @@ async function main() {
     }
   }
 
-  const buildingA = await prisma.building.upsert({
-    where: { code: 'A' },
-    update: {},
-    create: { code: 'A', name: 'Edifício A — Ciências', floors: 3, description: 'Edifício principal de demonstração' },
+  const buildingD2 = await prisma.building.upsert({
+    where: { code: 'D2' },
+    update: { name: 'Edifício D2 - UJAC', description: 'Edifício principal da UJAC', floors: 2, mapX: 48, mapY: 46 },
+    create: { code: 'D2', name: 'Edifício D2 - UJAC', floors: 2, description: 'Edifício principal da UJAC', mapX: 48, mapY: 46 },
   });
 
-  const buildingB = await prisma.building.upsert({
-    where: { code: 'B' },
-    update: {},
-    create: { code: 'B', name: 'Edifício B — Laboratórios', floors: 2 },
-  });
+  // Piso 1
+  await prisma.room.upsert({ where: { code: 'D2-101' }, update: {}, create: { code: 'D2-101', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-102' }, update: {}, create: { code: 'D2-102', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-103' }, update: {}, create: { code: 'D2-103', name: 'Sala dos Professores', capacity: 15, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-104' }, update: {}, create: { code: 'D2-104', name: 'Gabinete de Apoio ao Estudante', capacity: 12, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-105' }, update: {}, create: { code: 'D2-105', name: 'Laboratório', capacity: 25, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-106' }, update: {}, create: { code: 'D2-106', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-107' }, update: {}, create: { code: 'D2-107', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-108' }, update: {}, create: { code: 'D2-108', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-109' }, update: {}, create: { code: 'D2-109', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-110' }, update: {}, create: { code: 'D2-110', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-111' }, update: {}, create: { code: 'D2-111', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-112' }, update: {}, create: { code: 'D2-112', name: 'Sala de Aula', capacity: 40, floor: 1, status: 'AVAILABLE', buildingId: buildingD2.id } });
 
-  const roomA101 = await prisma.room.upsert({
-    where: { code: 'A-101' },
-    update: {},
-    create: {
-      code: 'A-101',
-      name: 'Sala de Aula 101',
-      capacity: 40,
-      floor: 1,
-      status: 'AVAILABLE',
-      buildingId: buildingA.id,
-    },
-  });
+  // Piso 2
+  await prisma.room.upsert({ where: { code: 'D2-201' }, update: {}, create: { code: 'D2-201', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-202' }, update: {}, create: { code: 'D2-202', name: 'Sala de Coordenação dos Cursos (ISCEG, ISET, FACISH)', capacity: 15, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-203' }, update: {}, create: { code: 'D2-203', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-204' }, update: {}, create: { code: 'D2-204', name: 'Laboratório de Informática', capacity: 25, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-205' }, update: {}, create: { code: 'D2-205', name: 'Laboratório', capacity: 25, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-206' }, update: {}, create: { code: 'D2-206', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-207' }, update: {}, create: { code: 'D2-207', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-207A' }, update: {}, create: { code: 'D2-207A', name: 'Sala de Aula', capacity: 30, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-208' }, update: {}, create: { code: 'D2-208', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-209' }, update: {}, create: { code: 'D2-209', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-210' }, update: {}, create: { code: 'D2-210', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-211' }, update: {}, create: { code: 'D2-211', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-212' }, update: {}, create: { code: 'D2-212', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
+  await prisma.room.upsert({ where: { code: 'D2-213' }, update: {}, create: { code: 'D2-213', name: 'Sala de Aula', capacity: 40, floor: 2, status: 'AVAILABLE', buildingId: buildingD2.id } });
 
-  await prisma.room.upsert({
-    where: { code: 'A-201' },
-    update: {},
-    create: {
-      code: 'A-201',
-      name: 'Sala de Aula 201',
-      capacity: 30,
-      floor: 2,
-      status: 'AVAILABLE',
-      buildingId: buildingA.id,
-    },
-  });
-
-  const labRoom = await prisma.room.upsert({
-    where: { code: 'B-L01' },
-    update: {},
-    create: {
-      code: 'B-L01',
-      name: 'Laboratório IoT',
-      capacity: 20,
-      floor: 1,
-      status: 'AVAILABLE',
-      buildingId: buildingB.id,
-    },
-  });
-
-  await prisma.laboratory.upsert({
-    where: { code: 'LAB-IOT' },
-    update: {},
-    create: {
-      code: 'LAB-IOT',
-      name: 'Laboratório de IoT',
-      description: 'Espaço preparado para integração MQTT',
-      buildingId: buildingB.id,
-    },
-  });
-
-  const projector = await prisma.equipment.upsert({
-    where: { code: 'EQ-PROJ-01' },
-    update: {},
-    create: {
-      code: 'EQ-PROJ-01',
-      name: 'Projector Epson',
-      description: 'Projector da sala A-101',
-      roomId: roomA101.id,
-    },
-  });
-
-  const existingIncident = await prisma.incident.findFirst({
-    where: { title: 'Projector sem imagem' },
-  });
-  if (!existingIncident) {
-    await prisma.incident.create({
-      data: {
-        title: 'Projector sem imagem',
-        description: 'O projector da sala A-101 não liga. Dados fictícios de demonstração.',
-        status: 'OPEN',
-        priority: 'MEDIUM',
-        roomId: roomA101.id,
-        equipmentId: projector.id,
-        reporterId: studentAId,
-      },
-    });
+  const roomD2101 = await prisma.room.findUnique({ where: { code: 'D2-101' } });
+  if (!roomD2101) {
+    throw new Error('D2-101 não encontrado após criação das salas do edifício D2');
   }
 
   const device = await prisma.device.upsert({
     where: { code: 'ESP32-A101-01' },
-    update: {},
+    update: {
+      name: 'Sensor ambiental D2-101',
+      roomId: roomD2101.id,
+      mqttTopic: 'campus/d2/d2-101/env',
+    },
     create: {
       code: 'ESP32-A101-01',
-      name: 'Sensor ambiental A-101',
+      name: 'Sensor ambiental D2-101',
       type: 'ESP32',
       status: 'ONLINE',
-      roomId: roomA101.id,
-      mqttTopic: 'campus/building-a/room-a101/env',
+      roomId: roomD2101.id,
+      mqttTopic: 'campus/d2/d2-101/env',
+    },
+  });
+
+  await prisma.device.upsert({
+    where: { code: 'CAM-LPR-D2-01' },
+    update: { ingestToken: 'dev-lpr-cam-01', name: 'Câmara LPR D2' },
+    create: {
+      code: 'CAM-LPR-D2-01',
+      name: 'Câmara LPR D2',
+      type: 'LPR_CAMERA',
+      status: 'ONLINE',
+      ingestToken: 'dev-lpr-cam-01',
     },
   });
 
   const tempSensor = await prisma.sensor.upsert({
     where: { code: 'TEMP-A101' },
-    update: {},
+    update: { warningMin: 18, warningMax: 27, criticalMax: 32 },
     create: {
       code: 'TEMP-A101',
-      name: 'Temperatura A-101',
+      name: 'Temperatura D2-101',
       metric: 'temperature',
       unit: '°C',
       deviceId: device.id,
+      warningMin: 18,
+      warningMax: 27,
+      criticalMax: 32,
     },
+  });
+
+  await prisma.sensor.upsert({
+    where: { code: 'HUM-A101' },
+    update: { warningMin: 30, warningMax: 65, deviceId: device.id },
+    create: {
+      code: 'HUM-A101',
+      name: 'Humidade D2-101',
+      metric: 'humidity',
+      unit: '%',
+      deviceId: device.id,
+      warningMin: 30,
+      warningMax: 65,
+    },
+  });
+
+  await prisma.sensor.upsert({
+    where: { code: 'CO2-A101' },
+    update: { warningMax: 800, criticalMax: 1000, deviceId: device.id },
+    create: {
+      code: 'CO2-A101',
+      name: 'CO₂ D2-101',
+      metric: 'co2',
+      unit: 'ppm',
+      deviceId: device.id,
+      warningMax: 800,
+      criticalMax: 1000,
+    },
+  });
+
+  await prisma.sensor.upsert({
+    where: { code: 'OCC-D2101' },
+    update: { deviceId: device.id },
+    create: {
+      code: 'OCC-D2101',
+      name: 'Ocupação D2-101',
+      metric: 'occupancy',
+      unit: 'pessoas',
+      deviceId: device.id,
+    },
+  });
+  await prisma.sensor.upsert({
+    where: { code: 'PPL-D2101' },
+    update: { deviceId: device.id },
+    create: {
+      code: 'PPL-D2101',
+      name: 'Pessoas D2-101',
+      metric: 'people',
+      unit: 'pessoas',
+      deviceId: device.id,
+    },
+  });
+
+  await prisma.systemSetting.upsert({
+    where: { key: 'parkingLabMode' },
+    update: {},
+    create: { key: 'parkingLabMode', value: 'false' },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'tempWarningMax' },
+    update: {},
+    create: { key: 'tempWarningMax', value: '27' },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'co2WarningMax' },
+    update: {},
+    create: { key: 'co2WarningMax', value: '800' },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'co2CriticalMax' },
+    update: {},
+    create: { key: 'co2CriticalMax', value: '1000' },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'readingRetentionDays' },
+    update: {},
+    create: { key: 'readingRetentionDays', value: '30' },
   });
 
   const readingCount = await prisma.reading.count({ where: { sensorId: tempSensor.id } });
@@ -374,10 +440,8 @@ async function main() {
     },
   });
 
-  // Recria vagas/leituras para garantir matrículas moçambicanas de demonstração
-  await prisma.plateReading.deleteMany({ where: { lotId: lot.id } });
-  await prisma.parkingSpot.deleteMany({ where: { lotId: lot.id } });
-  {
+  const existingSpots = await prisma.parkingSpot.count({ where: { lotId: lot.id } });
+  if (existingSpots === 0) {
     const rows = ['A', 'B', 'C', 'D'];
     const occupiedPlates = [
       'AIT 954 MC',
@@ -406,7 +470,8 @@ async function main() {
     await prisma.parkingSpot.createMany({ data: spots });
   }
 
-  {
+  const existingReadings = await prisma.plateReading.count({ where: { lotId: lot.id } });
+  if (existingReadings === 0) {
     const occupied = await prisma.parkingSpot.findMany({
       where: { lotId: lot.id, status: 'OCCUPIED' },
       take: 5,
@@ -448,7 +513,61 @@ async function main() {
     });
   }
 
+  const teacherProfile = await prisma.teacherProfile.findUnique({ where: { userId: teacherId } });
+  if (studentA) {
+    await prisma.debt.upsert({
+      where: { code: 'DEMO-PROP-2026' },
+      update: {},
+      create: {
+        code: 'DEMO-PROP-2026',
+        studentId: studentA.userId,
+        title: 'Propina 1.º semestre 2026',
+        amount: 8500,
+        origin: 'TUITION',
+        dueDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
+        status: 'PENDENTE',
+      },
+    });
+  }
+  if (teacherProfile) {
+    const month = new Date().toISOString().slice(0, 7);
+    await prisma.teacherSalary.upsert({
+      where: { teacherId_month: { teacherId: teacherProfile.id, month } },
+      update: {},
+      create: {
+        teacherId: teacherProfile.id,
+        month,
+        amount: 45000,
+        notes: 'Salário de demonstração',
+        status: 'PENDING',
+      },
+    });
+  }
+
   const dayMs = 24 * 60 * 60 * 1000;
+  const liveStarts = new Date(Date.now() - 15 * 60 * 1000);
+  const liveEnds = new Date(Date.now() + 75 * 60 * 1000);
+  const liveTitle = 'Aula PTP3 — sessão em curso';
+  const live = await prisma.classSchedule.findFirst({ where: { title: liveTitle } });
+  if (live) {
+    await prisma.classSchedule.update({
+      where: { id: live.id },
+      data: { startsAt: liveStarts, endsAt: liveEnds, roomId: roomD2101.id, subjectId: subject.id },
+    });
+  } else {
+    await prisma.classSchedule.create({
+      data: {
+        title: liveTitle,
+        subjectId: subject.id,
+        courseId: course.id,
+        teacherId,
+        roomId: roomD2101.id,
+        startsAt: liveStarts,
+        endsAt: liveEnds,
+      },
+    });
+  }
+
   const scheduleSpecs = [
     {
       title: 'Aula PTP3 — Integración Tecnológica',
@@ -470,7 +589,7 @@ async function main() {
           subjectId: subject.id,
           courseId: course.id,
           teacherId,
-          roomId: roomA101.id,
+          roomId: roomD2101.id,
           startsAt: spec.startsAt,
           endsAt: spec.endsAt,
         },

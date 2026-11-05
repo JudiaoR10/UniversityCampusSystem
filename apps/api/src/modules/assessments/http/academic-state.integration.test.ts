@@ -42,6 +42,7 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
       }
       await prisma.assessment.deleteMany({ where: { subjectId: subject.id } });
       await prisma.classSchedule.deleteMany({ where: { subjectId: subject.id } });
+      await prisma.subjectEnrolment.deleteMany({ where: { subjectId: subject.id } });
       await prisma.subject.delete({ where: { id: subject.id } }).catch(() => undefined);
     }
   }
@@ -139,6 +140,9 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
       },
     });
     subjectId = subject.id;
+    await prisma.subjectEnrolment.create({
+      data: { studentId: studentAId, subjectId, academicYear: 2026, status: 'ACTIVE' },
+    });
 
     // Ligação docente↔disciplina exigida para criar avaliações e lançar notas.
     const dayMs = 24 * 60 * 60 * 1000;
@@ -501,5 +505,122 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
     const restored = await getFinal();
     expect(restored.state).toBe('ADMITIDO_AO_EXAME');
     expect(restored.finalGrade).toBeNull();
+  });
+
+  it('Cenário 8 — nota mínima de dispensa do docente: admissão abaixo do mínimo não dispensa', async () => {
+    await resetStudent();
+    await setAdmission(15);
+    const exemptRes = request(app)
+      .post(`/api/v1/assessments/subject/${subjectId}/exemptions`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ studentId: studentAId, exempted: true });
+
+    // Regra institucional (≥ 14): admissão 15 é dispensado automaticamente...
+    const before = await getFinal();
+    expect(before.state).toBe('DISPENSADO');
+
+    // Docente define nota mínima de dispensa 16.
+    const rulesRes = await setRules({ exemptionMinGrade: 16 });
+    expect(rulesRes.status).toBe(200);
+    expect(rulesRes.body.data.exemptionMinGrade).toBe(16);
+    const boardRes = await getBoard();
+    expect(boardRes.body.data.rules.exemptionMinGrade).toBe(16);
+
+    // 15 < 16: deixa de ser dispensado e fica admitido ao exame.
+    const after = await getFinal();
+    expect(after.state).toBe('ADMITIDO_AO_EXAME');
+    expect(after.stateReason).toBeNull();
+
+    // Dispensa manual também é recusada abaixo do mínimo.
+    const denied = await exemptRes;
+    expect(denied.status).toBe(409);
+    expect(denied.body.code).toBe('EXEMPTION_MIN_GRADE');
+
+    // Mínimo == admissão: dispensa é aceite.
+    const equalMin = await setRules({ exemptionMinGrade: 15 });
+    expect(equalMin.status).toBe(200);
+    const allowed = await request(app)
+      .post(`/api/v1/assessments/subject/${subjectId}/exemptions`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ studentId: studentAId, exempted: true, grade: 15 });
+    expect(allowed.status).toBe(200);
+    const revoke = await request(app)
+      .post(`/api/v1/assessments/subject/${subjectId}/exemptions`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ studentId: studentAId, exempted: false });
+    expect(revoke.status).toBe(200);
+
+    // Valor inválido é recusado pela validação.
+    const invalid = await setRules({ exemptionMinGrade: 25 });
+    expect(invalid.status).toBe(400);
+
+    // Limpeza: volta à regra institucional.
+    const restore = await setRules({ exemptionMinGrade: null });
+    expect(restore.status).toBe(200);
+    await resetStudent();
+  });
+
+  it('Cenário 9 — uma única negativa em contínua veta a dispensa (mesmo com admissão ≥ mínimo)', async () => {
+    await resetStudent();
+    // Pesos: teste pesado (90%) com nota alta + teste leve (10%) com negativa
+    // → admissão = (90*100 + 10*30)/100 = 93% → 19, mas com uma negativa.
+    await request(app)
+      .patch(`/api/v1/assessments/${test1Id}`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ weight: 10 });
+    await request(app)
+      .patch(`/api/v1/assessments/${test2Id}`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ weight: 90 });
+    const neg = await postGrade(test1Id, 6);
+    expect(neg.status).toBe(201);
+    const high = await postGrade(test2Id, 20);
+    expect(high.status).toBe(201);
+
+    const mid = await getFinal();
+    expect(mid.admissionGrade).toBeGreaterThanOrEqual(14);
+
+    // Sem a negativa seria dispensado; com ela fica admitido ao exame.
+    expect(mid.state).toBe('ADMITIDO_AO_EXAME');
+    expect(mid.stateReason).toContain('negativa');
+
+    // Dispensa manual é recusada com código explícito.
+    const denied = await request(app)
+      .post(`/api/v1/assessments/subject/${subjectId}/exemptions`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ studentId: studentAId, exempted: true });
+    expect(denied.status).toBe(409);
+    expect(denied.body.code).toBe('EXEMPTION_NEGATIVE');
+
+    // Corrija a negativa para 20: a negativa fica REGISTADA para sempre...
+    const fixedGrade = await postGrade(test1Id, 20);
+    expect(fixedGrade.status).toBe(201);
+    const fixed = await getFinal();
+    expect(fixed.state).toBe('ADMITIDO_AO_EXAME');
+    expect(fixed.stateReason).toContain('negativa');
+
+    // ...mesmo depois tirando 20 e 17 nas contínuas continua sem dispensa.
+    const after17 = await postGrade(test2Id, 17);
+    expect(after17.status).toBe(201);
+    const stillVeto = await getFinal();
+    expect(stillVeto.state).toBe('ADMITIDO_AO_EXAME');
+    const stillDenied = await request(app)
+      .post(`/api/v1/assessments/subject/${subjectId}/exemptions`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ studentId: studentAId, exempted: true });
+    expect(stillDenied.status).toBe(409);
+    expect(stillDenied.body.code).toBe('EXEMPTION_NEGATIVE');
+    expect(stillDenied.body.message).toContain('negativa');
+
+    // Limpeza: pesos voltam ao estado base do harness (50/50).
+    await request(app)
+      .patch(`/api/v1/assessments/${test1Id}`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ weight: 50 });
+    await request(app)
+      .patch(`/api/v1/assessments/${test2Id}`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ weight: 50 });
+    await resetStudent();
   });
 });

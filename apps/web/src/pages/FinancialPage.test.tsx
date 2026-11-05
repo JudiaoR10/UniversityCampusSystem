@@ -3,20 +3,25 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { AuthUser, RoleCode } from '@smart-campus/shared-types';
 import { ApiClientError } from '@smart-campus/api-client';
 import { FinancialPage } from './FinancialPage';
+import { changeSelect } from '../test/selectField';
 
 const mocks = vi.hoisted(() => ({ user: null as AuthUser | null, api: {
   financialDebts: vi.fn(), financialHistory: vi.fn(), financialStudents: vi.fn(),
   financialAnalysisRequests: vi.fn(), resolveAnalysisRequest: vi.fn(), createAnalysisRequest: vi.fn(),
-  createDebt: vi.fn(), createPayment: vi.fn(), financialPolicy: vi.fn(), updateFinancialPolicy: vi.fn(),
-  financialNotifications: vi.fn(), financialDelivery: vi.fn(), retryFinancialDelivery: vi.fn(), financialReport: vi.fn(),
+  createDebt: vi.fn(), createPayment: vi.fn(), cancelDebt: vi.fn(), createDebtsFromEnrolments: vi.fn(),
+  financialPolicy: vi.fn(), updateFinancialPolicy: vi.fn(),
+  financialNotifications: vi.fn(), financialDelivery: vi.fn(), retryFinancialDelivery: vi.fn(),
+  financialNotificationQueue: vi.fn(), retryFailedNotifications: vi.fn(), financialReport: vi.fn(),
+  financialStatus: vi.fn(), financialBlockedStudents: vi.fn(), paymentReceipt: vi.fn(), salaryReceipt: vi.fn(),
   financialTeachers: vi.fn(), financialSalaries: vi.fn(), createSalary: vi.fn(), updateSalary: vi.fn(), paySalary: vi.fn(), monthlyPaymentReport: vi.fn(),
+  courses: vi.fn(),
 } }));
 vi.mock('../lib/auth', () => ({ useAuth: () => mocks }));
 const response = (data: unknown, meta = {}) => ({ data, meta: { correlationId: 'test', ...meta } });
 const student = { userId: 'student-1', fullName: 'Ana Estudante', studentNumber: '20260001', isActive: true };
 const debt = { id: 'debt-1', studentId: 'student-1', title: 'Propina Outubro', amount: 100, status: 'PENDENTE', dueDate: '2099-01-01' };
 const history = { payments: [{ id: 'payment-1', code: 'PAY-1', paidAt: '2026-10-01', amountPaid: 100, paymentMethod: 'BANK_TRANSFER', referenceCode: 'BANK-001' }], status: { status: 'ACTIVE' }, totalPaid: 100, totalOutstanding: 200, pagination: { totalPayments: 21, hasMorePayments: true } };
-const analysis = { id: 'analysis-1', studentId: 'student-1', student, debt, reason: 'Solicito revisão desta cobrança.', status: 'PENDENTE_ANALISE', createdAt: '2026-10-01', slaDueDate: '2026-10-08' };
+const analysis = { id: 'analysis-1', studentId: 'student-1', student, debt, reason: 'Solicito revisão desta cobrança.', status: 'PENDENTE_ANALISE', createdAt: '2026-10-01', slaDueDate: '2026-10-08', slaOverdue: false };
 const teacher = { teacherId: 'teacher-profile-1', userId: 'teacher-user-1', fullName: 'Maria Docente', employeeCode: 'DOC-1', isActive: true };
 const salary = { id: 'salary-1', teacher, month: '2026-10', amount: 15000, notes: '', status: 'PENDING', paidAt: null, updatedAt: '2026-10-24T10:00:00.000Z' };
 function asRole(role: RoleCode) { mocks.user = { id: 'student-1', role, fullName: 'Ana', email: 'ana@example.test', isActive: true }; }
@@ -32,7 +37,13 @@ beforeEach(() => {
   mocks.api.financialTeachers.mockResolvedValue(response([teacher], { total: 1, hasMore: false }));
   mocks.api.financialSalaries.mockResolvedValue(response([salary], { total: 1, hasMore: false }));
   mocks.api.monthlyPaymentReport.mockResolvedValue(response({ kind: 'payments', month: '2026-10', timezone: 'Africa/Maputo', totalPayments: 1, totalAmount: 100, generatedAt: '2026-10-24T10:00:00.000Z', rows: [{ id: 'p-1', fullName: 'Ana Estudante', identityCode: '20260001', description: 'Propina Outubro', amount: 100, paymentMethod: 'BANK_TRANSFER', referenceCode: 'REPORT-001', paidAt: '2026-10-23T10:00:00Z' }] }));
-  mocks.api.financialReport.mockResolvedValue(response({ totalDebts: 1, byStatus: { pendentes: 1, vencidas: 0, regularizadas: 0, canceladas: 0 }, totalPayments: 0, studentsBlocked: 0, generatedAt: '2026-10-23' }));
+  mocks.api.financialReport.mockResolvedValue(response({ totalDebts: 1, byStatus: { pendentes: 1, vencidas: 0, regularizadas: 0, canceladas: 0 }, totals: { outstanding: 100, overdue: 0, collectedMonth: 0 }, totalPayments: 0, studentsBlocked: 0, generatedAt: '2026-10-23' }));
+  mocks.api.financialStatus.mockResolvedValue(response({ studentId: 'student-1', status: 'ACTIVE', reason: null, blockedAt: null, overdueDebtsCount: 0, totalOverdueAmount: 0, updatedAt: '2026-10-23' }));
+  mocks.api.financialBlockedStudents.mockResolvedValue(response([], { total: 0, hasMore: false }));
+  mocks.api.financialNotificationQueue.mockResolvedValue(response([], { total: 0, hasMore: false }));
+  mocks.api.courses.mockResolvedValue(response([{ id: 'course-1', code: 'LEI', name: 'Engenharia Informática' }]));
+  mocks.api.paymentReceipt.mockResolvedValue(response({ kind: 'payment', payment: history.payments[0], student, debt: { id: debt.id, code: 'DB-1', title: debt.title, amount: debt.amount } }));
+  mocks.api.salaryReceipt.mockResolvedValue(response({ kind: 'salary', salary: { ...salary, status: 'PAID' } }));
 });
 afterEach(cleanup);
 
@@ -50,7 +61,7 @@ describe('Acções financeiras por perfil', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Imprimir relatório mensal' }));
     expect(print).toHaveBeenCalledOnce();
     expect(document.querySelector('.financial-print-view')).toHaveTextContent('REPORT-001');
-    fireEvent.change(screen.getByLabelText('Relatório'), { target: { value: 'salaries' } });
+    changeSelect('Relatório', 'salaries');
     await waitFor(() => expect(mocks.api.monthlyPaymentReport).toHaveBeenLastCalledWith('salaries', expect.any(String)));
     expect(mocks.api.createSalary).not.toHaveBeenCalled();
     expect(mocks.api.paySalary).not.toHaveBeenCalled();
@@ -133,7 +144,7 @@ describe('Acções financeiras por perfil', () => {
     render(<FinancialPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Contestações' }));
     fireEvent.click(await screen.findByRole('button', { name: /Analisar/ }));
-    fireEvent.change(screen.getByLabelText('Decisão'), { target: { value: 'IMPROCEDENTE' } });
+    changeSelect('Decisão', 'IMPROCEDENTE');
     fireEvent.change(screen.getByLabelText('Justificação da decisão'), { target: { value: 'Cobrança confirmada.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Registar decisão' }));
     await screen.findByText('Decisão registada.');
@@ -193,6 +204,33 @@ describe('Acções financeiras por perfil', () => {
     resolveHistory(response({ ...history, payments: [{ ...history.payments[0], referenceCode: 'SEGREDO-ANA' }] }));
     await waitFor(() => expect(mocks.api.financialHistory).toHaveBeenLastCalledWith('student-2', { offset: 0, limit: 20 }));
     expect(within(screen.getByRole('region', { name: 'Histórico de pagamentos' })).queryByText('SEGREDO-ANA')).not.toBeInTheDocument();
+  });
+
+  it('FINANCE vê dívidas do campus, cancela e emite propina sem criar utilizador', async () => {
+    asRole('FINANCE');
+    mocks.api.cancelDebt.mockResolvedValue(response({ ...debt, status: 'CANCELADA' }));
+    mocks.api.createDebtsFromEnrolments.mockResolvedValue(response({ created: 2, skipped: 1, debts: [] }));
+    render(<FinancialPage />);
+    await screen.findByText('Dívidas do campus');
+    expect(mocks.api.financialDebts.mock.calls[0][0].studentId).toBeUndefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar dívida' }));
+    await waitFor(() => expect(mocks.api.cancelDebt).toHaveBeenCalledWith(debt.id));
+    fireEvent.click(screen.getByRole('button', { name: 'Emissão de propina' }));
+    fireEvent.change(await screen.findByLabelText('Valor (MZN)'), { target: { value: '250' } });
+    fireEvent.change(screen.getByLabelText('Vencimento'), { target: { value: '2099-06-01T12:00' } });
+    changeSelect('Curso', 'course-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Emitir propinas' }));
+    await screen.findByText(/Emitidas 2 propinas/);
+    expect(mocks.api.createDebtsFromEnrolments).toHaveBeenCalledWith(expect.objectContaining({
+      courseId: 'course-1',
+      amount: 250,
+    }));
+  });
+
+  it('STUDENT vê o aviso de situação financeira regular', async () => {
+    render(<FinancialPage />);
+    expect(await screen.findByText('Situação financeira regular.')).toBeInTheDocument();
+    expect(mocks.api.financialStatus).toHaveBeenCalledWith('student-1');
   });
 
   it.each(['TEACHER', 'TECHNICIAN', 'COORDINATOR'] as RoleCode[])('%s não acede nem carrega dados financeiros', role => {

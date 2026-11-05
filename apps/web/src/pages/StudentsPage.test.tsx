@@ -33,6 +33,7 @@ function setupApi() {
       updateOwn: vi.fn(),
     },
     courses: vi.fn().mockResolvedValue({ data: [course] }),
+    users: vi.fn().mockResolvedValue({ data: [] }),
   } as unknown as ApiClient;
 
   return { create };
@@ -50,6 +51,7 @@ function renderAsAdmin() {
 }
 
 async function fillForm() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Criar conta' }));
   fireEvent.change(await screen.findByPlaceholderText('Email da conta'), {
     target: { value: 'ana@ujac.ac.mz' },
   });
@@ -85,11 +87,11 @@ describe('StudentsPage', () => {
     fireEvent.click(submit);
 
     const dialog = await screen.findByRole('dialog');
-    expect(dialog).toHaveTextContent('Criar estudante');
-    expect(dialog).toHaveTextContent('ana@ujac.ac.mz');
+    expect(dialog).toHaveTextContent('Criar perfil de estudante');
+    expect(dialog).toHaveTextContent('20261001');
     expect(create).not.toHaveBeenCalled();
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Criar estudante' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Criar perfil' }));
 
     await waitFor(() =>
       expect(create).toHaveBeenCalledWith({

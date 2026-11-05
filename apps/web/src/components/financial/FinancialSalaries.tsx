@@ -3,6 +3,9 @@ import type { TeacherIdentitySummaryDto, TeacherSalaryDto } from '@smart-campus/
 import { useAuth } from '../../lib/auth';
 import { currentFinancialMonth } from './FinancialMonthlyReports';
 import { date, errorMessage, LoadState, money, Pagination, useFinancialLoad } from './shared';
+import { printSalaryReceipt } from './printReceipts';
+import { SelectField } from '../SelectField';
+import { CheckIcon, EditAction, IconActionButton, TableActions } from '../ActionButtons';
 
 export function FinancialSalaries() {
   const { user } = useAuth();
@@ -49,7 +52,8 @@ function SalaryMonth({ month, canWrite }: { month: string; canWrite: boolean }) 
         <div className="flex flex-wrap justify-between gap-3"><h4 className="font-semibold">{salary.teacher.fullName} · {salary.teacher.employeeCode}</h4><strong>{money(salary.amount)}</strong></div>
         <p>{salary.status === 'PAID' ? `Pago em ${date(salary.paidAt!)} · Referência: ${salary.referenceCode}` : 'Pagamento pendente'}</p>
         {salary.notes && <p className="break-words whitespace-pre-wrap">{salary.notes}</p>}
-        {canWrite && salary.status === 'PENDING' && <div className="flex flex-wrap gap-3"><button className="btn-secondary" disabled={busy} onClick={() => { setSelected({ salary, action: 'edit' }); setError(''); setMessage(''); }}>Editar salário</button><button className="btn-primary" disabled={busy} onClick={() => { setSelected({ salary, action: 'pay' }); setError(''); setMessage(''); }}>Registar pagamento salarial</button></div>}
+        {canWrite && salary.status === 'PENDING' && <TableActions><EditAction label="Editar salário" disabled={busy} onClick={() => { setSelected({ salary, action: 'edit' }); setError(''); setMessage(''); }} /><IconActionButton label="Registar pagamento salarial" icon={<CheckIcon />} tone="success" disabled={busy} onClick={() => { setSelected({ salary, action: 'pay' }); setError(''); setMessage(''); }} /></TableActions>}
+        {salary.status === 'PAID' && <SalaryReceiptButton id={salary.id} />}
       </article>)}
       <Pagination offset={offset} hasMore={!!result.data.meta.hasMore} loading={result.loading || busy} onChange={value => { setOffset(value); setSelected(null); }} />
     </>}
@@ -57,7 +61,7 @@ function SalaryMonth({ month, canWrite }: { month: string; canWrite: boolean }) 
       <h3 className="font-display text-xl font-semibold">{selected.action === 'edit' ? 'Editar salário' : 'Confirmar pagamento salarial'} — {selected.salary.teacher.fullName}</h3>
       {selected.action === 'edit' ? <><AmountField value={selected.salary.amount} disabled={busy} /><label className="block text-sm font-medium">Observações<textarea className="field-input" name="notes" maxLength={500} defaultValue={selected.salary.notes} disabled={busy} /></label></> : <>
         <p>Pagamento integral de {money(selected.salary.amount)}. Este registo confirma um pagamento efectuado; não transfere dinheiro. Após confirmação, o salário deixa de ser editável.</p>
-        <div><label htmlFor="salary-method" className="text-sm font-medium">Método do pagamento salarial</label><select id="salary-method" className="field-input" name="paymentMethod" disabled={busy}><option value="BANK_TRANSFER">Transferência bancária</option><option value="CASH_DEPOSIT">Depósito</option><option value="MOBILE_MONEY">Carteira móvel</option><option value="POS">POS</option></select></div>
+        <div><label htmlFor="salary-method" className="text-sm font-medium">Método do pagamento salarial</label><SelectField id="salary-method" name="paymentMethod" disabled={busy} defaultValue="BANK_TRANSFER" options={[{ value: 'BANK_TRANSFER', label: 'Transferência bancária' }, { value: 'CASH_DEPOSIT', label: 'Depósito' }, { value: 'MOBILE_MONEY', label: 'Carteira móvel' }, { value: 'POS', label: 'POS' }]} /></div>
         <label className="block text-sm font-medium">Referência do pagamento salarial<input className="field-input" name="referenceCode" minLength={4} maxLength={80} required disabled={busy} /></label>
       </>}
       <div className="flex flex-wrap gap-3"><button className="btn-primary" disabled={busy}>{selected.action === 'edit' ? 'Guardar salário' : 'Confirmar pagamento salarial'}</button><button className="btn-secondary" type="button" disabled={busy} onClick={() => setSelected(null)}>Cancelar</button></div>
@@ -110,4 +114,21 @@ function NewSalaryForm({ month, api, onCreated }: { month: string; api: ReturnTy
     {error && <p role="alert" className="text-red-700">{error}</p>}{message && <p role="status">{message}</p>}
     {teacher && <form className="space-y-4" onSubmit={submit}><p className="font-medium">Docente seleccionado: {teacher.fullName} · {teacher.employeeCode}</p><AmountField disabled={busy} /><label className="block text-sm font-medium">Observações<textarea className="field-input" name="notes" maxLength={500} disabled={busy} /></label><button className="btn-primary" disabled={busy}>Registar salário</button></form>}
   </div>;
+}
+
+function SalaryReceiptButton({ id }: { id: string }) {
+  const { api } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function print() {
+    if (busy) return;
+    setBusy(true); setError('');
+    try { printSalaryReceipt((await api.salaryReceipt(id)).data); }
+    catch (e) { setError(errorMessage(e)); }
+    finally { setBusy(false); }
+  }
+  return <>
+    <IconActionButton label="Imprimir comprovativo salarial" disabled={busy} onClick={() => void print()} />
+    {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+  </>;
 }

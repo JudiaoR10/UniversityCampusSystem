@@ -3,55 +3,75 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export type ConfirmOptions = {
   title: string;
   message?: string;
+  description?: string;
   details?: Array<{ label: string; value: string }>;
   confirmLabel?: string;
+  confirmTone?: 'danger' | 'primary';
 };
 
+type ConfirmDialogProps = ConfirmOptions & {
+  open?: boolean;
+  busy?: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+/**
+ * Modal de confirmação (substitui window.confirm). Fecha com Escape ou clique fora.
+ */
 export function ConfirmDialog({
+  open = true,
   title,
   message,
+  description,
   details,
   confirmLabel = 'Confirmar',
+  confirmTone = 'primary',
+  busy = false,
   onCancel,
   onConfirm,
-}: ConfirmOptions & { onCancel: () => void; onConfirm: () => void }) {
+}: ConfirmDialogProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const body = description ?? message;
 
   useEffect(() => {
+    if (!open) return;
     confirmRef.current?.focus();
-  }, []);
+  }, [open]);
 
   useEffect(() => {
+    if (!open) return;
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !busy) {
         event.preventDefault();
         onCancel();
       }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onCancel]);
+  }, [open, busy, onCancel]);
+
+  if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-campus-ink/40 p-4 backdrop-blur-sm"
-      onMouseDown={onCancel}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-dialog-title"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !busy) onCancel();
+      }}
     >
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
         className="surface w-full max-w-md p-5"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <p className="eyebrow">Confirmação</p>
-        <h2
-          id="confirm-dialog-title"
-          className="mt-1 font-display text-lg font-semibold text-campus-ink"
-        >
+        <h2 id="confirm-dialog-title" className="mt-1 font-display text-lg font-semibold text-campus-ink">
           {title}
         </h2>
-        {message ? <p className="mt-2 text-sm text-campus-deep/75">{message}</p> : null}
+        {body ? <p className="mt-2 text-sm text-campus-deep/75">{body}</p> : null}
         {details && details.length > 0 ? (
           <dl className="mt-3 space-y-1.5 rounded-xl bg-campus-mist/70 p-3 text-sm">
             {details.map((item) => (
@@ -63,11 +83,21 @@ export function ConfirmDialog({
           </dl>
         ) : null}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className="btn-secondary" onClick={onCancel}>
+          <button type="button" className="btn-secondary" disabled={busy} onClick={onCancel}>
             Cancelar
           </button>
-          <button ref={confirmRef} type="button" className="btn-primary" onClick={onConfirm}>
-            {confirmLabel}
+          <button
+            ref={confirmRef}
+            type="button"
+            className={
+              confirmTone === 'danger'
+                ? 'rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60'
+                : 'btn-primary'
+            }
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            {busy ? 'A processar...' : confirmLabel}
           </button>
         </div>
       </div>
@@ -96,11 +126,7 @@ export function useConfirm() {
   }, []);
 
   const dialog = options ? (
-    <ConfirmDialog
-      {...options}
-      onCancel={() => settle(false)}
-      onConfirm={() => settle(true)}
-    />
+    <ConfirmDialog {...options} onCancel={() => settle(false)} onConfirm={() => settle(true)} />
   ) : null;
 
   return { confirm, dialog };

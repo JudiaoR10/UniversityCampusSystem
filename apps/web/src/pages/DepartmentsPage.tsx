@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import type { DepartmentDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { PageIntro } from '../components/PageIntro';
+import { DeleteAction, TableActions } from '../components/ActionButtons';
 
 const FORMULARIO_VAZIO = { code: '', name: '', description: '' };
 
@@ -72,10 +73,11 @@ export function DepartmentsPage() {
         description="Estrutura departamental da universidade."
       />
 
-      {erro ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p> : null}
+      {erro ? <p className="alert-error">{erro}</p> : null}
 
       {podeGerir ? (
         <form onSubmit={aoCriar} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+          <h2 className="section-title md:col-span-2 xl:col-span-4">Novo departamento</h2>
           <input
             className="field-input !mt-0"
             placeholder="Código (ex.: DEI)"
@@ -138,14 +140,13 @@ export function DepartmentsPage() {
                   <td className="px-4 py-3">{departamento.description ?? '—'}</td>
                   {podeGerir ? (
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        disabled={idAEliminar === departamento.id}
-                        onClick={() => void aoEliminar(departamento)}
-                      >
-                        {idAEliminar === departamento.id ? 'A eliminar...' : 'Eliminar'}
-                      </button>
+                      <TableActions>
+                        <DeleteAction
+                          busy={idAEliminar === departamento.id}
+                          disabled={idAEliminar === departamento.id}
+                          onClick={() => void aoEliminar(departamento)}
+                        />
+                      </TableActions>
                     </td>
                   ) : null}
                 </tr>

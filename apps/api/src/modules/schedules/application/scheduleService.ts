@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { AppError, conflict, forbidden, notFound } from '../../../lib/errors.js';
 import { prisma } from '../../../lib/prisma.js';
 import { audit } from '../../audit/application/auditService.js';
+import { notifyUsers } from '../../notifications/application/notificationService.js';
 import type { Actor } from '../../assessments/application/assessmentService.js';
 
 /**
@@ -284,9 +285,37 @@ export async function createSchedule(input: CreateScheduleInput, actor: Actor, c
     metadata: { title: schedule.title, subjectId: schedule.subjectId, courseId: schedule.courseId },
   });
 
+  // Notificação em tempo real para os estudantes inscritos no curso (mesmo
+  // critério do roster de avaliações: StudentProfile.courseId). Falhas de
+  // notificação nunca interrompem a criação do horário.
+  try {
+    const enrolled = await prisma.studentProfile.findMany({
+      where: { courseId: schedule.courseId, user: { isActive: true } },
+      select: { userId: true },
+    });
+    await notifyUsers(
+      enrolled.map((e) => ({ id: e.userId })),
+      'Novo horário',
+      `Foi criada a sessão "${schedule.title}" (${schedule.subject.name}) para ${startsLabel(schedule.startsAt)} — verifique o seu horário.`,
+    );
+  } catch {
+    // optimização: notificar não pode bloquear a criação
+  }
+
   const mapped = mapSchedule(schedule);
   const rooms = await resolveRooms([mapped.roomId]);
   return withRooms([mapped], rooms)[0];
+}
+
+const IMMEDIATE_DATE_FORMAT = new Intl.DateTimeFormat('pt-PT', { dateStyle: 'medium', timeStyle: 'short' });
+
+function startsLabel(date: Date): string {
+  // Safeguard: se a formatação Intl falhar, usamos ISO — nunca bloquear a notificação.
+  try {
+    return IMMEDIATE_DATE_FORMAT.format(date);
+  } catch {
+    return date.toISOString();
+  }
 }
 
 export async function updateSchedule(id: string, input: UpdateScheduleInput, actor: Actor, correlationId: string) {

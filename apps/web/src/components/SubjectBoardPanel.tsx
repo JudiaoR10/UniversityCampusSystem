@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import type { AcademicState, AssessmentOptions, SubjectBoard, SubjectBoardEntry } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { RECURRENCE_LEGEND, STATE_LABELS, stateBadgeClass } from '../lib/academic';
+import { SelectField } from './SelectField';
+import { BanIcon, CheckIcon, IconActionButton } from './ActionButtons';
 
 export type BoardMode = 'frequencia' | 'exame' | 'recorrencia' | 'resultados';
 
@@ -54,7 +56,7 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  const [rulesForm, setRulesForm] = useState({ requiredTestCount: '', recurrenceMinAdmission: '' });
+  const [rulesForm, setRulesForm] = useState({ requiredTestCount: '', recurrenceMinAdmission: '', exemptionMinGrade: '' });
   const [savingRules, setSavingRules] = useState(false);
 
   useEffect(() => {
@@ -96,6 +98,8 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
       requiredTestCount: board.rules.requiredTestCount === null ? '' : String(board.rules.requiredTestCount),
       recurrenceMinAdmission:
         board.rules.recurrenceMinAdmission === null ? '' : String(board.rules.recurrenceMinAdmission),
+      exemptionMinGrade:
+        board.rules.exemptionMinGrade === null ? '' : String(board.rules.exemptionMinGrade),
     });
     const next: Record<string, string> = {};
     const nextExemptions: Record<string, string> = {};
@@ -156,13 +160,18 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
       const requiredTestCount = rulesForm.requiredTestCount.trim() === '' ? null : Number(rulesForm.requiredTestCount);
       const recurrenceMinAdmission =
         rulesForm.recurrenceMinAdmission.trim() === '' ? null : Number(rulesForm.recurrenceMinAdmission);
+      const exemptionMinGrade =
+        rulesForm.exemptionMinGrade.trim() === '' ? null : Number(rulesForm.exemptionMinGrade);
       if (requiredTestCount !== null && (!Number.isInteger(requiredTestCount) || requiredTestCount < 1)) {
         throw new Error('O número de testes deve ser um inteiro ≥ 1 (ou vazio).');
       }
       if (recurrenceMinAdmission !== null && (recurrenceMinAdmission < 0 || recurrenceMinAdmission > 20)) {
         throw new Error('O mínimo de admissão para recorrência deve estar entre 0 e 20 (ou vazio).');
       }
-      await api.setSubjectRules(subjectId, { requiredTestCount, recurrenceMinAdmission });
+      if (exemptionMinGrade !== null && (exemptionMinGrade < 0 || exemptionMinGrade > 20)) {
+        throw new Error('A nota mínima de dispensa deve estar entre 0 e 20 (ou vazio).');
+      }
+      await api.setSubjectRules(subjectId, { requiredTestCount, recurrenceMinAdmission, exemptionMinGrade });
       setNotice('Regras da disciplina guardadas.');
       await reload();
     } catch (err) {
@@ -243,7 +252,7 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
     setNotice(null);
     try {
       await api.upsertGrades(epoch.id, { grades });
-      setNotice(isExamMode ? 'Notas do exame normal guardadas.' : 'Notas de recorrência guardadas.');
+      setNotice(isExamMode ? 'Notas do exame normal lançadas com sucesso.' : 'Notas de recorrência lançadas com sucesso.');
       await reload();
     } catch (err) {
       setError(describeError(err, 'Não foi possível guardar as notas.'));
@@ -335,24 +344,18 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
         </div>
         <label className="text-xs font-medium text-campus-deep/70">
           Disciplina do quadro
-          <select
-            className="field-input"
+          <SelectField
             value={subjectId}
-            onChange={(e) => onSubjectChange(e.target.value)}
-          >
-            <option value="">Selecionar disciplina</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.code} — {s.name}
-              </option>
-            ))}
-          </select>
+            onChange={onSubjectChange}
+            placeholder="Seleccionar disciplina"
+            options={subjects.map((s) => ({ value: s.id, label: `${s.code} — ${s.name}` }))}
+          />
         </label>
       </div>
 
       <div aria-live="polite" className="space-y-2">
-        {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p> : null}
+        {error ? <p className="alert-error">{error}</p> : null}
+        {notice ? <p className="alert-success">{notice}</p> : null}
       </div>
 
       {!subjectId ? (
@@ -403,6 +406,19 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                     placeholder="—"
                   />
                 </label>
+                <label className="text-xs text-campus-deep/70">
+                  Nota mínima de dispensa (0–20)
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    step="0.5"
+                    className="field-input !mt-0 w-28"
+                    value={rulesForm.exemptionMinGrade}
+                    onChange={(e) => setRulesForm({ ...rulesForm, exemptionMinGrade: e.target.value })}
+                    placeholder="—"
+                  />
+                </label>
                 <button type="submit" className="btn-secondary !px-3 !py-1.5 text-xs" disabled={savingRules}>
                   {savingRules ? 'A guardar...' : 'Guardar regras'}
                 </button>
@@ -411,6 +427,10 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                 {!board.rules.rulesConfigured
                   ? 'Critérios de recorrência ainda não configurados — a publicação fica bloqueada até definires o mínimo.'
                   : 'Critérios de recorrência configurados.'}
+                {' '}
+                {board.rules.exemptionMinGrade == null
+                  ? 'Sem nota mínima de dispensa: aplica-se a regra institucional (admissão ≥ 14).'
+                  : `Dispensa exige admissão ≥ ${String(board.rules.exemptionMinGrade).replace('.', ',')}; basta uma única negativa em avaliação contínua para vetar a dispensa — mesmo que depois tire 20 e 17.`}
               </p>
             </form>
 
@@ -475,21 +495,18 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
             </label>
             <label className="text-xs font-medium text-campus-deep/70">
               Estado
-              <select
-                className="field-input !mt-0 w-56"
+              <SelectField
+                className="w-56"
                 value={stateFilter}
-                onChange={(e) => {
-                  setStateFilter(e.target.value);
+                onChange={(next) => {
+                  setStateFilter(next);
                   setPage(1);
                 }}
-              >
-                <option value="">Todos os estados</option>
-                {statesPresent.map((state) => (
-                  <option key={state} value={state}>
-                    {STATE_LABELS[state]}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: '', label: 'Todos os estados' },
+                  ...statesPresent.map((state) => ({ value: state, label: STATE_LABELS[state] })),
+                ]}
+              />
             </label>
             <p className="text-xs text-campus-deep/70">
               {filtered.length} de {board.counters.total} estudantes
@@ -637,14 +654,14 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                                    : 'Dispensado pelo docente (nota de admissão)'}
                                </span>
                                <div className="flex items-center gap-2">
-                                 <button
-                                   type="button"
-                                   className="btn-secondary !px-3 !py-1.5 text-xs"
-                                   onClick={() => void toggleExemption(entry)}
+                                 <IconActionButton
+                                   label="Anular dispensa"
+                                   icon={<BanIcon />}
+                                   danger
+                                   busy={exemptingId === entry.studentProfileId}
                                    disabled={exemptingId !== null}
-                                 >
-                                   {exemptingId === entry.studentProfileId ? 'A processar...' : 'Anular dispensa'}
-                                 </button>
+                                   onClick={() => void toggleExemption(entry)}
+                                 />
                                </div>
                              </div>
                            ) : (
@@ -659,14 +676,14 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                                    setExemptionInputs((prev) => ({ ...prev, [entry.studentProfileId]: e.target.value }))
                                  }
                                />
-                               <button
-                                 type="button"
-                                 className="btn-secondary !px-3 !py-1.5 text-xs"
-                                 onClick={() => void toggleExemption(entry)}
+                               <IconActionButton
+                                 label="Dispensar"
+                                 icon={<CheckIcon />}
+                                 tone="success"
+                                 busy={exemptingId === entry.studentProfileId}
                                  disabled={exemptingId !== null}
-                               >
-                                 {exemptingId === entry.studentProfileId ? 'A processar...' : 'Dispensar'}
-                               </button>
+                                 onClick={() => void toggleExemption(entry)}
+                               />
                              </div>
                            )}
                          </td>

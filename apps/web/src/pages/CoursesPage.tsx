@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import type { CourseDto, DepartmentDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { PageIntro } from '../components/PageIntro';
+import { SelectField } from '../components/SelectField';
 
 export function CoursesPage() {
   const { api, user } = useAuth();
@@ -70,23 +71,20 @@ export function CoursesPage() {
         title="Cursos"
         description="Catálogo de cursos e programas, organizado por departamento."
         actions={
-          <select
-            className="field-input !mt-0"
+          <SelectField
+            className="w-full sm:w-80"
             value={filtroDepartamento}
-            onChange={(e) => aoMudarFiltro(e.target.value)}
+            onChange={aoMudarFiltro}
             aria-label="Filtrar por departamento"
-          >
-            <option value="">Todos os departamentos</option>
-            {departamentos.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.code} — {d.name}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: '', label: 'Todos os departamentos' },
+              ...departamentos.map((d) => ({ value: d.id, label: `${d.code} — ${d.name}` })),
+            ]}
+          />
         }
       />
 
-      {erro ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p> : null}
+      {erro ? <p className="alert-error">{erro}</p> : null}
 
       {podeGerir ? (
         semDepartamentos ? (
@@ -95,6 +93,7 @@ export function CoursesPage() {
           </p>
         ) : (
           <form onSubmit={aoCriar} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-5">
+            <h2 className="section-title md:col-span-2 xl:col-span-5">Novo curso</h2>
             <input
               className="field-input !mt-0"
               placeholder="Código (ex.: LEI)"
@@ -120,18 +119,13 @@ export function CoursesPage() {
               onChange={(e) => setFormulario({ ...formulario, description: e.target.value })}
               maxLength={500}
             />
-            <select
-              className="field-input !mt-0"
+            <SelectField
               value={formulario.departmentId}
-              onChange={(e) => setFormulario({ ...formulario, departmentId: e.target.value })}
+              onChange={(departmentId) => setFormulario({ ...formulario, departmentId })}
               required
-            >
-              {departamentos.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.code} — {d.name}
-                </option>
-              ))}
-            </select>
+              placeholder="Seleccionar departamento"
+              options={departamentos.map((d) => ({ value: d.id, label: `${d.code} — ${d.name}` }))}
+            />
             <button type="submit" className="btn-primary w-full" disabled={aGuardar || !formulario.departmentId}>
               {aGuardar ? 'A criar...' : 'Criar curso'}
             </button>

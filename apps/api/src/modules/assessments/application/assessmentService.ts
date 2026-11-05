@@ -3,6 +3,8 @@ import type { CreateAssessmentInput, UpdateAssessmentInput, UpsertGradesInput } 
 import { AppError, conflict, forbidden, notFound } from '../../../lib/errors.js';
 import { prisma } from '../../../lib/prisma.js';
 import { audit } from '../../audit/application/auditService.js';
+import { notifyUsers } from '../../notifications/application/notificationService.js';
+import { getStudentStatus } from '../../financial/application/financialService.js';
 
 export type Actor = { id: string; role: string };
 
@@ -108,7 +110,14 @@ export type AcademicStateInput = {
   hasRecurrenceEpoch: boolean;
   /** A nota de exame foi alterada depois de lançada a recorrência (cenário 5). */
   examChangedAfterRecurrence: boolean;
+  /** Mínimo (0–20) de admissão definido pelo docente para dispensa; null = regra institucional (>= 14). */
+  exemptionMinGrade?: number | null;
+  /** O estudante tem pelo menos uma negativa (nota < 50%) nas avaliações contínuas? */
+  hasNegativeContinuous?: boolean;
 };
+
+export const NEGATIVE_VETO_REASON =
+  'Basta uma negativa (nota abaixo de 10) em avaliação contínua — dispensa não aplicável, mesmo que depois a nota melhore; segue ao exame normal';
 
 /**
  * Máquina de estados académicos — função pura, única fonte de verdade do
@@ -124,8 +133,10 @@ export function computeAcademicState(input: AcademicStateInput): { state: Academ
 
   const admissionRounded = Math.round(admissionGrade);
 
-  // 2. Dispensa: frequência na banda >= 14 não faz exame nem recorrência.
-  if (admissionRounded >= 14) {
+  // 2. Dispensa: frequência na banda >= 14 (ou no mínimo extra definido pelo
+  //    docente) e sem nenhuma negativa nas avaliações contínuas.
+  const effectiveExemptionMin = Math.max(14, Math.round(input.exemptionMinGrade ?? 14));
+  if (admissionRounded >= effectiveExemptionMin && !input.hasNegativeContinuous) {
     return { state: 'DISPENSADO', reason: null };
   }
 
@@ -136,7 +147,7 @@ export function computeAcademicState(input: AcademicStateInput): { state: Academ
 
   // 4. Ainda não realizou (ou não foi lançado) o exame normal.
   if (examGrade === null) {
-    return { state: 'ADMITIDO_AO_EXAME', reason: null };
+    return { state: 'ADMITIDO_AO_EXAME', reason: input.hasNegativeContinuous ? NEGATIVE_VETO_REASON : null };
   }
 
   // 5. Recorrência lançada — substitui o exame normal no resultado.
@@ -230,7 +241,7 @@ type SubjectAssessmentInput = {
   id: string;
   type: string;
   weight: number;
-  grades: Array<{ studentId: string; valuePercent: number }>;
+  grades: Array<{ studentId: string; valuePercent: number; everNegative?: boolean }>;
 };
 
 /**
@@ -270,7 +281,13 @@ export function computeSituationsByStudent(
       return acc + grade.valuePercent * a.weight;
     }, 0);
     const grade20 = round2((weightedSum / totalWeight) * 0.2);
-    situacoes.set(studentId, classifySituacao(Math.round(grade20)));
+    const situacao = classifySituacao(Math.round(grade20));
+    // Basta uma negativa registada (permanente): grades com everNegative vedam
+    // a dispensa no percurso legado também.
+    const hasNegativeVeto = graded.some((a) =>
+      a.grades.some((g) => g.studentId === studentId && g.everNegative === true),
+    );
+    situacoes.set(studentId, situacao === 'DISPENSADO' && hasNegativeVeto ? 'ADMITIDO_AO_EXAME' : situacao);
   }
   return situacoes;
 }
@@ -293,7 +310,7 @@ export async function loadSituations(subjectId: string, studentIds: string[]): P
   });
   const subjectAssessments = await prisma.assessment.findMany({
     where: { subjectId },
-    include: { grades: { select: { studentId: true, valuePercent: true } } },
+    include: { grades: { select: { studentId: true, valuePercent: true, everNegative: true } } },
   });
   return computeSituationsByStudent(subjectAssessments, studentIds, subject?.requiredTestCount ?? null);
 }
@@ -354,6 +371,12 @@ export async function setSubjectExemption(
 
   if (input.grade != null && (input.grade < 0 || input.grade > 20)) {
     throw conflict('INVALID_GRADE_VALUE', 'A nota de dispensa deve estar entre 0 e 20');
+  }
+
+  // Dispensar exige: (1) nenhuma negativa nas avaliações contínuas e
+  // (2) admissão >= mínimo de dispensa definido pelo docente (quando definido).
+  if (input.exempted) {
+    await assertExemptionEligible(subject, input.studentId);
   }
 
   if (input.exempted) {
@@ -418,6 +441,7 @@ export async function loadAcademicStates(
       subject.recurrenceMinAdmission,
       exempted.has(studentId),
       exempted.get(studentId) ?? null,
+      subject.exemptionMinGrade,
     );
     map.set(studentId, { state: result.state, reason: result.stateReason });
   }
@@ -610,9 +634,74 @@ async function assertCanManageSubject(subjectId: string, actor: Actor) {
   await assertTeacherTeachesSubject(subjectId, actor);
 }
 
+/**
+ * Elegibilidade para dispensa manual:
+ * 1. O estudante não pode ter nenhuma negativa registada (`everNegative`) nas
+ *    avaliações contínuas — basta UMA negativa, mesmo que a nota seja depois
+ *    corrigida, para vedar a dispensa de forma irrevogável.
+ * 2. Quando o docente definiu nota mínima de dispensa (`exemptionMinGrade`),
+ *    a admissão (média ponderada completa, como no quadro) tem de a alcançar.
+ */
+async function assertExemptionEligible(
+  subject: { id: string; requiredTestCount: number | null; exemptionMinGrade: number | null },
+  studentId: string,
+) {
+  const assessments = await prisma.assessment.findMany({
+    where: { subjectId: subject.id, type: { notIn: EXAM_ASSESSMENT_TYPES as any } },
+    select: { id: true, title: true, weight: true },
+  });
+  const grades = assessments.length
+    ? await prisma.grade.findMany({
+        where: { assessmentId: { in: assessments.map((a) => a.id) }, studentId },
+        select: { assessmentId: true, valuePercent: true, everNegative: true },
+      })
+    : [];
+  const gradeByAssessment = new Map(grades.map((g) => [g.assessmentId, g]));
+
+  // Basta UMA negativa (mesmo corrigida depois) — a marca `everNegative` é
+  // permanente e veta a dispensa de forma irrevogável.
+  const negative = grades.find((g) => g.everNegative);
+  if (negative) {
+    const title = assessments.find((a) => a.id === negative.assessmentId)?.title ?? 'avaliação contínua';
+    throw conflict(
+      'EXEMPTION_NEGATIVE',
+      `Estudante registou negativa em "${title}" — basta uma negativa para vetar a dispensa, mesmo que depois a nota melhore`,
+    );
+  }
+
+  const min = subject.exemptionMinGrade;
+  if (min === null) return;
+
+  const graded = assessments.filter((a) => gradeByAssessment.has(a.id));
+  const baseWeight = assessments.reduce((acc, a) => acc + a.weight, 0);
+  const complete =
+    assessments.length > 0 &&
+    (subject.requiredTestCount != null
+      ? graded.length >= subject.requiredTestCount
+      : graded.length === assessments.length && baseWeight >= 100);
+  if (!complete) {
+    throw conflict(
+      'EXEMPTION_INCOMPLETE',
+      'Frequência incompleta — sem notas suficientes para apurar o mínimo de dispensa',
+    );
+  }
+  const admissionPercent = round2(
+    graded.reduce((acc, a) => acc + gradeByAssessment.get(a.id)!.valuePercent * a.weight, 0) /
+      graded.reduce((acc, a) => acc + a.weight, 0),
+  );
+  const admissionGrade = round2(admissionPercent * 0.2);
+  if (admissionGrade < min) {
+    throw conflict(
+      'EXEMPTION_MIN_GRADE',
+      `Admissão ${admissionGrade} abaixo do mínimo de dispensa ${min} definido nesta disciplina`,
+    );
+  }
+}
+
 export type SubjectRulesInput = {
   requiredTestCount?: number | null;
   recurrenceMinAdmission?: number | null;
+  exemptionMinGrade?: number | null;
 };
 
 /**
@@ -634,6 +723,13 @@ export async function setSubjectRules(subjectId: string, input: SubjectRulesInpu
     }
     data.recurrenceMinAdmission = min;
   }
+  if (input.exemptionMinGrade !== undefined) {
+    const minExemption = input.exemptionMinGrade;
+    if (minExemption !== null && (minExemption < 0 || minExemption > 20)) {
+      throw new AppError('INVALID_EXEMPTION_MIN', 'A nota mínima de dispensa deve estar entre 0 e 20', 400);
+    }
+    data.exemptionMinGrade = minExemption;
+  }
   if (Object.keys(data).length === 0) {
     throw new AppError('NO_CHANGES', 'Nenhum valor para actualizar', 400);
   }
@@ -647,6 +743,7 @@ export async function setSubjectRules(subjectId: string, input: SubjectRulesInpu
       name: true,
       requiredTestCount: true,
       recurrenceMinAdmission: true,
+      exemptionMinGrade: true,
       resultsPublishedAt: true,
     },
   });
@@ -661,8 +758,13 @@ export async function setSubjectRules(subjectId: string, input: SubjectRulesInpu
       before: {
         requiredTestCount: existing.requiredTestCount,
         recurrenceMinAdmission: existing.recurrenceMinAdmission,
+        exemptionMinGrade: existing.exemptionMinGrade,
       },
-      after: { requiredTestCount: subject.requiredTestCount, recurrenceMinAdmission: subject.recurrenceMinAdmission },
+      after: {
+        requiredTestCount: subject.requiredTestCount,
+        recurrenceMinAdmission: subject.recurrenceMinAdmission,
+        exemptionMinGrade: subject.exemptionMinGrade,
+      },
     },
   });
 
@@ -781,6 +883,7 @@ export async function getSubjectBoard(subjectId: string, actor: Actor) {
       subject.recurrenceMinAdmission,
       exemptedStudents.has(student.id),
       exemptedStudents.get(student.id) ?? null,
+      subject.exemptionMinGrade,
     );
     const state = result.state;
 
@@ -865,6 +968,7 @@ export async function getSubjectBoard(subjectId: string, actor: Actor) {
       subjectName: subject.name,
       requiredTestCount: subject.requiredTestCount,
       recurrenceMinAdmission: subject.recurrenceMinAdmission,
+      exemptionMinGrade: subject.exemptionMinGrade,
       rulesConfigured: subject.recurrenceMinAdmission !== null,
       published: subject.resultsPublishedAt !== null,
       publishedAt: subject.resultsPublishedAt ? subject.resultsPublishedAt.toISOString() : null,
@@ -891,11 +995,12 @@ export async function getAssessmentRoster(id: string, actor: Actor) {
   if (!assessment) throw notFound('ASSESSMENT_NOT_FOUND', 'Avaliação não encontrada');
   assertCanManageAssessment(assessment, actor);
 
-  const students = await prisma.studentProfile.findMany({
-    where: { courseId: assessment.subject.courseId },
-    include: { user: { select: { fullName: true } } },
-    orderBy: { studentNumber: 'asc' },
+  const enrolments = await prisma.subjectEnrolment.findMany({
+    where: { subjectId: assessment.subjectId, status: 'ACTIVE' },
+    include: { student: { include: { user: { select: { fullName: true } } } } },
+    orderBy: { student: { studentNumber: 'asc' } },
   });
+  const students = enrolments.map((row) => row.student);
 
   const grades = await prisma.grade.findMany({ where: { assessmentId: id } });
   const byStudent = new Map(grades.map((g) => [g.studentId, g]));
@@ -1003,6 +1108,26 @@ export function assertSubjectNotPublished(publishedAt: Date | null) {
 }
 
 /**
+ * Estudante em défice (FinancialStatus BLOCKED) fica impedido de consultar as
+ * próprias notas. O modelo FinancialStatus referencia o User (id do utilizador),
+ * por isso resolve o perfil de estudante antes de consultar.
+ */
+export async function assertStudentFinancialStanding(studentId: string) {
+  const profile = await prisma.studentProfile.findUnique({
+    where: { id: studentId },
+    select: { userId: true },
+  });
+  if (!profile) return;
+  const standing = await getStudentStatus(profile.userId);
+  if (standing.status === 'BLOCKED') {
+    throw forbidden(
+      'Deve regularizar a sua situação financeira para consultar as notas',
+      'FINANCIAL_BLOCKED',
+    );
+  }
+}
+
+/**
  * Cenário 5: uma nota de exame normal alterada depois de recorrência lançada
  * coloca o estado em RECORRENCIA_EM_REVISAO e é auditada explicitamente.
  */
@@ -1075,11 +1200,14 @@ export async function upsertGrades(assessmentId: string, input: UpsertGradesInpu
 
   const prepared = input.grades.map((g) => {
     assertGradeValueInRange(g.value, assessment.gradingMode, assessment.maxScore);
+    const valuePercent = normalizeGradeValue(g.value, assessment.gradingMode, assessment.maxScore);
     return {
       assessmentId,
       studentId: g.studentId,
       value: g.value,
-      valuePercent: normalizeGradeValue(g.value, assessment.gradingMode, assessment.maxScore),
+      valuePercent,
+      // Basta uma negativa: a marca é permanente (histórico imutável).
+      everNegative: valuePercent < 50,
       comment: g.comment ?? null,
       gradedById: actor.id,
     };
@@ -1087,7 +1215,7 @@ export async function upsertGrades(assessmentId: string, input: UpsertGradesInpu
 
   const before = await prisma.grade.findMany({
     where: { assessmentId, studentId: { in: studentIds } },
-    select: { studentId: true, value: true, comment: true },
+    select: { studentId: true, value: true, comment: true, everNegative: true },
   });
   const beforeByStudent = new Map(before.map((g) => [g.studentId, g]));
 
@@ -1112,6 +1240,8 @@ export async function upsertGrades(assessmentId: string, input: UpsertGradesInpu
         update: {
           value: g.value,
           valuePercent: g.valuePercent,
+          // A negativa registada fica para sempre, mesmo que a nota melhore.
+          everNegative: Boolean(beforeByStudent.get(g.studentId)?.everNegative) || g.everNegative,
           comment: g.comment,
           gradedById: g.gradedById,
         },
@@ -1136,6 +1266,31 @@ export async function upsertGrades(assessmentId: string, input: UpsertGradesInpu
     },
   });
 
+  // Notificação em tempo real por estudante agregado com alteração. Falhas de
+  // notificação nunca interrompem o lançamento das notas.
+  try {
+    const changedStudents = students.filter((s) => changes.some((c) => c.studentId === s.id));
+    await Promise.all(
+      changedStudents.map((student) =>
+        notifyUsers(
+          [{ id: student.userId }],
+          'Nova nota',
+          changes
+            .filter((c) => c.studentId === student.id)
+            .map(
+              (c) =>
+                `${assessment.title}: ${c.from === null ? 'nota lançada' : 'nota actualizada'} para ${c.to}${
+                  c.commentTo ? ` — "${c.commentTo}"` : ''
+                }.`,
+            )
+            .join(' '),
+        ),
+      ),
+    );
+  } catch {
+    // optimização: notificar não pode bloquear o lançamento
+  }
+
   await auditExamChangeAfterRecurrence(assessment, changes, states, actor, correlationId);
 
   const grades = await prisma.grade.findMany({
@@ -1148,8 +1303,16 @@ export async function upsertGrades(assessmentId: string, input: UpsertGradesInpu
 
 export async function listStudentGrades(studentId: string, actor: Actor) {
   await assertStudentDataAccess(studentId, actor);
+
+  await assertStudentFinancialStanding(studentId);
+
   const grades = await prisma.grade.findMany({
-    where: { studentId },
+    where: {
+      studentId,
+      ...(actor.role === 'STUDENT'
+        ? { assessment: { subject: { resultsPublishedAt: { not: null } } } }
+        : {}),
+    },
     include: {
       assessment: {
         select: { id: true, title: true, type: true, gradingMode: true, maxScore: true, weight: true, subjectId: true },
@@ -1188,6 +1351,8 @@ export type SubjectAssessmentForFinal = {
     /** Opcional — usado para detectar alteração de exame após recorrência. */
     createdAt?: Date | string;
     updatedAt?: Date | string;
+    /** Opcional — negativa registada (permanente) veta a dispensa. */
+    everNegative?: boolean;
   }>;
 };
 
@@ -1245,6 +1410,8 @@ export function computeSubjectFinalResult(
   manuallyExempted = false,
   /** Nota de dispensa (0–20) imposta pelo docente; null/undefined = nota de admissão. */
   exemptionGrade?: number | null,
+  /** Mínimo (0–20) de admissão definido pelo docente para dispensa; null = regra institucional. */
+  exemptionMinGrade?: number | null,
 ): Omit<SubjectFinalResult, 'status'> & { status: SituacaoAcademica | null } {
   const hasGrade = (a: SubjectAssessmentForFinal) => a.grades.some((g) => g.studentId === studentId);
   const findGrade = (a: SubjectAssessmentForFinal) => a.grades.find((g) => g.studentId === studentId)!;
@@ -1271,6 +1438,17 @@ export function computeSubjectFinalResult(
         )
       : null;
 
+  // Basta uma negativa: qualquer marca `everNegative` (histórico permanente)
+  // veta a dispensa — valor actual da nota não é relevante.
+  const hasNegativeContinuous = gradedBase.some((a) => findGrade(a).everNegative === true);
+
+  // Elegível à dispensa automática: admissão >= regra institucional (14) ou
+  // mínimo definido pelo docente, e sem nenhuma negativa nas contínuas.
+  const autoExemptible =
+    admissionPercent !== null &&
+    Math.round(admissionPercent * 0.2) >= Math.max(14, Math.round(exemptionMinGrade ?? 14)) &&
+    !hasNegativeContinuous;
+
   // Exame e recorrência lançados.
   const extras = assessments.filter((a) => !baseIds.has(a.id) && hasGrade(a));
   const normalExam = extras.find((a) => a.type === 'EXAM');
@@ -1290,7 +1468,9 @@ export function computeSubjectFinalResult(
   const statusTemp = finalPercent !== null
     ? classifySituacao(Math.round(finalPercent * 0.2), effectiveExamPercent !== null, true)
     : (complete && admissionPercent !== null && effectiveExamPercent === null
-        ? classifySituacao(Math.round(admissionPercent * 0.2), false, false)
+        ? (autoExemptible
+            ? classifySituacao(Math.round(admissionPercent * 0.2), false, false)
+            : 'ADMITIDO_AO_EXAME')
         : null);
 
   // Estado académico detalhado (dispensa → exame normal → recorrência).
@@ -1308,6 +1488,8 @@ export function computeSubjectFinalResult(
     recurrenceMinAdmission: recurrenceMinAdmission ?? null,
     hasRecurrenceEpoch: assessments.some((a) => a.type === 'RECURRENCE'),
     examChangedAfterRecurrence,
+    exemptionMinGrade: exemptionMinGrade ?? null,
+    hasNegativeContinuous,
   });
 
   // Enquanto o estudante aguarda a recorrência não existe nota final: a média
@@ -1391,6 +1573,9 @@ export async function listMyFinalGrades(userId: string) {
 
 export async function getFinalGrades(studentId: string, actor: Actor) {
   await assertStudentDataAccess(studentId, actor);
+
+  await assertStudentFinancialStanding(studentId);
+
   const profile = await prisma.studentProfile.findUnique({ where: { id: studentId } });
   if (!profile || !profile.courseId) throw notFound('STUDENT_PROFILE_NOT_FOUND', 'Estudante sem curso atribuído');
 
@@ -1416,6 +1601,7 @@ export async function getFinalGrades(studentId: string, actor: Actor) {
       subject.recurrenceMinAdmission,
       exemptedSubjects.has(subject.id),
       exemptedSubjects.get(subject.id) ?? null,
+      subject.exemptionMinGrade,
     );
     return {
       subjectId: subject.id,
@@ -1496,4 +1682,42 @@ export async function updateAssessment(id: string, input: UpdateAssessmentInput,
   });
 
   return mapAssessment(assessment);
+}
+
+/**
+ * Elimina uma avaliação sem notas. Com notas lançadas (ou pauta publicada)
+ * a eliminação é recusada — nesses casos a via é corrigir/reabrir.
+ */
+export async function deleteAssessment(assessmentId: string, actor: Actor, correlationId: string) {
+  assertStaff(actor);
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: assessmentId },
+    include: {
+      subject: { select: { id: true, resultsPublishedAt: true } },
+      _count: { select: { grades: true } },
+    },
+  });
+  if (!assessment) throw notFound('ASSESSMENT_NOT_FOUND', 'Avaliação não encontrada');
+
+  if (actor.role === 'TEACHER') {
+    await assertTeacherTeachesSubject(assessment.subjectId, actor);
+  }
+  assertSubjectNotPublished(assessment.subject.resultsPublishedAt);
+  if (assessment._count.grades > 0) {
+    throw conflict(
+      'ASSESSMENT_HAS_GRADES',
+      'A avaliação já tem notas lançadas — corrija as notas ou ignore a avaliação',
+    );
+  }
+
+  await prisma.assessment.delete({ where: { id: assessmentId } });
+
+  await audit({
+    action: 'ASSESSMENT_DELETE',
+    resource: 'Assessment',
+    resourceId: assessmentId,
+    actorId: actor.id,
+    correlationId,
+    metadata: { title: assessment.title, subjectId: assessment.subjectId },
+  });
 }

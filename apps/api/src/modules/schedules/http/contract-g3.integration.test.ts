@@ -50,7 +50,7 @@ describe('Contrato G3 — Financeiro ↔ Avaliações e Horários (03-financeiro
     const profileB = await prisma.studentProfile.findUnique({ where: { studentNumber: 'EST-2026-002' } });
     const teacherUser = await prisma.user.findUnique({ where: { email: 'docente@smartcampus.demo' } });
     const teacher2User = await prisma.user.findUnique({ where: { email: 'docente2@smartcampus.demo' } });
-    const room = await prisma.room.findFirst({ where: { code: 'A-101' } });
+    const room = await prisma.room.findFirst({ where: { code: 'D2-101' } });
     if (!subject || !profileA || !profileB || !teacherUser || !teacher2User || !room) {
       throw new Error('Seed necessário antes dos testes (npm run db:seed)');
     }

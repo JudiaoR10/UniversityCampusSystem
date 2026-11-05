@@ -1,3 +1,4 @@
+import type { OpsRoomView } from '@smart-campus/shared-types';
 import type { CampusBuildingView, OpsMetric } from './types';
 
 function pinColor(building: CampusBuildingView, metric: OpsMetric): string {
@@ -17,39 +18,50 @@ function pinColor(building: CampusBuildingView, metric: OpsMetric): string {
 }
 
 function pinLabel(building: CampusBuildingView, metric: OpsMetric): string {
-  if (metric === 'occupancy') return `${building.utilisation.value}%`;
-  if (metric === 'temperature') return `${building.temperature.value}°`;
-  if (metric === 'co2') return `${building.co2.value}`;
-  return `${building.humidity.value}%`;
+  const fmt = (value: number | null, suffix: string) => (value == null ? '—' : `${value}${suffix}`);
+  if (metric === 'occupancy') return fmt(building.utilisation.value, '%');
+  if (metric === 'temperature') return fmt(building.temperature.value, '°');
+  if (metric === 'co2') return fmt(building.co2.value, '');
+  return fmt(building.humidity.value, '%');
+}
+
+function roomFill(room: OpsRoomView, metric: OpsMetric) {
+  if (metric === 'occupancy') return room.occupied ? '#1a6b5c' : '#d7e3dc';
+  if (metric === 'temperature') {
+    if (room.temperature == null) return '#dce4ec';
+    if (room.temperature > 27) return '#c45c26';
+    return '#1a6b5c';
+  }
+  if (room.co2 == null) return '#dce4ec';
+  if (room.co2 > 1000) return '#b91c1c';
+  if (room.co2 > 800) return '#b45309';
+  return '#1a6b5c';
 }
 
 export function CampusMap({
   buildings,
+  rooms = [],
   metric,
   selectedId,
   onSelect,
 }: {
   buildings: CampusBuildingView[];
+  rooms?: OpsRoomView[];
   metric: OpsMetric;
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const d2 = buildings.find((building) => building.code === 'D2') ?? buildings[0];
+  const floors = [0, 1];
+
   return (
     <div className="campus-ops-map relative h-full min-h-[280px] overflow-hidden rounded-2xl border border-campus-line/70 sm:min-h-[360px]">
-      <svg viewBox="0 0 1000 640" className="h-full w-full" role="img" aria-label="Mapa interactivo do campus UJAC">
+      <svg viewBox="0 0 1000 640" className="h-full w-full" role="img" aria-label="Mapa esquemático do edifício D2">
         <defs>
           <linearGradient id="ground" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#dce8df" />
             <stop offset="55%" stopColor="#e8eef4" />
             <stop offset="100%" stopColor="#d5e0ea" />
-          </linearGradient>
-          <linearGradient id="bldgA" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f7fafc" />
-            <stop offset="100%" stopColor="#c5d4e4" />
-          </linearGradient>
-          <linearGradient id="bldgB" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#fff8f2" />
-            <stop offset="100%" stopColor="#e7cbb8" />
           </linearGradient>
           <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
             <feDropShadow dx="0" dy="8" stdDeviation="8" floodColor="#0f2744" floodOpacity="0.12" />
@@ -57,51 +69,61 @@ export function CampusMap({
         </defs>
 
         <rect width="1000" height="640" fill="url(#ground)" />
-        <path
-          d="M0 470 C180 430 320 520 520 480 C720 440 860 500 1000 460 L1000 640 L0 640 Z"
-          fill="#b7cfc0"
-          opacity="0.55"
-        />
-        <path
-          d="M40 520 C200 500 280 560 460 540 C650 520 780 580 960 550"
-          fill="none"
-          stroke="#8eae9d"
-          strokeWidth="18"
-          strokeLinecap="round"
-          opacity="0.45"
-        />
-        <text x="70" y="560" fill="#3f5d4f" fontSize="18" fontFamily="IBM Plex Sans, sans-serif">
-          Jardim central
+        <path d="M0 500 C220 460 420 540 1000 490 L1000 640 L0 640 Z" fill="#b7cfc0" opacity="0.5" />
+        <text x="48" y="580" fill="#3f5d4f" fontSize="16" fontFamily="IBM Plex Sans, sans-serif">
+          Campus UJAC · silhueta do D2
         </text>
 
-        <g filter="url(#soft)" className="campus-ops-building" style={{ animationDelay: '80ms' }}>
-          <polygon points="180,360 320,290 460,360 320,430" fill="url(#bldgA)" stroke="#8ea3b8" strokeWidth="2" />
-          <polygon points="180,360 180,430 320,500 320,430" fill="#9eb2c6" stroke="#7f95aa" strokeWidth="2" />
-          <polygon points="320,430 320,500 460,430 460,360" fill="#7f98b0" stroke="#6d879f" strokeWidth="2" />
-          <text x="250" y="390" fill="#0f2744" fontSize="22" fontWeight="600" fontFamily="Source Serif 4, serif">
-            A
-          </text>
-          <text x="210" y="520" fill="#163a5f" fontSize="16" fontFamily="IBM Plex Sans, sans-serif">
-            Ciências
-          </text>
-        </g>
-
-        <g filter="url(#soft)" className="campus-ops-building" style={{ animationDelay: '160ms' }}>
-          <polygon points="560,300 700,230 840,300 700,370" fill="url(#bldgB)" stroke="#c4a08a" strokeWidth="2" />
-          <polygon points="560,300 560,370 700,440 700,370" fill="#d4b09a" stroke="#b9927a" strokeWidth="2" />
-          <polygon points="700,370 700,440 840,370 840,300" fill="#c4987e" stroke="#b07f64" strokeWidth="2" />
-          <text x="670" y="330" fill="#0f2744" fontSize="22" fontWeight="600" fontFamily="Source Serif 4, serif">
-            B
-          </text>
-          <text x="620" y="470" fill="#163a5f" fontSize="16" fontFamily="IBM Plex Sans, sans-serif">
-            Laboratórios
-          </text>
-        </g>
-
-        <ellipse cx="500" cy="560" rx="70" ry="28" fill="#f4f7fa" stroke="#c9d6e4" strokeWidth="2" opacity="0.9" />
-        <text x="470" y="565" fill="#163a5f" fontSize="14" fontFamily="IBM Plex Sans, sans-serif">
-          Praça
-        </text>
+        {floors.map((floor, floorIndex) => {
+          const y = 70 + floorIndex * 230;
+          const floorRooms = rooms.filter((room) => room.floor === floor && (!d2 || room.buildingId === d2.id));
+          return (
+            <g key={floor} filter="url(#soft)">
+              <rect x="80" y={y} width="840" height="200" rx="28" fill="#f7faf8" stroke="#c5d4cc" strokeWidth="2" />
+              <text x="108" y={y + 36} fill="#1a6b5c" fontSize="18" fontWeight="700" fontFamily="Manrope, sans-serif">
+                Piso {floor}
+              </text>
+              {floorRooms.map((room, index) => {
+                const width = Math.min(150, 700 / Math.max(floorRooms.length, 1) - 12);
+                const x = 118 + index * (width + 16);
+                return (
+                  <g key={room.id} style={{ cursor: 'pointer' }} onClick={() => d2 && onSelect(d2.id)}>
+                    <rect
+                      x={x}
+                      y={y + 58}
+                      width={width}
+                      height="110"
+                      rx="16"
+                      fill={roomFill(room, metric)}
+                      opacity={room.occupied ? 0.92 : 0.55}
+                    />
+                    <text
+                      x={x + width / 2}
+                      y={y + 108}
+                      textAnchor="middle"
+                      fill={room.occupied || metric !== 'occupancy' ? '#fff' : '#10233d'}
+                      fontSize="13"
+                      fontWeight="700"
+                      fontFamily="IBM Plex Sans, sans-serif"
+                    >
+                      {room.code}
+                    </text>
+                    <text
+                      x={x + width / 2}
+                      y={y + 130}
+                      textAnchor="middle"
+                      fill={room.occupied || metric !== 'occupancy' ? '#f4f7fa' : '#1a3a5c'}
+                      fontSize="11"
+                      fontFamily="IBM Plex Sans, sans-serif"
+                    >
+                      {room.occupied ? `${room.people} pess.` : 'livre'}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          );
+        })}
 
         {buildings.map((b, idx) => {
           const cx = (b.mapX / 100) * 1000;
@@ -134,8 +156,8 @@ export function CampusMap({
       </svg>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-white/70 to-transparent p-4">
-        <p className="font-display text-xl font-semibold text-campus-ink">Campus UJAC</p>
-        <p className="text-xs text-campus-deep/70">Mapa operacional · pinos por métrica seleccionada</p>
+        <p className="font-display text-xl font-semibold text-campus-ink">Edifício D2</p>
+        <p className="text-xs text-campus-deep/70">Dois pisos · salas coloridas pela métrica seleccionada</p>
       </div>
     </div>
   );

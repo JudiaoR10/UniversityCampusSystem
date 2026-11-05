@@ -3,6 +3,7 @@ import type { CreateRoomInput } from '@smart-campus/validation';
 import { conflict, notFound } from '../../../lib/errors.js';
 import { prisma } from '../../../lib/prisma.js';
 import { audit } from '../../audit/application/auditService.js';
+import { computeOccupancyByRoom } from '../../ops/application/occupancyService.js';
 
 function mapRoom(room: {
   id: string;
@@ -29,11 +30,22 @@ function mapRoom(room: {
 }
 
 export async function listRooms() {
-  const rooms = await prisma.room.findMany({
-    include: { building: { select: { id: true, code: true, name: true } } },
-    orderBy: { code: 'asc' },
+  const [rooms, occupancy] = await Promise.all([
+    prisma.room.findMany({
+      include: { building: { select: { id: true, code: true, name: true } } },
+      orderBy: { code: 'asc' },
+    }),
+    computeOccupancyByRoom(),
+  ]);
+  return rooms.map((room) => {
+    const mapped = mapRoom(room);
+    if (room.status === 'MAINTENANCE' || room.status === 'RESERVED') return mapped;
+    const live = occupancy.byRoom.get(room.id);
+    return {
+      ...mapped,
+      status: live?.occupied ? 'OCCUPIED' : room.status === 'OCCUPIED' ? 'AVAILABLE' : room.status,
+    };
   });
-  return rooms.map(mapRoom);
 }
 
 export async function getRoom(id: string) {

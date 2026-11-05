@@ -176,6 +176,16 @@ assessmentsRouter.patch('/assessments/:id', authenticate, authorize(...STAFF), a
   }
 });
 
+// Eliminar avaliação (staff) — 409 se já tiver notas ou pauta publicada.
+assessmentsRouter.delete('/assessments/:id', authenticate, authorize(...STAFF), async (req, res, next) => {
+  try {
+    await assessmentService.deleteAssessment(req.params.id, req.user!, req.correlationId);
+    success(res, { id: req.params.id });
+  } catch (err) {
+    next(err);
+  }
+});
+
 assessmentsRouter.get('/assessments/:id/grades', authenticate, authorize(...STAFF), async (req, res, next) => {
   try {
     success(res, await assessmentService.listAssessmentGrades(req.params.id, req.user!));

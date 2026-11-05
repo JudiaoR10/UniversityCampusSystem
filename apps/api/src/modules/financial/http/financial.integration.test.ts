@@ -15,7 +15,7 @@ let admin: string, finance: string, student: string, other: string, teacher: str
 let studentId: string, otherId: string;
 let debtId: string, otherDebtId: string;
 const bearer = (token: string) => `Bearer ${token}`;
-const debtInput = (id = studentId) => ({ studentId: id, title: 'Propina integração', amount: 100, origin: 'TEST', dueDate: '2099-01-01T00:00:00.000Z' });
+const debtInput = (id = studentId) => ({ studentId: id, title: 'Propina integração', amount: 100, origin: 'TUITION', dueDate: '2099-01-01T00:00:00.000Z' });
 async function login(email: string, password: string) {
   const res = await request(app).post('/api/v1/auth/login').send({ email, password });
   expect(res.status).toBe(200);
@@ -216,5 +216,62 @@ describe('Financeiro integrado no Core oficial', () => {
       expect(refreshToken).not.toBe(session.tokens.refreshToken);
       expect((await client.logout()).data.ok).toBe(true);
     } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+  });
+  it('rejeita origem fora do catálogo e cancela dívida aberta', async () => {
+    expect((await request(app).post(api + '/debts').set('Authorization', bearer(finance)).send({ ...debtInput(), origin: 'TEST' })).status).toBe(400);
+    const debt = await createDebt();
+    const cancelled = await request(app).post(`${api}/debts/${debt.id}/cancel`).set('Authorization', bearer(finance));
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body.data.status).toBe('CANCELADA');
+    expect((await request(app).post(`${api}/debts/${debt.id}/cancel`).set('Authorization', bearer(finance))).status).toBe(409);
+    const contested = await createDebt();
+    expect((await request(app).post(api + '/analysis-requests').set('Authorization', bearer(student)).send({ debtId: contested.id, reason: 'Pedido para impedir o cancelamento.' })).status).toBe(201);
+    expect((await request(app).post(`${api}/debts/${contested.id}/cancel`).set('Authorization', bearer(finance))).status).toBe(409);
+  });
+  it('lista do campus, bloqueados, totais, propina por matrícula e comprovativo', async () => {
+    const overdue = await request(app).post(api + '/debts').set('Authorization', bearer(finance)).send({
+      ...debtInput(), title: 'Multa vencida campus', origin: 'FINE', dueDate: '2020-01-01T00:00:00.000Z',
+    });
+    expect(overdue.status).toBe(201);
+    const worklist = await request(app).get(api + '/debts').query({ origin: 'FINE', status: 'VENCIDA' }).set('Authorization', bearer(finance));
+    expect(worklist.status).toBe(200);
+    expect(worklist.body.data.some((row: { id: string }) => row.id === overdue.body.data.id)).toBe(true);
+    expect(worklist.body.data[0].student.userId).toBeTruthy();
+    await request(app).patch(api + '/policies/DEFAULT_POLICY').set('Authorization', bearer(admin)).send({ gracePeriodDays: 0, autoBlockEnabled: true, maxDebtAmount: 0 });
+    const blocked = await request(app).get(api + '/students/blocked').set('Authorization', bearer(finance));
+    expect(blocked.status).toBe(200);
+    expect(blocked.body.data.some((row: { student: { userId: string } }) => row.student.userId === studentId)).toBe(true);
+    const report = await request(app).get(api + '/reports').set('Authorization', bearer(finance));
+    expect(report.body.data.totals).toEqual(expect.objectContaining({ outstanding: expect.any(Number), overdue: expect.any(Number), collectedMonth: expect.any(Number) }));
+    const course = await prisma.course.findFirstOrThrow();
+    const profile = await prisma.studentProfile.create({
+      data: { userId: studentId, studentNumber: `FIN-${prefix.slice(0, 8)}`, courseId: course.id, status: 'ACTIVE' },
+    });
+    await prisma.enrolment.create({
+      data: { studentId: profile.id, courseId: course.id, academicYear: '2099', status: 'ACTIVE' },
+    });
+    const issued = await request(app).post(api + '/debts/from-enrolments').set('Authorization', bearer(finance)).send({
+      courseId: course.id, academicYear: '2099', amount: 250, dueDate: '2099-06-01T00:00:00.000Z',
+    });
+    expect(issued.status).toBe(201);
+    expect(issued.body.data.created).toBeGreaterThanOrEqual(1);
+    const repeat = await request(app).post(api + '/debts/from-enrolments').set('Authorization', bearer(finance)).send({
+      courseId: course.id, academicYear: '2099', amount: 250, dueDate: '2099-06-01T00:00:00.000Z',
+    });
+    expect(repeat.body.data.created).toBe(0);
+    expect(repeat.body.data.skipped).toBeGreaterThanOrEqual(1);
+    const payable = await createDebt();
+    const paid = await request(app).post(api + '/payments').set('Authorization', bearer(finance)).send({
+      debtId: payable.id, amountPaid: 100, paymentMethod: 'CASH_DEPOSIT', referenceCode: randomUUID(),
+    });
+    expect(paid.status).toBe(201);
+    const receipt = await request(app).get(`${api}/payments/${paid.body.data.payment.id}/receipt`).set('Authorization', bearer(student));
+    expect(receipt.status).toBe(200);
+    expect(receipt.body.data).toMatchObject({ kind: 'payment', student: { userId: studentId }, debt: { id: payable.id } });
+    expect((await request(app).get(`${api}/payments/${paid.body.data.payment.id}/receipt`).set('Authorization', bearer(other))).status).toBe(403);
+    const queue = await request(app).get(api + '/notifications').set('Authorization', bearer(finance));
+    expect(queue.status).toBe(200);
+    expect(queue.body.data[0].student.userId).toBeTruthy();
+    expect((await request(app).get(api + '/notifications').set('Authorization', bearer(student))).status).toBe(403);
   });
 });

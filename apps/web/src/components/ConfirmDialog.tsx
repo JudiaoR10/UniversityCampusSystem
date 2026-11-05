@@ -3,14 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export type ConfirmOptions = {
   title: string;
   message?: string;
+  description?: string;
   details?: Array<{ label: string; value: string }>;
   confirmLabel?: string;
+  confirmTone?: 'danger' | 'primary';
 };
 
 type ConfirmDialogProps = ConfirmOptions & {
   open?: boolean;
-  description?: string;
-  confirmTone?: 'danger' | 'primary';
   busy?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -18,7 +18,7 @@ type ConfirmDialogProps = ConfirmOptions & {
 
 /**
  * Diálogo partilhado pelos fluxos directos e pelo hook useConfirm.
- * Aceita tanto description como message para manter os contratos existentes.
+ * Aceita description ou message, fecha com Escape ou clique fora.
  */
 export function ConfirmDialog({
   open = true,
@@ -64,7 +64,10 @@ export function ConfirmDialog({
         if (event.target === event.currentTarget && !busy) onCancel();
       }}
     >
-      <div className="surface w-full max-w-md p-5">
+      <div
+        className="surface w-full max-w-md p-5"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <p className="eyebrow">Confirmação</p>
         <h2 id="confirm-dialog-title" className="mt-1 font-display text-lg font-semibold text-campus-ink">
           {title}
@@ -124,11 +127,7 @@ export function useConfirm() {
   }, []);
 
   const dialog = options ? (
-    <ConfirmDialog
-      {...options}
-      onCancel={() => settle(false)}
-      onConfirm={() => settle(true)}
-    />
+    <ConfirmDialog {...options} onCancel={() => settle(false)} onConfirm={() => settle(true)} />
   ) : null;
 
   return { confirm, dialog };

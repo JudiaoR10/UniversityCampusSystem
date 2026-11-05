@@ -55,6 +55,26 @@ export async function findUserByEmail(email: string) {
   return prisma.user.findUnique({ where: { email }, select: { id: true } });
 }
 
+export async function findUserForTeacherLink(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    include: { role: true, teacherProfile: { select: { id: true } } },
+  });
+}
+
+export async function createTeacherProfileForUser(data: {
+  userId: string;
+  employeeCode: string;
+  departmentId: string;
+  title?: string | null;
+  phone?: string | null;
+}) {
+  return prisma.teacherProfile.create({
+    data,
+    include: { department: departmentRef, user: userRef },
+  });
+}
+
 export async function findRoleByCode(code: 'TEACHER') {
   return prisma.role.findUnique({ where: { code }, select: { id: true, code: true } });
 }
@@ -91,17 +111,12 @@ export async function updateTeacher(id: string, data: UpdateTeacherData) {
   });
 }
 
-// Remove a conta (User) e o perfil em conjunto: a conta não pode ficar órfã a permitir login.
-// O perfil é apagado por cascade.
-export async function deleteTeacherAccount(id: string) {
-  return prisma.$transaction(async (tx) => {
-    const profile = await tx.teacherProfile.findUnique({
-      where: { id },
-      select: { id: true, userId: true },
-    });
-    if (!profile) return null;
-
-    await tx.user.delete({ where: { id: profile.userId } });
-    return profile;
+export async function deleteTeacherProfile(id: string) {
+  const profile = await prisma.teacherProfile.findUnique({
+    where: { id },
+    select: { id: true, userId: true },
   });
+  if (!profile) return null;
+  await prisma.teacherProfile.delete({ where: { id: profile.id } });
+  return profile;
 }

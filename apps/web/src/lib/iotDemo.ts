@@ -25,6 +25,7 @@ const STATUSES: IotDeviceStatus[] = ['ONLINE', 'OFFLINE', 'MAINTENANCE', 'UNKNOW
 const METRIC_LABELS: Record<string, string> = {
   temperature: 'Temperatura',
   humidity: 'Humidade',
+  co2: 'CO₂',
 };
 
 /** "há 5 min", "há 2 h", etc., a partir de uma data ISO. */

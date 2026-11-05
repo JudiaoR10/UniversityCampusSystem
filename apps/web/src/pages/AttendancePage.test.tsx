@@ -9,6 +9,7 @@ vi.mock('../lib/auth', () => ({
 }));
 
 import { AttendancePage } from './AttendancePage';
+import { changeSelect } from '../test/selectField';
 
 const sampleSession: ScheduleDto = {
   id: 'schedule-1',
@@ -105,11 +106,11 @@ describe('AttendancePage', () => {
     const api = setAuth('TEACHER');
     render(<AttendancePage />);
 
-    const sessionSelect = await screen.findByRole('combobox');
-    fireEvent.change(sessionSelect, { target: { value: 'schedule-1' } });
+    await screen.findByLabelText('Sessão');
+    changeSelect('Sessão', 'schedule-1');
 
-    const statusSelect = await screen.findByLabelText('Estado de EST-2026-001');
-    fireEvent.change(statusSelect, { target: { value: 'ABSENT' } });
+    await screen.findByLabelText('Estado de EST-2026-001');
+    changeSelect('Estado de EST-2026-001', 'ABSENT');
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar assiduidade' }));
 

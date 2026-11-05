@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import type { BuildingDto, LaboratoryDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { PageIntro } from '../components/PageIntro';
+import { SelectField } from '../components/SelectField';
+import { DeleteAction, EditAction, TableActions } from '../components/ActionButtons';
 
 type LabForm = { code: string; name: string; description: string; buildingId: string };
 
@@ -92,21 +94,22 @@ export function LaboratoriesPage() {
         description="Laboratórios e espaços técnicos associados aos edifícios."
       />
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="alert-error">{error}</p> : null}
       {loading ? <p className="text-sm text-campus-deep/70">A carregar laboratórios…</p> : null}
 
       {canManage ? (
         <form onSubmit={onSubmit} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-6">
+          <h2 className="section-title md:col-span-2 xl:col-span-6">{editingId ? 'Editar laboratório' : 'Novo laboratório'}</h2>
           <input className="field-input !mt-0" placeholder="Código" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
           <input className="field-input !mt-0" placeholder="Nome" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
           <input className="field-input !mt-0" placeholder="Descrição" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <select className="field-input !mt-0" value={form.buildingId} onChange={(e) => setForm({ ...form, buildingId: e.target.value })} required>
-            {buildings.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.code} — {b.name}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            value={form.buildingId}
+            onChange={(buildingId) => setForm({ ...form, buildingId })}
+            required
+            placeholder="Seleccionar edifício"
+            options={buildings.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }))}
+          />
           <button type="submit" className="btn-primary w-full">
             {editingId ? 'Guardar alterações' : 'Criar laboratório'}
           </button>
@@ -138,14 +141,10 @@ export function LaboratoriesPage() {
                 <td className="px-4 py-3">{lab.description ?? '—'}</td>
                 {canManage ? (
                   <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <button type="button" className="btn-ghost" onClick={() => startEdit(lab)}>
-                        Editar
-                      </button>
-                      <button type="button" className="btn-ghost text-red-600 hover:text-red-700" onClick={() => onDelete(lab.id)}>
-                        Eliminar
-                      </button>
-                    </div>
+                    <TableActions>
+                      <EditAction onClick={() => startEdit(lab)} />
+                      <DeleteAction onClick={() => onDelete(lab.id)} />
+                    </TableActions>
                   </td>
                 ) : null}
               </tr>

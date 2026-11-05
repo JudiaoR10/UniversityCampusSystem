@@ -10,14 +10,25 @@ function colorFor(intensity: number): string {
 }
 
 export function WeeklyPatternChart({ cells }: { cells: WeeklyCell[] }) {
+  const isDemo = cells.length > 0 && cells.every((c) => c.isDemo);
+  const hasSignal = cells.some((c) => c.intensity > 0);
+
   return (
     <section className="surface p-5 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h3 className="font-display text-xl font-semibold text-campus-ink">Padrões semanais</h3>
-          <p className="text-sm text-campus-deep/70">Intensidade horária (leituras / procura estimada)</p>
+          <p className="text-sm text-campus-deep/70">
+            {hasSignal
+              ? 'Intensidade horária a partir de leituras MQTT dos últimos 7 dias'
+              : 'Ainda sem leituras vivas nesta semana'}
+          </p>
         </div>
-        <span className="rounded-md bg-campus-accent/10 px-2 py-1 text-xs font-semibold text-campus-accent">DEMO</span>
+        {isDemo ? (
+          <span className="rounded-md bg-campus-accent/10 px-2 py-1 text-xs font-semibold text-campus-accent">DEMO</span>
+        ) : (
+          <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">Telemetria</span>
+        )}
       </div>
 
       <div className="mt-4 overflow-x-auto">

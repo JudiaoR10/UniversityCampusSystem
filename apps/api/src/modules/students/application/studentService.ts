@@ -94,6 +94,41 @@ export async function create(input: CreateStudentProfileInput, ctx: AuditContext
     throw conflict('STUDENT_NUMBER_EXISTS', `Já existe um estudante com o número '${input.studentNumber}'`);
   }
 
+  if ('userId' in input) {
+    const user = await studentRepository.findUserForStudentLink(input.userId);
+    if (!user) throw notFound('USER_NOT_FOUND', 'Utilizador não encontrado');
+    if (!user.isActive) throw conflict('USER_INACTIVE', 'A conta está inactiva');
+    if (user.role.code !== 'STUDENT') {
+      throw conflict('USER_ROLE_MISMATCH', 'A conta não tem o papel STUDENT');
+    }
+    if (user.studentProfile) {
+      throw conflict('STUDENT_PROFILE_EXISTS', 'Esta conta já tem perfil de estudante');
+    }
+
+    try {
+      const row = await studentRepository.createStudentProfileForUser({
+        userId: user.id,
+        studentNumber: input.studentNumber,
+        courseId: input.courseId,
+        yearOfStudy: input.yearOfStudy ?? null,
+        phone: input.phone ?? null,
+      });
+      await audit({
+        action: 'STUDENT_PROFILE_CREATED',
+        resource: 'StudentProfile',
+        resourceId: row.id,
+        ...auditContext(ctx),
+        metadata: { userId: user.id },
+      });
+      return toDto(row);
+    } catch (error) {
+      if (isDuplicate(error)) {
+        throw conflict('STUDENT_DUPLICATE', 'Número de estudante ou perfil já existente');
+      }
+      throw error;
+    }
+  }
+
   const role = await studentRepository.findRoleByCode('STUDENT');
   if (!role) {
     throw conflict('ROLE_NOT_FOUND', 'Role STUDENT não existe na base de dados — corra o seed');
@@ -190,12 +225,12 @@ export async function remove(id: string, ctx: AuditContext) {
 
   let removed: { id: string; userId: string } | null;
   try {
-    removed = await studentRepository.deleteStudentAccount(id);
+    removed = await studentRepository.deleteStudentProfile(id);
   } catch (error) {
     if (isForeignKeyViolation(error)) {
       throw conflict(
-        'USER_HAS_DEPENDENCIES',
-        'A conta tem ocorrências ou acções de manutenção associadas e não pode ser removida',
+        'STUDENT_HAS_DEPENDENCIES',
+        'O perfil tem dependências associadas e não pode ser removido',
       );
     }
     throw error;
@@ -213,13 +248,7 @@ export async function remove(id: string, ctx: AuditContext) {
     resource: 'StudentProfile',
     resourceId: existing.id,
     ...auditContext(ctx),
-  });
-  await audit({
-    action: 'USER_DELETE',
-    resource: 'User',
-    resourceId: removed.userId,
-    ...auditContext(ctx),
-    metadata: { fullName: existing.user.fullName, role: 'STUDENT' },
+    metadata: { userId: removed.userId },
   });
 
   return { id: existing.id, deleted: true as const };

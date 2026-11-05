@@ -97,6 +97,40 @@ export async function create(input: CreateTeacherProfileInput, ctx: AuditContext
     );
   }
 
+  if ('userId' in input) {
+    const user = await teacherRepository.findUserForTeacherLink(input.userId);
+    if (!user) throw notFound('USER_NOT_FOUND', 'Utilizador não encontrado');
+    if (!user.isActive) throw conflict('USER_INACTIVE', 'A conta está inactiva');
+    if (user.role.code !== 'TEACHER') {
+      throw conflict('USER_ROLE_MISMATCH', 'A conta não tem o papel TEACHER');
+    }
+    if (user.teacherProfile) {
+      throw conflict('TEACHER_PROFILE_EXISTS', 'Esta conta já tem perfil de docente');
+    }
+    try {
+      const row = await teacherRepository.createTeacherProfileForUser({
+        userId: user.id,
+        employeeCode: input.employeeCode,
+        departmentId: input.departmentId,
+        title: input.title ?? null,
+        phone: input.phone ?? null,
+      });
+      await audit({
+        action: 'TEACHER_PROFILE_CREATED',
+        resource: 'TeacherProfile',
+        resourceId: row.id,
+        ...auditContext(ctx),
+        metadata: { userId: user.id },
+      });
+      return toDto(row);
+    } catch (error) {
+      if (isDuplicate(error)) {
+        throw conflict('TEACHER_DUPLICATE', 'Código de docente ou perfil já existente');
+      }
+      throw error;
+    }
+  }
+
   const role = await teacherRepository.findRoleByCode('TEACHER');
   if (!role) {
     throw conflict('ROLE_NOT_FOUND', 'Role TEACHER não existe na base de dados — corra o seed');
@@ -193,12 +227,12 @@ export async function remove(id: string, ctx: AuditContext) {
 
   let removed: { id: string; userId: string } | null;
   try {
-    removed = await teacherRepository.deleteTeacherAccount(id);
+    removed = await teacherRepository.deleteTeacherProfile(id);
   } catch (error) {
     if (isForeignKeyViolation(error)) {
       throw conflict(
-        'USER_HAS_DEPENDENCIES',
-        'A conta tem ocorrências ou acções de manutenção associadas e não pode ser removida',
+        'TEACHER_HAS_DEPENDENCIES',
+        'O perfil tem dependências associadas e não pode ser removido',
       );
     }
     throw error;
@@ -211,13 +245,7 @@ export async function remove(id: string, ctx: AuditContext) {
     resource: 'TeacherProfile',
     resourceId: existing.id,
     ...auditContext(ctx),
-  });
-  await audit({
-    action: 'USER_DELETE',
-    resource: 'User',
-    resourceId: removed.userId,
-    ...auditContext(ctx),
-    metadata: { fullName: existing.user.fullName, role: 'TEACHER' },
+    metadata: { userId: removed.userId },
   });
 
   return { id: existing.id, deleted: true as const };

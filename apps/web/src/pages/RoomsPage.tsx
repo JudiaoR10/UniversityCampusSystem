@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import type { BuildingDto, RoomDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { PageIntro } from '../components/PageIntro';
+import { SelectField } from '../components/SelectField';
+import { DeleteAction, EditAction, TableActions } from '../components/ActionButtons';
 
 type RoomForm = {
   code: string;
@@ -115,29 +117,28 @@ export function RoomsPage() {
         description="Módulo funcional do Core — gestão de salas e disponibilidade."
       />
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="alert-error">{error}</p> : null}
       {loading ? <p className="text-sm text-campus-deep/70">A carregar salas…</p> : null}
 
       {canManage ? (
         <form onSubmit={onSubmit} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-7">
+          <h2 className="section-title md:col-span-2 xl:col-span-7">{editingId ? 'Editar sala' : 'Nova sala'}</h2>
           <input className="field-input !mt-0" placeholder="Código" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
           <input className="field-input !mt-0" placeholder="Nome" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
           <input className="field-input !mt-0" type="number" placeholder="Capacidade" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} required />
           <input className="field-input !mt-0" type="number" placeholder="Piso" value={form.floor} onChange={(e) => setForm({ ...form, floor: Number(e.target.value) })} required />
-          <select className="field-input !mt-0" value={form.buildingId} onChange={(e) => setForm({ ...form, buildingId: e.target.value })} required>
-            {buildings.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.code} — {b.name}
-              </option>
-            ))}
-          </select>
-          <select className="field-input !mt-0" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as RoomDto['status'] })}>
-            {estados.map((estado) => (
-              <option key={estado} value={estado}>
-                {estado}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            value={form.buildingId}
+            onChange={(buildingId) => setForm({ ...form, buildingId })}
+            required
+            placeholder="Seleccionar edifício"
+            options={buildings.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }))}
+          />
+          <SelectField
+            value={form.status}
+            onChange={(status) => setForm({ ...form, status: status as RoomDto['status'] })}
+            options={estados.map((estado) => ({ value: estado, label: estado }))}
+          />
           <button type="submit" className="btn-primary w-full">
             {editingId ? 'Guardar alterações' : 'Criar sala'}
           </button>
@@ -173,14 +174,10 @@ export function RoomsPage() {
                 <td className="px-4 py-3">{room.status}</td>
                 {canManage ? (
                   <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <button type="button" className="btn-ghost" onClick={() => startEdit(room)}>
-                        Editar
-                      </button>
-                      <button type="button" className="btn-ghost text-red-600 hover:text-red-700" onClick={() => onDelete(room.id)}>
-                        Eliminar
-                      </button>
-                    </div>
+                    <TableActions>
+                      <EditAction onClick={() => startEdit(room)} />
+                      <DeleteAction onClick={() => onDelete(room.id)} />
+                    </TableActions>
                   </td>
                 ) : null}
               </tr>

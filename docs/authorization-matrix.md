@@ -19,7 +19,11 @@ FINANCE é um perfil acrescentado pelo módulo financeiro. Não recebe permissõ
 | Operação financeira | STUDENT | FINANCE | ADMIN | Outros perfis |
 |---|---|---|---|---|
 | Consultar dívida, estado, histórico e avisos | Apenas próprios | Sim | Sim | Não |
-| Criar dívida e confirmar pagamento | Não | Sim | **Não** | Não |
+| Listar dívidas do campus, bloqueados e fila de avisos | Não | Sim | Sim | Não |
+| Criar dívida, emitir propina por matrícula e confirmar pagamento | Não | Sim | **Não** | Não |
+| Cancelar dívida aberta | Não | Sim | **Não** | Não |
+| Imprimir comprovativo de pagamento | Próprio | Sim | Sim | Não |
+| Imprimir comprovativo salarial | Não | Sim | Sim | Não |
 | Contestar dívida | Apenas própria | Não | Não | Não |
 | Resolver contestação | Não | Sim | **Não** | Não |
 | Consultar relatório e entrega de avisos | Não | Sim | Sim | Não |
@@ -32,13 +36,13 @@ A criação de utilizadores pertence exclusivamente ao Core. O módulo financeir
 
 | Acção na interface | STUDENT | FINANCE | ADMIN |
 |---|---|---|---|
-| Dívidas, histórico de pagamentos paginado, situação e avisos | Próprios | Estudante seleccionado | Estudante seleccionado |
+| Dívidas, histórico de pagamentos paginado, situação e avisos | Próprios | Campus ou estudante seleccionado | Campus ou estudante seleccionado |
 | Pesquisar estudante por nome ou matrícula | Não | Sim | Sim |
-| Registar dívida e pagamento integral | Não | Sim | **Não** |
+| Registar dívida, cancelar, emitir propina e pagamento integral | Não | Sim | **Não** |
 | Submeter contestação | Própria | Não | Não |
 | Consultar contestações e decisões | Próprias | Todas ou do estudante seleccionado | Todas ou do estudante seleccionado |
 | Decidir contestação pendente com justificação | Não | Sim | **Não** |
-| Resumo de contagens do campus e estado dos avisos | Não | Sim | Sim |
+| Resumo com totais MZN, bloqueados e fila de avisos | Não | Sim | Sim |
 | Reenviar avisos pendentes ou falhados | Não | Sim | **Não** |
 | Engrenagem de políticas: tolerância, limite vencido e bloqueio automático | Não | Não | Sim |
 

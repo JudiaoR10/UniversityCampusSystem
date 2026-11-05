@@ -3,6 +3,8 @@ import type { EmployeeCategory, EmployeeDto, EmployeeSalaryDto, SalaryChangeRequ
 import { useAuth } from '../../lib/auth';
 import { currentFinancialMonth } from './FinancialMonthlyReports';
 import { BusyLabel, date, errorMessage, LoadState, money, SuccessFeedback, useFinancialLoad } from './shared';
+import { printSalaryReceipt } from './printReceipts';
+import { IconActionButton } from '../ActionButtons';
 
 const categories: Array<{ value: '' | EmployeeCategory; label: string }> = [
   { value: '', label: 'Todas as categorias' }, { value: 'TEACHER', label: 'Docentes' },
@@ -281,6 +283,7 @@ function SalaryCard({ salary, canOperate, api, onChanged, onSuccess }: {
     <div className="flex justify-between gap-3"><div><h4 className="font-semibold">{salary.employee.fullName}</h4><p className="text-sm">{salary.employee.employeeCode}</p></div><strong>{money(salary.amount)}</strong></div>
     <p className="mt-2 text-sm">{salary.status === 'PAID' ? `Pago em ${date(salary.paidAt!)} · ${salary.referenceCode}` : 'Pagamento pendente'}</p>
     {canOperate && salary.status === 'PENDING' && <button className="btn-primary mt-3" onClick={() => setOpen(value => !value)}>Registar pagamento salarial</button>}
+    {salary.status === 'PAID' && <SalaryReceiptButton id={salary.id} />}
     {open && <form className="mt-3 space-y-3 border-t border-campus-line pt-3" onSubmit={submit}>
       <label className="block text-sm font-medium">Método do pagamento salarial<select className="field-input" name="paymentMethod" disabled={busy}><option value="BANK_TRANSFER">Transferência bancária</option><option value="CASH_DEPOSIT">Depósito</option><option value="MOBILE_MONEY">Carteira móvel</option><option value="POS">POS</option></select></label>
       <label className="block text-sm font-medium">Referência do pagamento salarial<input className="field-input" name="referenceCode" minLength={4} maxLength={80} required disabled={busy} /></label>
@@ -288,4 +291,21 @@ function SalaryCard({ salary, canOperate, api, onChanged, onSuccess }: {
       <button className="btn-primary" disabled={busy}><BusyLabel busy={busy} busyText="A confirmar…">Confirmar pagamento salarial</BusyLabel></button>
     </form>}
   </article>;
+}
+
+function SalaryReceiptButton({ id }: { id: string }) {
+  const { api } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function print() {
+    if (busy) return;
+    setBusy(true); setError('');
+    try { printSalaryReceipt((await api.salaryReceipt(id)).data); }
+    catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  return <div className="mt-3">
+    <IconActionButton label="Imprimir comprovativo salarial" disabled={busy} onClick={() => void print()} />
+    {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+  </div>;
 }

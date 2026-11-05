@@ -20,7 +20,7 @@
 
 | key | Módulo | Rota | Estado | Grupo atribuído | Branch sugerida |
 | --- | --- | --- | --- | --- | --- |
-| academic | Hub académico | `/academic` | partial | _a definir_ | — |
+| academic | Hub académico | `/academic` | **available** | Core | — |
 | departments | Departamentos | `/departments` | development | _a definir_ | `feature/grupo-academico-departments-crud` |
 | courses | Cursos | `/courses` | development | _a definir_ | `feature/grupo-academico-courses-crud` |
 | subjects | Disciplinas | `/subjects` | development | _a definir_ | `feature/grupo-academico-subjects-crud` |
@@ -42,7 +42,8 @@
 
 | key | Módulo | Rota | Estado | Grupo atribuído | Branch sugerida |
 | --- | --- | --- | --- | --- | --- |
-| campus | Hub campus | `/campus` | partial | _a definir_ | — |
+| campus | Hub campus | `/campus` | **available** | Core | — |
+| campus-twin | Gémeo digital | `/campus/twin` | **available** | Core | — |
 | buildings | Edifícios | `/buildings` | **available** | Grupo Infraestrutura | `feature/grupo-infra-campus-crud` |
 | rooms | Salas | `/rooms` | **available** | Core | — |
 | laboratories | Laboratórios | `/laboratories` | **available** | Grupo Infraestrutura | `feature/grupo-infra-campus-crud` |

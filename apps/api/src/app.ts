@@ -32,6 +32,12 @@ import { academicRouter } from './modules/academic/http/academicRouter.js';
 import { studentRouter } from './modules/students/http/studentRouter.js';
 import { teacherRouter } from './modules/teachers/http/teacherRouter.js';
 import { enrolmentRouter } from './modules/enrolments/http/enrolmentRouter.js';
+import { sensorsRouter } from './modules/sensors/http/sensorsRouter.js';
+import { opsRouter } from './modules/ops/http/opsRouter.js';
+import { maintenanceRouter } from './modules/maintenance/http/maintenanceRouter.js';
+import { reportsRouter } from './modules/reports/http/reportsRouter.js';
+import { adminRouter } from './modules/admin/http/adminRouter.js';
+import { getMqttStatus } from './modules/iot/application/mqttIngestService.js';
 
 export function createApp() {
   const env = loadEnv();
@@ -74,10 +80,12 @@ export function createApp() {
   );
 
   app.get('/health', (_req, res) => {
+    const mqtt = getMqttStatus();
     res.json({
       status: 'ok',
       service: 'smart-campus-api',
       timestamp: new Date().toISOString(),
+      mqtt,
     });
   });
 
@@ -138,6 +146,11 @@ export function createApp() {
   v1.use(teacherRouter);
   v1.use(enrolmentRouter);
   v1.use(academicRouter);
+  v1.use(sensorsRouter);
+  v1.use(opsRouter);
+  v1.use(maintenanceRouter);
+  v1.use(reportsRouter);
+  v1.use(adminRouter);
 
   app.use('/api/v1', v1);
 

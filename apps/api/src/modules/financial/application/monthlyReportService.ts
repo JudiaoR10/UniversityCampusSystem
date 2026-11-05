@@ -12,6 +12,11 @@ export function monthlyBounds(month: string) {
   const [year, number] = month.split('-').map(Number);
   return { gte: new Date(Date.UTC(year, number - 1, 1) - 2 * 3600000), lt: new Date(Date.UTC(year, number, 1) - 2 * 3600000) };
 }
+
+export function currentMaputoMonth() {
+  const parts = new Intl.DateTimeFormat('en', { timeZone: 'Africa/Maputo', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+  return `${parts.find((part) => part.type === 'year')!.value}-${parts.find((part) => part.type === 'month')!.value}`;
+}
 const MAX_REPORT_ROWS = 10000;
 
 export async function monthlyPaymentReport(actor: FinancialActor, kind: 'payments' | 'salaries', month: string): Promise<MonthlyPaymentReportDto> {

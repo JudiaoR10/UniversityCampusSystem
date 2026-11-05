@@ -224,7 +224,7 @@ describe('API Docentes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('admin remove docente e conta de acesso (200)', async () => {
+  it('admin remove o perfil e mantém a conta (200)', async () => {
     const res = await request(app)
       .delete(`${api}/teachers/${createdTeacherId}`)
       .set(bearer(adminToken));
@@ -232,28 +232,27 @@ describe('API Docentes', () => {
     expect(res.body.data).toEqual({ id: createdTeacherId, deleted: true });
 
     expect(await prisma.teacherProfile.findUnique({ where: { id: createdTeacherId } })).toBeNull();
-    expect(await prisma.user.findUnique({ where: { id: createdTeacherUserId } })).toBeNull();
+    expect(await prisma.user.findUnique({ where: { id: createdTeacherUserId } })).not.toBeNull();
 
     const login = await request(app)
       .post(`${api}/auth/login`)
       .send({ email: teacherEmail, password: PASSWORD });
-    expect(login.status).toBe(401);
-    expect(login.body.code).toBe('INVALID_CREDENTIALS');
-
-    const audit = await prisma.auditEvent.findFirst({
-      where: { action: 'USER_DELETE', resourceId: createdTeacherUserId },
-    });
-    expect(audit).not.toBeNull();
+    expect(login.status).toBe(200);
   });
 
-  it('permite recriar o docente com o mesmo email e código após a remoção', async () => {
+  it('permite recriar o perfil na conta existente via userId', async () => {
     const res = await request(app)
       .post(`${api}/teachers`)
       .set(bearer(adminToken))
-      .send(payload({ email: teacherEmail, fullName: 'Docente Teste' }));
+      .send({
+        userId: createdTeacherUserId,
+        employeeCode: `TD${suffix}`,
+        departmentId,
+        title: 'Assistente',
+      });
 
     expect(res.status).toBe(201);
     expect(res.body.data.employeeCode).toBe(`TD${suffix}`);
-    expect(res.body.data.user.fullName).toBe('Docente Teste');
+    expect(res.body.data.userId).toBe(createdTeacherUserId);
   });
 });

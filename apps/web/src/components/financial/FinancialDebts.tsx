@@ -1,12 +1,25 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { DebtDto } from "@smart-campus/shared-types";
+import type { DebtDto, DebtOrigin, DebtStatus } from "@smart-campus/shared-types";
+import { DEBT_ORIGINS } from "@smart-campus/shared-types";
 import { useAuth } from "../../lib/auth";
 import { BusyLabel, LoadState, SuccessFeedback } from "./shared";
+import { SelectField } from "../SelectField";
+import { BanIcon, IconActionButton, TableActions } from "../ActionButtons";
 
-export function FinancialDebts({ studentId }: { studentId: string }) {
+const ORIGIN_LABELS: Record<DebtOrigin, string> = {
+  TUITION: "Propina",
+  FEE: "Taxa",
+  FINE: "Multa",
+  OTHER: "Outra",
+};
+
+export function FinancialDebts({ studentId }: { studentId?: string }) {
   const { api, user } = useAuth();
   const [debts, setDebts] = useState<DebtDto[]>([]);
   const [offset, setOffset] = useState(0);
+  const [status, setStatus] = useState<DebtStatus | "">("");
+  const [origin, setOrigin] = useState<DebtOrigin | "">("");
+  const [dueBefore, setDueBefore] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -15,8 +28,18 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
   const allowed = !!user && ["STUDENT", "FINANCE", "ADMIN"].includes(user.role);
   const canManage = user?.role === "FINANCE";
   const canContest = user?.role === "STUDENT";
+  const manager = !!user && ["FINANCE", "ADMIN"].includes(user.role);
+  const campus = manager && !studentId;
+  const query = {
+    studentId,
+    offset,
+    limit: 20,
+    status: status || undefined,
+    origin: origin || undefined,
+    dueBefore: dueBefore ? new Date(`${dueBefore}T23:59:59`).toISOString() : undefined,
+  };
   async function reload() {
-    const res = await api.financialDebts({ studentId, offset, limit: 20 });
+    const res = await api.financialDebts(query);
     setDebts(res.data);
   }
   useEffect(() => {
@@ -31,7 +54,7 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
     setError("");
 
     api
-      .financialDebts({ studentId, offset, limit: 20 })
+      .financialDebts(query)
       .then((res) => {
         if (active) setDebts(res.data);
       })
@@ -45,12 +68,13 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
     return () => {
       active = false;
     };
-  }, [api, allowed, offset, studentId]);
+  }, [api, allowed, offset, studentId, status, origin, dueBefore]);
   async function submit(
     event: FormEvent<HTMLFormElement>,
     kind: "debt" | "payment" | "analysis",
   ) {
     event.preventDefault();
+    if (!studentId && kind === "debt") return;
     const form = event.currentTarget;
     const fields = Object.fromEntries(new FormData(form));
     setBusy(true);
@@ -86,18 +110,72 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
       setBusy(false);
     }
   }
+  async function cancel(debt: DebtDto) {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.cancelDebt(debt.id);
+      setSelected(null);
+      setMessage("Dívida cancelada.");
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível cancelar a dívida.");
+    } finally {
+      setBusy(false);
+    }
+  }
   if (!allowed)
     return <p className="surface p-4 text-sm text-campus-deep sm:p-5">O seu perfil não tem acesso à gestão financeira.</p>;
   return (
     <div className="space-y-6">
       <SuccessFeedback message={message} onClose={() => setMessage("")} />
       {error && (
-        <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="alert-error">
           {error}
         </p>
       )}
       <LoadState loading={loading} error="" reload={() => void reload()} label="A carregar dívidas…" />
-      {canManage && (
+      <form className="surface grid gap-4 p-4 sm:p-5 md:grid-cols-3" onSubmit={(event) => event.preventDefault()}>
+        <h2 className="font-display text-xl font-semibold text-campus-ink md:col-span-3">
+          {campus ? "Dívidas do campus" : "Filtros"}
+        </h2>
+        <label className="min-w-0 text-sm font-medium">
+          Estado
+          <SelectField
+            value={status}
+            disabled={busy}
+            onChange={(value) => { setStatus(value as DebtStatus | ""); setOffset(0); }}
+            options={[
+              { value: "", label: "Todos" },
+              { value: "PENDENTE", label: "Pendente" },
+              { value: "VENCIDA", label: "Vencida" },
+              { value: "REGULARIZADA", label: "Regularizada" },
+              { value: "CANCELADA", label: "Cancelada" },
+            ]}
+          />
+        </label>
+        <label className="min-w-0 text-sm font-medium">
+          Origem
+          <SelectField
+            value={origin}
+            disabled={busy}
+            onChange={(value) => { setOrigin(value as DebtOrigin | ""); setOffset(0); }}
+            options={[{ value: "", label: "Todas" }, ...DEBT_ORIGINS.map((value) => ({ value, label: ORIGIN_LABELS[value] }))]}
+          />
+        </label>
+        <label className="min-w-0 text-sm font-medium">
+          Vence até
+          <input
+            className="field-input"
+            type="date"
+            value={dueBefore}
+            disabled={busy}
+            onChange={(event) => { setDueBefore(event.target.value); setOffset(0); }}
+          />
+        </label>
+      </form>
+      {canManage && studentId && (
         <form
           className="surface grid gap-4 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3"
           onSubmit={(e) => void submit(e, "debt")}
@@ -121,13 +199,10 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
           </label>
           <label className="min-w-0 text-sm font-medium">
             Origem{" "}
-            <input
-              className="field-input"
+            <SelectField
               name="origin"
               defaultValue="TUITION"
-              minLength={2}
-              maxLength={60}
-              required
+              options={DEBT_ORIGINS.map((value) => ({ value, label: ORIGIN_LABELS[value] }))}
             />
           </label>
           <label className="min-w-0 text-sm font-medium">
@@ -157,7 +232,9 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
               <thead className="bg-campus-mist/80 text-campus-deep">
                 <tr>
                   {[
+                    ...(campus ? ["Estudante"] : []),
                     "Descrição",
+                    "Origem",
                     "Valor (MZN)",
                     "Vencimento",
                     "Estado",
@@ -172,7 +249,11 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
               <tbody>
                 {debts.map((debt) => (
                   <tr key={debt.id} className="border-t border-campus-line/70">
+                    {campus && (
+                      <td className="px-4 py-3">{debt.student?.fullName ?? debt.studentId}</td>
+                    )}
                     <td className="px-4 py-3 font-medium">{debt.title}</td>
+                    <td className="px-4 py-3">{ORIGIN_LABELS[debt.origin as DebtOrigin] ?? debt.origin}</td>
                     <td className="px-4 py-3 tabular-nums">{debt.amount.toFixed(2)}</td>
                     <td className="px-4 py-3">
                       {new Date(debt.dueDate).toLocaleDateString("pt-MZ")}
@@ -180,13 +261,22 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
                     <td className="px-4 py-3">{debt.status}</td>
                     <td className="px-4 py-3">
                       {["PENDENTE", "VENCIDA"].includes(debt.status) && (canManage || canContest) && (
-                        <button
-                          disabled={busy}
-                          className="btn-secondary whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
-                          onClick={() => setSelected(debt)}
-                        >
-                          {canManage ? "Registar pagamento" : "Contestar"}
-                        </button>
+                        <TableActions>
+                          <IconActionButton
+                            label={canManage ? "Registar pagamento" : "Contestar"}
+                            disabled={busy}
+                            onClick={() => setSelected(debt)}
+                          />
+                          {canManage && (
+                            <IconActionButton
+                              label="Cancelar dívida"
+                              icon={<BanIcon />}
+                              danger
+                              disabled={busy}
+                              onClick={() => void cancel(debt)}
+                            />
+                          )}
+                        </TableActions>
                       )}
                     </td>
                   </tr>
@@ -225,12 +315,16 @@ export function FinancialDebts({ studentId }: { studentId: string }) {
             <>
               <label className="min-w-0 text-sm font-medium">
                 Método{" "}
-                <select className="field-input" name="paymentMethod">
-                  <option value="BANK_TRANSFER">Transferência bancária</option>
-                  <option value="CASH_DEPOSIT">Depósito</option>
-                  <option value="MOBILE_MONEY">Carteira móvel</option>
-                  <option value="POS">POS</option>
-                </select>
+                <SelectField
+                  name="paymentMethod"
+                  defaultValue="BANK_TRANSFER"
+                  options={[
+                    { value: "BANK_TRANSFER", label: "Transferência bancária" },
+                    { value: "CASH_DEPOSIT", label: "Depósito" },
+                    { value: "MOBILE_MONEY", label: "Carteira móvel" },
+                    { value: "POS", label: "POS" },
+                  ]}
+                />
               </label>
               <label className="min-w-0 text-sm font-medium">
                 Referência{" "}

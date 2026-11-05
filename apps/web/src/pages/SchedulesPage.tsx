@@ -4,7 +4,8 @@ import { useAuth } from '../lib/auth';
 import { printDocument } from '../lib/print';
 import { PageIntro } from '../components/PageIntro';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { IconActionButton, PencilIcon, TrashIcon } from '../components/ActionButtons';
+import { DeleteAction, EditAction, TableActions } from '../components/ActionButtons';
+import { SelectField } from '../components/SelectField';
 
 const MANAGE_ROLES = ['COORDINATOR', 'ADMIN'];
 
@@ -257,52 +258,40 @@ export function SchedulesPage() {
       />
 
       <div aria-live="polite" className="space-y-2">
-        {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p> : null}
+        {error ? <p className="alert-error">{error}</p> : null}
+        {notice ? <p className="alert-success">{notice}</p> : null}
       </div>
 
       <div className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-5">
         {canManage ? (
           <>
-            <select
-              className="field-input !mt-0"
+            <SelectField
               aria-label="Filtrar por curso"
               value={filters.courseId}
-              onChange={(e) => setFilters({ ...filters, courseId: e.target.value })}
-            >
-              <option value="">Todos os cursos</option>
-              {options?.courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.code} — {c.name}
-                </option>
-              ))}
-            </select>
-            <select
-              className="field-input !mt-0"
+              onChange={(courseId) => setFilters({ ...filters, courseId })}
+              options={[
+                { value: '', label: 'Todos os cursos' },
+                ...(options?.courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` })) ?? []),
+              ]}
+            />
+            <SelectField
               aria-label="Filtrar por docente"
               value={filters.teacherId}
-              onChange={(e) => setFilters({ ...filters, teacherId: e.target.value })}
-            >
-              <option value="">Todos os docentes</option>
-              {options?.teachers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.fullName}
-                </option>
-              ))}
-            </select>
-            <select
-              className="field-input !mt-0"
+              onChange={(teacherId) => setFilters({ ...filters, teacherId })}
+              options={[
+                { value: '', label: 'Todos os docentes' },
+                ...(options?.teachers.map((t) => ({ value: t.id, label: t.fullName })) ?? []),
+              ]}
+            />
+            <SelectField
               aria-label="Filtrar por sala"
               value={filters.roomId}
-              onChange={(e) => setFilters({ ...filters, roomId: e.target.value })}
-            >
-              <option value="">Todas as salas</option>
-              {options?.rooms.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.code} — {r.name}
-                </option>
-              ))}
-            </select>
+              onChange={(roomId) => setFilters({ ...filters, roomId })}
+              options={[
+                { value: '', label: 'Todas as salas' },
+                ...(options?.rooms.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}` })) ?? []),
+              ]}
+            />
           </>
         ) : null}
         <label className="text-xs font-medium text-campus-deep/70">
@@ -357,66 +346,46 @@ export function SchedulesPage() {
             </label>
             <label className="text-xs font-medium text-campus-deep/70">
               Curso
-              <select
-                className="field-input"
+              <SelectField
                 value={form.courseId}
-                onChange={(e) => setForm({ ...form, courseId: e.target.value, subjectId: '' })}
+                onChange={(courseId) => setForm({ ...form, courseId, subjectId: '' })}
                 required
-              >
-                <option value="">Selecionar curso</option>
-                {options?.courses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.code} — {c.name}
-                  </option>
-                ))}
-              </select>
+                placeholder="Seleccionar curso"
+                options={options?.courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` })) ?? []}
+              />
             </label>
             <label className="text-xs font-medium text-campus-deep/70">
               Disciplina
-              <select
-                className="field-input"
+              <SelectField
                 value={form.subjectId}
-                onChange={(e) => setForm({ ...form, subjectId: e.target.value })}
+                onChange={(subjectId) => setForm({ ...form, subjectId })}
                 required
                 disabled={!form.courseId}
-              >
-                <option value="">Selecionar disciplina</option>
-                {subjectChoices.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.code} — {s.name}
-                  </option>
-                ))}
-              </select>
+                placeholder="Seleccionar disciplina"
+                options={subjectChoices.map((s) => ({ value: s.id, label: `${s.code} — ${s.name}` }))}
+              />
             </label>
             <label className="text-xs font-medium text-campus-deep/70">
               Docente
-              <select
-                className="field-input"
+              <SelectField
                 value={form.teacherId}
-                onChange={(e) => setForm({ ...form, teacherId: e.target.value })}
-              >
-                <option value="">Sem docente atribuído</option>
-                {options?.teachers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.fullName}
-                  </option>
-                ))}
-              </select>
+                onChange={(teacherId) => setForm({ ...form, teacherId })}
+                options={[
+                  { value: '', label: 'Sem docente atribuído' },
+                  ...(options?.teachers.map((t) => ({ value: t.id, label: t.fullName })) ?? []),
+                ]}
+              />
             </label>
             <label className="text-xs font-medium text-campus-deep/70">
               Sala
-              <select
-                className="field-input"
+              <SelectField
                 value={form.roomId}
-                onChange={(e) => setForm({ ...form, roomId: e.target.value })}
-              >
-                <option value="">Sem sala atribuída</option>
-                {options?.rooms.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.code} — {r.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(roomId) => setForm({ ...form, roomId })}
+                options={[
+                  { value: '', label: 'Sem sala atribuída' },
+                  ...(options?.rooms.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}` })) ?? []),
+                ]}
+              />
             </label>
             <label className="text-xs font-medium text-campus-deep/70">
               Início
@@ -485,25 +454,19 @@ export function SchedulesPage() {
                       <td className="px-4 py-3">{schedule.room ? `${schedule.room.code} — ${schedule.room.name}` : '—'}</td>
                       {canManage ? (
                         <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <IconActionButton
-                              label="Editar"
-                              icon={<PencilIcon />}
+                          <TableActions>
+                            <EditAction
                               title="Editar sessão de horário"
                               disabled={deletingId !== null}
-                              busy={false}
                               onClick={() => startEdit(schedule)}
                             />
-                            <IconActionButton
-                              label="Eliminar"
-                              danger
-                              icon={<TrashIcon />}
+                            <DeleteAction
                               title={`Eliminar "${schedule.title}"`}
                               disabled={deletingId !== null}
                               busy={deletingId === schedule.id}
                               onClick={() => setPendingDelete(schedule)}
                             />
-                          </div>
+                          </TableActions>
                         </td>
                       ) : null}
                     </tr>

@@ -57,6 +57,13 @@ export function LoginPage() {
               Entre na plataforma académica da Universidade Joaquim Alberto Chissano — espaço comum para
               aprendizagem, operações e inovação.
             </p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {['Mapa do D2', 'Gémeo 3D', 'Aulas e notas', 'IoT ao vivo'].map((item) => (
+                <span key={item} className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/90">
+                  {item}
+                </span>
+              ))}
+            </div>
           </div>
 
           <form
@@ -93,7 +100,7 @@ export function LoginPage() {
               />
             </label>
 
-            {error ? <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+            {error ? <p className="mt-4 alert-error">{error}</p> : null}
 
             <button type="submit" disabled={submitting} className="btn-primary mt-7 w-full">
               {submitting ? 'A autenticar…' : 'Entrar no campus'}

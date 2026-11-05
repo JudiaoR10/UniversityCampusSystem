@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { AuthUser, RoleCode } from '@smart-campus/shared-types';
 import { ApiClientError } from '@smart-campus/api-client';
 import { FinancialPage } from './FinancialPage';
+import { changeSelect } from '../test/selectField';
 
 const mocks = vi.hoisted(() => ({ user: null as AuthUser | null, api: {
   financialDebts: vi.fn(), financialHistory: vi.fn(), financialStudents: vi.fn(),
@@ -13,6 +14,9 @@ const mocks = vi.hoisted(() => ({ user: null as AuthUser | null, api: {
   salaryChangeRequests: vi.fn(), createSalaryChange: vi.fn(), reviewSalaryChange: vi.fn(),
   financialSalaries: vi.fn(), createSalary: vi.fn(), paySalary: vi.fn(),
   courseTuitions: vi.fn(), updateCourseTuition: vi.fn(), monthlyPaymentReport: vi.fn(),
+  cancelDebt: vi.fn(), createDebtsFromEnrolments: vi.fn(), financialNotificationQueue: vi.fn(),
+  retryFailedNotifications: vi.fn(), financialStatus: vi.fn(), financialBlockedStudents: vi.fn(),
+  paymentReceipt: vi.fn(), salaryReceipt: vi.fn(), courses: vi.fn(),
   auditEvents: vi.fn(),
 } }));
 vi.mock('../lib/auth', () => ({ useAuth: () => mocks }));
@@ -42,6 +46,10 @@ beforeEach(() => {
   mocks.api.courseTuitions.mockResolvedValue(response([{ courseId: 'course-1', courseCode: 'LEI', courseName: 'Engenharia Informática', departmentName: 'Engenharia', amount: 5000, notes: '', updatedAt: '2026-10-24T10:00:00.000Z' }]));
   mocks.api.monthlyPaymentReport.mockResolvedValue(response({ kind: 'payments', month: '2026-10', timezone: 'Africa/Maputo', totalPayments: 1, totalAmount: 100, generatedAt: '2026-10-24T10:00:00.000Z', rows: [{ id: 'p-1', fullName: 'Ana Estudante', identityCode: '20260001', description: 'Propina Outubro', amount: 100, paymentMethod: 'BANK_TRANSFER', referenceCode: 'REPORT-001', paidAt: '2026-10-23T10:00:00Z' }] }));
   mocks.api.financialReport.mockResolvedValue(response({ totalDebts: 1, byStatus: { pendentes: 1, vencidas: 0, regularizadas: 0, canceladas: 0 }, totalPayments: 0, studentsBlocked: 0, generatedAt: '2026-10-23' }));
+  mocks.api.financialStatus.mockResolvedValue(response({ studentId: 'student-1', status: 'ACTIVE', reason: null, blockedAt: null, overdueDebtsCount: 0, totalOverdueAmount: 0, updatedAt: '2026-10-23' }));
+  mocks.api.financialBlockedStudents.mockResolvedValue(response([], { total: 0, hasMore: false }));
+  mocks.api.financialNotificationQueue.mockResolvedValue(response([], { total: 0, hasMore: false }));
+  mocks.api.courses.mockResolvedValue(response([{ id: 'course-1', code: 'LEI', name: 'Engenharia Informática' }]));
   mocks.api.auditEvents.mockResolvedValue(response([{ id: 'audit-1', action: 'DEBT_CREATED', resource: 'financial', correlationId: 'corr-1', createdAt: '2026-10-23T10:00:00Z', actor: { fullName: 'Tesouraria Demo' } }]));
 });
 afterEach(cleanup);
@@ -85,7 +93,7 @@ describe('Acções financeiras por perfil', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Imprimir relatório mensal' }));
     expect(print).toHaveBeenCalledOnce();
     expect(document.querySelector('.financial-print-view')).toHaveTextContent('REPORT-001');
-    fireEvent.change(screen.getByLabelText('Relatório'), { target: { value: 'salaries' } });
+    changeSelect('Relatório', 'salaries');
     await waitFor(() => expect(mocks.api.monthlyPaymentReport).toHaveBeenLastCalledWith('salaries', expect.any(String)));
     expect(mocks.api.createSalary).not.toHaveBeenCalled();
     expect(mocks.api.paySalary).not.toHaveBeenCalled();
@@ -177,7 +185,7 @@ describe('Acções financeiras por perfil', () => {
     render(<FinancialPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Contestações' }));
     fireEvent.click(await screen.findByRole('button', { name: /Analisar/ }));
-    fireEvent.change(screen.getByLabelText('Decisão'), { target: { value: 'IMPROCEDENTE' } });
+    changeSelect('Decisão', 'IMPROCEDENTE');
     fireEvent.change(screen.getByLabelText('Justificação da decisão'), { target: { value: 'Cobrança confirmada.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Registar decisão' }));
     await screen.findByText('Decisão registada.');

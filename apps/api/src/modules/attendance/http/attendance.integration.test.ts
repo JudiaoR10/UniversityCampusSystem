@@ -163,7 +163,7 @@ describe('Módulo Assiduidade — /attendance', () => {
       expect(owner.status).toBe(200);
       expect(owner.body.data.schedule.course.id).toBe(courseId);
       expect(owner.body.data.entries.length).toBeGreaterThanOrEqual(2);
-      expect(owner.body.data.entries.every((e: { status: string | null }) => e.status === null)).toBe(true);
+      expect(owner.body.data.entries.every((e: { status: string | null; marked?: boolean }) => e.status === 'ABSENT' && e.marked === false)).toBe(true);
       expect(owner.body.data.entries.some((e: { studentNumber: string }) => e.studentNumber === 'EST-2026-001')).toBe(true);
       expect(owner.body.data.entries.some((e: { studentNumber: string }) => e.studentNumber === 'EST-2026-002')).toBe(true);
 
@@ -243,7 +243,7 @@ describe('Módulo Assiduidade — /attendance', () => {
         .set('Authorization', `Bearer ${coordinatorToken}`)
         .send({ records: [{ studentId: studentAProfileId, status: 'PRESENT' }] });
       expect(res.status).toBe(409);
-      expect(res.body.code).toBe('STUDENT_COURSE_MISMATCH');
+      expect(res.body.code).toBe('STUDENT_NOT_ENROLLED');
     });
 
     it('docente titular registra presenças e a pauta reflecte o estado', async () => {

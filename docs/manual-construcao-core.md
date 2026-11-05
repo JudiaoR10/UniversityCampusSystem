@@ -74,9 +74,9 @@ Criar um **Core comum** de Smart Campus onde vários grupos da PTP III integram 
 | RF-04 | Ocorrências (criar + alterar estado) | Implementado |
 | RF-05 | Auditoria de eventos relevantes | Implementado |
 | RF-06 | Dashboard / Centro de Operações | Implementado |
-| RF-07 | Dispositivos e alertas (parcial / demo) | Parcial |
+| RF-07 | Dispositivos e alertas (parcial / demo) | Implementado |
 | RF-08 | Estacionamento + LPR + matrículas MZ | Implementado |
-| RF-09 | Navegação para todos os módulos (placeholders) | Implementado |
+| RF-09 | Navegação para todos os módulos (placeholders) | Implementado (sem placeholders) |
 | RF-10 | Documentação OpenAPI / Swagger | Implementado |
 
 ## 0.3 Requisitos não funcionais
@@ -751,7 +751,7 @@ Env: `VITE_API_BASE_URL=http://localhost:4100/api/v1`
 | `/alerts` | `AlertsPage` | |
 | `/audit` | `AuditPage` | ADMIN/COORD |
 | `/admin` | `AdminPage` | ADMIN |
-| hubs / placeholders | `AcademicHubPage`, `CampusHubPage`, `ModulePlaceholderPage` | |
+| hubs | `AcademicHubPage`, `CampusHubPage`, `CampusTwinPage` | |
 
 ## 9.5 Design system e responsividade
 
@@ -1010,7 +1010,7 @@ Para apresentar o Core na PTP III:
 2. Stack tecnológica — Fase 2 deste manual  
 3. Demo ao vivo: fluxo transversal + parking + ops  
 4. Swagger aberto em `/api/docs`  
-5. Explicar placeholders vs módulos `available`  
+5. Explicar módulos `available` (já sem placeholders)
 6. Mostrar CI e Docker Compose  
 
 ---

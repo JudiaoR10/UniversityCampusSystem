@@ -27,17 +27,28 @@ import { CampusHubPage } from './pages/CampusHubPage';
 import { StudentsPage } from './pages/StudentsPage';
 import { TeachersPage } from './pages/TeachersPage';
 import { EnrolmentsPage } from './pages/EnrolmentsPage';
-import { ModulePlaceholderPage } from './pages/ModulePlaceholderPage';
-import { campusModules, type RoleCode } from '@smart-campus/shared-types';
+import { type RoleCode } from '@smart-campus/shared-types';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { FinancialPage } from './pages/FinancialPage';
+import { SensorsPage } from './pages/SensorsPage';
+import { ReadingsPage } from './pages/ReadingsPage';
+import { MaintenancePage } from './pages/MaintenancePage';
+import { ReportsPage } from './pages/ReportsPage';
+import { CampusTwinPage } from './pages/CampusTwinPage';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center text-campus-deep">
-        A carregar sessão...
+        <span className="flex flex-col items-center gap-3">
+          <span className="skeleton-dots" aria-hidden>
+            <i />
+            <i />
+            <i />
+          </span>
+          A preparar a sua sessão…
+        </span>
       </div>
     );
   }
@@ -60,25 +71,6 @@ function RoleProtected({
 
   return children;
 }
-
-const placeholderKeys = campusModules
-  .filter((m) =>
-    [
-      //'departments',
-      //'courses',
-      //'subjects',
-      'students',
-      'teachers',
-      'enrolments',
-      //'assessments',
-      //'schedules',
-      'maintenance',
-      'sensors',
-      'readings',
-      'reports',
-    ].includes(m.key),
-  )
-  .map((m) => m.key);
 
 export function App() {
   return (
@@ -110,6 +102,7 @@ export function App() {
         <Route path="users" element={<UsersPage />} />
         <Route path="academic" element={<AcademicHubPage />} />
         <Route path="campus" element={<CampusHubPage />} />
+        <Route path="campus/twin" element={<CampusTwinPage />} />
         <Route path="buildings" element={<BuildingsPage />} />
         <Route path="rooms" element={<RoomsPage />} />
         <Route path="laboratories" element={<LaboratoriesPage />} />
@@ -121,6 +114,10 @@ export function App() {
         <Route path="iot" element={<IotHubPage />} />
         <Route path="parking" element={<ParkingPage />} />
         <Route path="devices" element={<DevicesPage />} />
+        <Route path="sensors" element={<SensorsPage />} />
+        <Route path="readings" element={<ReadingsPage />} />
+        <Route path="maintenance" element={<MaintenancePage />} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="students" element={<StudentsPage />} />
         <Route path="teachers" element={<TeachersPage />} />
@@ -128,16 +125,6 @@ export function App() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="admin" element={<AdminPage />} />
-        {placeholderKeys.map((key) => {
-          const mod = campusModules.find((m) => m.key === key)!;
-          return (
-            <Route
-              key={key}
-              path={mod.path.slice(1)}
-              element={<ModulePlaceholderPage moduleKey={key} />}
-            />
-          );
-        })}
       </Route>
       <Route path="*" element={<Navigate to="/ops" replace />} />
     </Routes>

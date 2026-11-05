@@ -1,9 +1,12 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import type { CourseDto, StudentProfileDto } from '@smart-campus/shared-types';
+import type { AuthUser, CourseDto, StudentProfileDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { AlertMessage, type AlertState } from '../components/AlertMessage';
 import { useConfirm } from '../components/ConfirmDialog';
 import { PageIntro } from '../components/PageIntro';
+import { EmptyState, StatusPill } from '../components/ui';
+import { SelectField } from '../components/SelectField';
+import { DeleteAction, TableActions } from '../components/ActionButtons';
 
 const statusLabel: Record<StudentProfileDto['status'], string> = {
   ACTIVE: 'Activo',
@@ -135,13 +138,17 @@ function OwnStudentProfile() {
 
 function StudentsDirectory({ canManage }: { canManage: boolean }) {
   const { api } = useAuth();
+  const prefillUserId = new URLSearchParams(window.location.search).get('userId') ?? '';
   const [students, setStudents] = useState<StudentProfileDto[]>([]);
   const [courses, setCourses] = useState<CourseDto[]>([]);
+  const [accounts, setAccounts] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState<AlertState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { confirm, dialog } = useConfirm();
+  const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [form, setForm] = useState({
+    userId: prefillUserId,
     email: '',
     password: '',
     fullName: '',
@@ -153,9 +160,14 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
 
   async function load() {
     try {
-      const [resStudents, resCourses] = await Promise.all([api.students.list(), api.courses()]);
+      const [resStudents, resCourses, resUsers] = await Promise.all([
+        api.students.list(),
+        api.courses(),
+        api.users().catch(() => ({ data: [] as AuthUser[] })),
+      ]);
       setStudents(resStudents.data);
       setCourses(resCourses.data);
+      setAccounts(resUsers.data);
       const first = resCourses.data[0];
       setForm((current) =>
         current.courseId || !first ? current : { ...current, courseId: first.id },
@@ -175,39 +187,51 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
     event.preventDefault();
     const course = courses.find((item) => item.id === form.courseId);
     const confirmed = await confirm({
-      title: 'Criar estudante',
-      message: 'Confirma a criação da conta de acesso e do perfil de estudante com estes dados?',
+      title: 'Criar perfil de estudante',
+      message:
+        mode === 'existing'
+          ? 'Ligar esta conta existente ao perfil académico?'
+          : 'Criar conta de acesso e perfil de estudante?',
       details: [
-        { label: 'Nome', value: form.fullName },
-        { label: 'Email', value: form.email },
         { label: 'Nº de estudante', value: form.studentNumber },
         { label: 'Curso', value: course ? `${course.code} — ${course.name}` : '—' },
       ],
-      confirmLabel: 'Criar estudante',
+      confirmLabel: 'Criar perfil',
     });
     if (!confirmed) return;
     setAlert(null);
     setSubmitting(true);
     try {
-      await api.students.create({
-        email: form.email,
-        password: form.password,
-        fullName: form.fullName,
-        studentNumber: form.studentNumber,
-        courseId: form.courseId,
-        yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : undefined,
-        phone: form.phone || undefined,
-      });
+      await api.students.create(
+        mode === 'existing'
+          ? {
+              userId: form.userId,
+              studentNumber: form.studentNumber,
+              courseId: form.courseId,
+              yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : undefined,
+              phone: form.phone || undefined,
+            }
+          : {
+              email: form.email,
+              password: form.password,
+              fullName: form.fullName,
+              studentNumber: form.studentNumber,
+              courseId: form.courseId,
+              yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : undefined,
+              phone: form.phone || undefined,
+            },
+      );
       setAlert({
         tone: 'success',
         message: 'Estudante criado com sucesso.',
       });
       setForm({
+        userId: '',
         email: '',
         password: '',
         fullName: '',
         studentNumber: '',
-        courseId: '',
+        courseId: form.courseId,
         yearOfStudy: '1',
         phone: '',
       });
@@ -223,7 +247,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
   async function remove(student: StudentProfileDto) {
     const confirmed = await confirm({
       title: 'Remover estudante',
-      message: 'O perfil e a conta de acesso associada serão eliminados em definitivo.',
+      message: 'O perfil académico será removido. A conta de acesso permanece activa.',
       details: [
         { label: 'Nº de estudante', value: student.studentNumber },
         { label: 'Nome', value: student.user.fullName },
@@ -252,6 +276,31 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
 
       {canManage ? (
         <form onSubmit={create} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="md:col-span-2 xl:col-span-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="section-title">Novo perfil de estudante</h2>
+            <div className="flex gap-2">
+              <button type="button" className={mode === 'existing' ? 'btn-primary' : 'btn-ghost'} onClick={() => setMode('existing')}>
+                Conta existente
+              </button>
+              <button type="button" className={mode === 'new' ? 'btn-primary' : 'btn-ghost'} onClick={() => setMode('new')}>
+                Criar conta
+              </button>
+            </div>
+          </div>
+          {mode === 'existing' ? (
+            <SelectField
+              className="md:col-span-2"
+              value={form.userId}
+              onChange={(userId) => setForm({ ...form, userId })}
+              required
+              aria-label="Conta STUDENT sem perfil"
+              placeholder="Seleccionar conta de estudante sem perfil"
+              options={accounts
+                .filter((item) => item.role === 'STUDENT' && item.isActive && !item.hasStudentProfile)
+                .map((item) => ({ value: item.id, label: `${item.fullName} · ${item.email}` }))}
+            />
+          ) : (
+            <>
           <input
             className="field-input !mt-0"
             type="email"
@@ -276,6 +325,8 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
             onChange={(event) => setForm({ ...form, fullName: event.target.value })}
             required
           />
+            </>
+          )}
           <input
             className="field-input !mt-0"
             placeholder="Nº de estudante"
@@ -283,22 +334,14 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
             onChange={(event) => setForm({ ...form, studentNumber: event.target.value })}
             required
           />
-          <select
-            className="field-input !mt-0"
+          <SelectField
             aria-label="Curso"
             value={form.courseId}
-            onChange={(event) => setForm({ ...form, courseId: event.target.value })}
+            onChange={(courseId) => setForm({ ...form, courseId })}
             required
-          >
-            <option value="" disabled>
-              {courses.length === 0 ? 'Sem cursos disponíveis' : 'Selecionar curso'}
-            </option>
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.code} — {course.name}
-              </option>
-            ))}
-          </select>
+            placeholder={courses.length === 0 ? 'Sem cursos disponíveis' : 'Seleccionar curso'}
+            options={courses.map((course) => ({ value: course.id, label: `${course.code} — ${course.name}` }))}
+          />
           <input
             className="field-input !mt-0"
             type="number"
@@ -314,7 +357,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
             value={form.phone}
             onChange={(event) => setForm({ ...form, phone: event.target.value })}
           />
-          <button type="submit" className="btn-primary" disabled={submitting || !form.courseId}>
+          <button type="submit" className="btn-primary" disabled={submitting || !form.courseId || (mode === 'existing' && !form.userId)}>
             {submitting ? 'A criar…' : 'Criar perfil'}
           </button>
         </form>
@@ -327,7 +370,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
       {loading ? (
         <p className="text-campus-deep/70">A carregar estudantes…</p>
       ) : students.length === 0 ? (
-        <p className="surface p-5 text-sm text-campus-deep/70">Ainda não há estudantes registados.</p>
+        <EmptyState title="Ainda não há estudantes" description="Crie o primeiro perfil para o ver neste directório." />
       ) : (
         <div className="table-scroll surface">
           <table className="min-w-[720px] w-full text-left text-sm">
@@ -348,16 +391,16 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
                   <td className="px-4 py-3">{student.user.fullName}</td>
                   <td className="px-4 py-3">{student.course?.code ?? '—'}</td>
                   <td className="px-4 py-3">{student.yearOfStudy ?? '—'}</td>
-                  <td className="px-4 py-3">{statusLabel[student.status]}</td>
+                  <td className="px-4 py-3">
+                    <StatusPill tone={student.status === 'ACTIVE' ? 'success' : student.status === 'SUSPENDED' ? 'warning' : 'muted'}>
+                      {statusLabel[student.status]}
+                    </StatusPill>
+                  </td>
                   {canManage ? (
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        className="rounded-lg border border-campus-line px-2.5 py-1 text-xs hover:bg-campus-mist"
-                        onClick={() => void remove(student)}
-                      >
-                        Remover
-                      </button>
+                      <TableActions>
+                        <DeleteAction label="Remover" title={`Remover ${student.user.fullName}`} onClick={() => void remove(student)} />
+                      </TableActions>
                     </td>
                   ) : null}
                 </tr>

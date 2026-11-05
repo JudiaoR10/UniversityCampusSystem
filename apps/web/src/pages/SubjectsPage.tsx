@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import type { CourseDto, SubjectDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { PageIntro } from '../components/PageIntro';
+import { SelectField } from '../components/SelectField';
 
 export function SubjectsPage() {
   const { api, user } = useAuth();
@@ -70,23 +71,20 @@ export function SubjectsPage() {
         title="Disciplinas"
         description="Disciplinas e planos curriculares, organizados por curso."
         actions={
-          <select
-            className="field-input !mt-0"
+          <SelectField
+            className="w-full sm:w-80"
             value={filtroCurso}
-            onChange={(e) => aoMudarFiltro(e.target.value)}
+            onChange={aoMudarFiltro}
             aria-label="Filtrar por curso"
-          >
-            <option value="">Todos os cursos</option>
-            {cursos.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.code} — {c.name}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: '', label: 'Todos os cursos' },
+              ...cursos.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` })),
+            ]}
+          />
         }
       />
 
-      {erro ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p> : null}
+      {erro ? <p className="alert-error">{erro}</p> : null}
 
       {podeGerir ? (
         semCursos ? (
@@ -95,6 +93,7 @@ export function SubjectsPage() {
           </p>
         ) : (
           <form onSubmit={aoCriar} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-5">
+            <h2 className="section-title md:col-span-2 xl:col-span-5">Nova disciplina</h2>
             <input
               className="field-input !mt-0"
               placeholder="Código (ex.: PTP3)"
@@ -123,18 +122,13 @@ export function SubjectsPage() {
               onChange={(e) => setFormulario({ ...formulario, credits: Number(e.target.value) })}
               required
             />
-            <select
-              className="field-input !mt-0"
+            <SelectField
               value={formulario.courseId}
-              onChange={(e) => setFormulario({ ...formulario, courseId: e.target.value })}
+              onChange={(courseId) => setFormulario({ ...formulario, courseId })}
               required
-            >
-              {cursos.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.code} — {c.name}
-                </option>
-              ))}
-            </select>
+              placeholder="Seleccionar curso"
+              options={cursos.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }))}
+            />
             <button type="submit" className="btn-primary w-full" disabled={aGuardar || !formulario.courseId}>
               {aGuardar ? 'A criar...' : 'Criar disciplina'}
             </button>

@@ -17,6 +17,9 @@ const envSchema = z.object({
   NOTIFICATIONS_POLL_INTERVAL_MS: z.coerce.number().int().min(1).max(3600000).default(30000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900_000),
   RATE_LIMIT_MAX: z.coerce.number().default(200),
+  MQTT_URL: z.string().default('mqtt://localhost:1883'),
+  DEVICE_OFFLINE_AFTER_MS: z.coerce.number().int().min(1_000).default(120_000),
+  INGEST_API_KEY: z.string().default(''),
 });
 
 export type Env = z.infer<typeof envSchema>;

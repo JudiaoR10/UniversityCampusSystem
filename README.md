@@ -15,7 +15,7 @@ O repositório fornece o **Core comum**: autenticação, utilizadores/roles, API
 ```bash
 cp .env.example .env
 npm install
-docker compose up -d db
+docker compose up -d db mosquitto
 npm run db:generate
 npm run db:migrate:dev -- --name init
 npm run db:seed
@@ -23,6 +23,9 @@ npm run build -w @smart-campus/shared-types
 npm run build -w @smart-campus/validation
 npm run build -w @smart-campus/api-client
 npm run dev
+# noutro terminal, telemetria e LPR de laboratório:
+npm run iot:sim
+npm run lpr:sim
 ```
 
 - Frontend: http://localhost:5173
@@ -51,6 +54,8 @@ npm run dev
 | `npm run db:seed` | Dados fictícios |
 | `npm test` | Testes |
 | `npm run build` | Build de todos os workspaces |
+| `npm run iot:sim` | Simulador MQTT de sensores do D2 |
+| `npm run lpr:sim` | Simulador de ingestão LPR (`POST /parking/ingest`) |
 
 ## Docker completo
 
@@ -98,7 +103,7 @@ Guia completo: **[docs/deploy-gratuito.md](docs/deploy-gratuito.md)** · Bluepri
 
 ## Limitações actuais
 
-- Módulos académicos/IoT/relatórios estão parcialmente preparados (placeholders + schema)
+- Módulos académicos, campus, IoT, relatórios e administração estão disponíveis no Core
 - MQTT ainda não está ligado (estrutura e dados demo apenas)
 - Notificações UI marcadas como preparadas
 

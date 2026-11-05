@@ -108,6 +108,16 @@ describe('API Inscrições em disciplinas', () => {
   });
 
   afterAll(async () => {
+    const users = await prisma.user.findMany({
+      where: { email: { contains: suffix } },
+      select: { id: true },
+    });
+    const studentIds = users.map((user) => user.id);
+    await prisma.financialNotification.deleteMany({ where: { studentId: { in: studentIds } } });
+    await prisma.analysisRequest.deleteMany({ where: { studentId: { in: studentIds } } });
+    await prisma.payment.deleteMany({ where: { studentId: { in: studentIds } } });
+    await prisma.debt.deleteMany({ where: { studentId: { in: studentIds } } });
+    await prisma.financialStatus.deleteMany({ where: { studentId: { in: studentIds } } });
     await prisma.user.deleteMany({ where: { email: { contains: suffix } } });
     await prisma.studentProfile.deleteMany({ where: { studentNumber: { contains: suffix } } });
     await prisma.subject.deleteMany({ where: { code: { contains: suffix } } });
@@ -229,6 +239,47 @@ describe('API Inscrições em disciplinas', () => {
     const res = await request(app).get(`${api}/enrolments?academicYear=abc`).set(bearer(adminToken));
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('recusa nova inscrição de estudante financeiramente bloqueado', async () => {
+    const profile = await prisma.studentProfile.findUniqueOrThrow({ where: { id: tempStudentProfileId } });
+    const previousPolicy = await prisma.financialPolicy.findUnique({ where: { code: 'DEFAULT_POLICY' } });
+    await prisma.debt.create({
+      data: {
+        code: `BLK-${suffix}`,
+        studentId: profile.userId,
+        title: 'Propina em atraso',
+        amount: 150,
+        origin: 'TUITION',
+        dueDate: new Date('2020-01-01T00:00:00.000Z'),
+        status: 'VENCIDA',
+      },
+    });
+    await prisma.financialPolicy.upsert({
+      where: { code: 'DEFAULT_POLICY' },
+      create: { code: 'DEFAULT_POLICY', gracePeriodDays: 0, autoBlockEnabled: true, maxDebtAmount: 0 },
+      update: { gracePeriodDays: 0, autoBlockEnabled: true, maxDebtAmount: 0 },
+    });
+    const res = await request(app)
+      .post(`${api}/enrolments`)
+      .set(bearer(coordinatorToken))
+      .send({ studentId: tempStudentProfileId, subjectId, academicYear: 2096 });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FINANCIAL_BLOCKED');
+    expect(await prisma.subjectEnrolment.findFirst({
+      where: { studentId: tempStudentProfileId, academicYear: 2096 },
+    })).toBeNull();
+    await prisma.debt.deleteMany({ where: { code: `BLK-${suffix}` } });
+    if (previousPolicy) {
+      await prisma.financialPolicy.update({
+        where: { code: 'DEFAULT_POLICY' },
+        data: {
+          gracePeriodDays: previousPolicy.gracePeriodDays,
+          autoBlockEnabled: previousPolicy.autoBlockEnabled,
+          maxDebtAmount: previousPolicy.maxDebtAmount,
+        },
+      });
+    }
   });
 
   it('coordenador inscreve outro estudante (201)', async () => {

@@ -17,7 +17,9 @@ import { STATE_LABELS, RECURRENCE_LEGEND, stateBadgeClass } from '../lib/academi
 import { PageIntro } from '../components/PageIntro';
 import { SubjectBoardPanel, type BoardMode } from '../components/SubjectBoardPanel';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { IconActionButton, PencilIcon, TrashIcon } from '../components/ActionButtons';
+import { CheckIcon, DeleteAction, EditAction, IconActionButton, TableActions } from '../components/ActionButtons';
+import { SelectField } from '../components/SelectField';
+import { ChipTabs } from '../components/ui';
 
 const STAFF_ROLES: RoleCode[] = ['TEACHER', 'COORDINATOR', 'ADMIN'];
 
@@ -429,28 +431,11 @@ function StaffAssessments() {
         description="Criação de avaliações e lançamento de notas. Docentes gerem as suas avaliações; coordenadores e administradores gerem todas."
       />
 
-      <div role="tablist" aria-label="Secções de avaliações" className="flex flex-wrap gap-2">
-        {STAFF_TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.id}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-              tab === item.id
-                ? 'bg-campus-deep text-white'
-                : 'bg-campus-mist text-campus-deep hover:bg-campus-line/70'
-            }`}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <ChipTabs items={STAFF_TABS} value={tab} onChange={setTab} ariaLabel="Secções de avaliações" asTabs />
 
       <div aria-live="polite" className="space-y-2">
-        {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p> : null}
+        {error ? <p className="alert-error">{error}</p> : null}
+        {notice ? <p className="alert-success">{notice}</p> : null}
       </div>
 
       <div hidden={tab !== 'avaliacoes'}>
@@ -471,44 +456,30 @@ function StaffAssessments() {
           </label>
           <label className="text-xs font-medium text-campus-deep/70">
             Disciplina
-            <select
-              className="field-input disabled:opacity-60"
+            <SelectField
               value={form.subjectId}
-              onChange={(e) => setForm({ ...form, subjectId: e.target.value })}
+              onChange={(subjectId) => setForm({ ...form, subjectId })}
               disabled={isEditing}
               required
-            >
-              <option value="">Selecionar disciplina</option>
-              {options?.subjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.code} — {s.name}
-                </option>
-              ))}
-            </select>
+              placeholder="Seleccionar disciplina"
+              options={options?.subjects.map((s) => ({ value: s.id, label: `${s.code} — ${s.name}` })) ?? []}
+            />
           </label>
           <label className="text-xs font-medium text-campus-deep/70">
             Tipo
-            <select className="field-input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as AssessmentType })}>
-              {Object.entries(TYPE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            <SelectField
+              value={form.type}
+              onChange={(type) => setForm({ ...form, type: type as AssessmentType })}
+              options={Object.entries(TYPE_LABELS).map(([value, label]) => ({ value, label }))}
+            />
           </label>
           <label className="text-xs font-medium text-campus-deep/70">
             Modo de nota
-            <select
-              className="field-input"
+            <SelectField
               value={form.gradingMode}
-              onChange={(e) => setForm({ ...form, gradingMode: e.target.value as GradingMode })}
-            >
-              {Object.entries(GRADING_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              onChange={(gradingMode) => setForm({ ...form, gradingMode: gradingMode as GradingMode })}
+              options={Object.entries(GRADING_LABELS).map(([value, label]) => ({ value, label }))}
+            />
           </label>
           {form.gradingMode === 'POINTS' ? (
             <label className="text-xs font-medium text-campus-deep/70">
@@ -721,13 +692,14 @@ function StaffAssessments() {
                     <td className="px-4 py-3">{assessment.date ? dateFormatter.format(new Date(assessment.date)) : '—'}</td>
                     <td className="px-4 py-3">—</td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" className="btn-secondary !px-3 !py-1.5" onClick={() => void openRoster(assessment)}>
-                          Lançar notas
-                        </button>
+                      <TableActions>
                         <IconActionButton
-                          label="Editar"
-                          icon={<PencilIcon />}
+                          label="Lançar notas"
+                          icon={<CheckIcon />}
+                          tone="success"
+                          onClick={() => void openRoster(assessment)}
+                        />
+                        <EditAction
                           title={
                             hasGrades(assessment)
                               ? 'Não é possível editar: já existem notas lançadas para esta avaliação.'
@@ -742,10 +714,7 @@ function StaffAssessments() {
                             startEdit(assessment);
                           }}
                         />
-                        <IconActionButton
-                          label="Eliminar"
-                          danger
-                          icon={<TrashIcon />}
+                        <DeleteAction
                           title={
                             hasGrades(assessment)
                               ? 'Não é possível eliminar: já existem notas lançadas para esta avaliação.'
@@ -755,7 +724,7 @@ function StaffAssessments() {
                           busy={deletingId !== null}
                           onClick={() => setPendingDelete(assessment)}
                         />
-                      </div>
+                      </TableActions>
                     </td>
                   </tr>
                 );
@@ -926,7 +895,7 @@ function StudentAssessments() {
         description="Notas por disciplina (admissão, exames e situação) e detalhe das avaliações lançadas pelos docentes."
       />
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="alert-error">{error}</p> : null}
 
       {loading ? (
         <div className="surface p-6 text-sm text-campus-deep/70">A carregar notas...</div>

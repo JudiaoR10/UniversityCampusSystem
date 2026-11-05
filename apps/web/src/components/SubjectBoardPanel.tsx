@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import type { AcademicState, AssessmentOptions, SubjectBoard, SubjectBoardEntry } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { RECURRENCE_LEGEND, STATE_LABELS, stateBadgeClass } from '../lib/academic';
+import { SelectField } from './SelectField';
+import { BanIcon, CheckIcon, IconActionButton } from './ActionButtons';
 
 export type BoardMode = 'frequencia' | 'exame' | 'recorrencia' | 'resultados';
 
@@ -342,24 +344,18 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
         </div>
         <label className="text-xs font-medium text-campus-deep/70">
           Disciplina do quadro
-          <select
-            className="field-input"
+          <SelectField
             value={subjectId}
-            onChange={(e) => onSubjectChange(e.target.value)}
-          >
-            <option value="">Selecionar disciplina</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.code} — {s.name}
-              </option>
-            ))}
-          </select>
+            onChange={onSubjectChange}
+            placeholder="Seleccionar disciplina"
+            options={subjects.map((s) => ({ value: s.id, label: `${s.code} — ${s.name}` }))}
+          />
         </label>
       </div>
 
       <div aria-live="polite" className="space-y-2">
-        {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p> : null}
+        {error ? <p className="alert-error">{error}</p> : null}
+        {notice ? <p className="alert-success">{notice}</p> : null}
       </div>
 
       {!subjectId ? (
@@ -499,21 +495,18 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
             </label>
             <label className="text-xs font-medium text-campus-deep/70">
               Estado
-              <select
-                className="field-input !mt-0 w-56"
+              <SelectField
+                className="w-56"
                 value={stateFilter}
-                onChange={(e) => {
-                  setStateFilter(e.target.value);
+                onChange={(next) => {
+                  setStateFilter(next);
                   setPage(1);
                 }}
-              >
-                <option value="">Todos os estados</option>
-                {statesPresent.map((state) => (
-                  <option key={state} value={state}>
-                    {STATE_LABELS[state]}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: '', label: 'Todos os estados' },
+                  ...statesPresent.map((state) => ({ value: state, label: STATE_LABELS[state] })),
+                ]}
+              />
             </label>
             <p className="text-xs text-campus-deep/70">
               {filtered.length} de {board.counters.total} estudantes
@@ -661,14 +654,14 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                                    : 'Dispensado pelo docente (nota de admissão)'}
                                </span>
                                <div className="flex items-center gap-2">
-                                 <button
-                                   type="button"
-                                   className="btn-secondary !px-3 !py-1.5 text-xs"
-                                   onClick={() => void toggleExemption(entry)}
+                                 <IconActionButton
+                                   label="Anular dispensa"
+                                   icon={<BanIcon />}
+                                   danger
+                                   busy={exemptingId === entry.studentProfileId}
                                    disabled={exemptingId !== null}
-                                 >
-                                   {exemptingId === entry.studentProfileId ? 'A processar...' : 'Anular dispensa'}
-                                 </button>
+                                   onClick={() => void toggleExemption(entry)}
+                                 />
                                </div>
                              </div>
                            ) : (
@@ -683,14 +676,14 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                                    setExemptionInputs((prev) => ({ ...prev, [entry.studentProfileId]: e.target.value }))
                                  }
                                />
-                               <button
-                                 type="button"
-                                 className="btn-secondary !px-3 !py-1.5 text-xs"
-                                 onClick={() => void toggleExemption(entry)}
+                               <IconActionButton
+                                 label="Dispensar"
+                                 icon={<CheckIcon />}
+                                 tone="success"
+                                 busy={exemptingId === entry.studentProfileId}
                                  disabled={exemptingId !== null}
-                               >
-                                 {exemptingId === entry.studentProfileId ? 'A processar...' : 'Dispensar'}
-                               </button>
+                                 onClick={() => void toggleExemption(entry)}
+                               />
                              </div>
                            )}
                          </td>

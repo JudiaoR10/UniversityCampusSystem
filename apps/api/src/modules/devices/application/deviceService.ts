@@ -45,7 +45,6 @@ export async function createDevice(input: CreateDeviceInput, actorId: string, co
 
   return device;
 }
-
 export async function updateDevice(
   id: string,
   input: UpdateDeviceInput,
@@ -77,6 +76,7 @@ export async function updateDevice(
 
   return device;
 }
+
 
 export async function updateDeviceStatus(
   id: string,

@@ -1,3 +1,4 @@
+import { readPagination } from '../../../lib/pagination.js';
 import { Router } from 'express';
 import { createScheduleSchema, updateScheduleSchema } from '@smart-campus/validation';
 import { authenticate, authorize } from '../../../middleware/auth.js';
@@ -26,14 +27,21 @@ function queryDate(value: unknown, field: string): Date | undefined {
 }
 
 function parseFilters(query: Record<string, unknown>): ScheduleFilters {
+  const from = queryDate(query.from, 'from');
+  const to = queryDate(query.to, 'to');
+
+  if (from && to && from > to) {
+    throw new AppError('VALIDATION_ERROR', 'Parâmetro from deve ser anterior ou igual a to', 400);
+  }
+
   return {
     studentId: queryString(query.studentId),
     courseId: queryString(query.courseId),
     subjectId: queryString(query.subjectId),
     teacherId: queryString(query.teacherId),
     roomId: queryString(query.roomId),
-    from: queryDate(query.from, 'from'),
-    to: queryDate(query.to, 'to'),
+    from,
+    to,
   };
 }
 
@@ -47,7 +55,7 @@ schedulesRouter.get('/schedules/options', authenticate, authorize(...MANAGE_ROLE
 
 schedulesRouter.get('/schedules', authenticate, authorize(...STUDENT_DATA_ROLES), async (req, res, next) => {
   try {
-    success(res, await scheduleService.listSchedules(req.user!, parseFilters(req.query)));
+    success(res, await scheduleService.listSchedules(req.user!, parseFilters(req.query), readPagination(req.query)));
   } catch (err) {
     next(err);
   }

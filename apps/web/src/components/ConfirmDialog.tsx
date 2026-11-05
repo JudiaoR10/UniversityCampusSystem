@@ -3,36 +3,35 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export type ConfirmOptions = {
   title: string;
   message?: string;
-  description?: string;
   details?: Array<{ label: string; value: string }>;
   confirmLabel?: string;
   confirmTone?: 'danger' | 'primary';
 };
 
-type ConfirmDialogProps = ConfirmOptions & {
-  open?: boolean;
-  busy?: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-};
-
-/**
- * Modal de confirmação (substitui window.confirm). Fecha com Escape ou clique fora.
- */
 export function ConfirmDialog({
   open = true,
   title,
-  message,
   description,
+  message,
   details,
   confirmLabel = 'Confirmar',
-  confirmTone = 'primary',
+  confirmTone = 'danger',
   busy = false,
-  onCancel,
   onConfirm,
-}: ConfirmDialogProps) {
+  onCancel,
+}: {
+  open?: boolean;
+  title: string;
+  description?: string;
+  message?: string;
+  details?: Array<{ label: string; value: string }>;
+  confirmLabel?: string;
+  confirmTone?: 'danger' | 'primary';
+  busy?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
   const confirmRef = useRef<HTMLButtonElement>(null);
-  const body = description ?? message;
 
   useEffect(() => {
     if (!open) return;
@@ -53,6 +52,8 @@ export function ConfirmDialog({
 
   if (!open) return null;
 
+  const desc = description ?? message;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-campus-ink/40 p-4 backdrop-blur-sm"
@@ -68,10 +69,13 @@ export function ConfirmDialog({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <p className="eyebrow">Confirmação</p>
-        <h2 id="confirm-dialog-title" className="mt-1 font-display text-lg font-semibold text-campus-ink">
+        <h2
+          id="confirm-dialog-title"
+          className="mt-1 font-display text-lg font-semibold text-campus-ink"
+        >
           {title}
         </h2>
-        {body ? <p className="mt-2 text-sm text-campus-deep/75">{body}</p> : null}
+        {desc ? <p className="mt-2 text-sm text-campus-deep/75">{desc}</p> : null}
         {details && details.length > 0 ? (
           <dl className="mt-3 space-y-1.5 rounded-xl bg-campus-mist/70 p-3 text-sm">
             {details.map((item) => (
@@ -83,7 +87,7 @@ export function ConfirmDialog({
           </dl>
         ) : null}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className="btn-secondary" disabled={busy} onClick={onCancel}>
+          <button type="button" className="btn-secondary" onClick={onCancel} disabled={busy}>
             Cancelar
           </button>
           <button
@@ -91,11 +95,11 @@ export function ConfirmDialog({
             type="button"
             className={
               confirmTone === 'danger'
-                ? 'rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60'
+                ? 'rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700 active:scale-[0.97] disabled:opacity-60'
                 : 'btn-primary'
             }
-            disabled={busy}
             onClick={onConfirm}
+            disabled={busy}
           >
             {busy ? 'A processar...' : confirmLabel}
           </button>
@@ -126,7 +130,15 @@ export function useConfirm() {
   }, []);
 
   const dialog = options ? (
-    <ConfirmDialog {...options} onCancel={() => settle(false)} onConfirm={() => settle(true)} />
+    <ConfirmDialog
+      open
+      title={options.title}
+      message={options.message}
+      details={options.details}
+      confirmLabel={options.confirmLabel ?? 'Confirmar'}
+      onConfirm={() => settle(true)}
+      onCancel={() => settle(false)}
+    />
   ) : null;
 
   return { confirm, dialog };

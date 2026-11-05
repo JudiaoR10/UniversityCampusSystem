@@ -1,3 +1,4 @@
+import { readPagination } from '../../../lib/pagination.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import {
@@ -62,6 +63,7 @@ assessmentsRouter.patch(
           req.params.subjectId,
           body.requiredTestCount,
           req.user!,
+          req.correlationId,
         ),
       );
     } catch (err) {
@@ -224,7 +226,7 @@ assessmentsRouter.get('/my/final-grades', authenticate, authorize('STUDENT'), as
 assessmentsRouter.get('/results', authenticate, authorize(...STUDENT_DATA_ROLES), async (req, res, next) => {
   try {
     const studentId = typeof req.query.studentId === 'string' ? req.query.studentId : undefined;
-    success(res, await resultService.listResults(req.user!, studentId));
+    success(res, await resultService.listResults(req.user!, studentId, readPagination(req.query)));
   } catch (err) {
     next(err);
   }

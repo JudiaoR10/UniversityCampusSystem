@@ -847,9 +847,14 @@ canvas:not(.twin-stage canvas) {
 .financial-print-view {
   display: none;
 }
+.financial-document-brand, .financial-document-signatures { display: none; }
 
 @media print {
-  @page { size: A4 landscape; margin: 12mm; }
+  @page {
+    size: A4 landscape; margin: 14mm 12mm 17mm;
+    @bottom-left { content: "Smart Campus · Tesouraria"; font: 7pt Arial, sans-serif; }
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 7pt Arial, sans-serif; }
+  }
   :root { background: #fff; }
   body.financial-print-mode { background: #fff !important; min-height: 0; overflow: visible; }
   body.financial-print-mode::before { display: none; }
@@ -867,5 +872,13 @@ canvas:not(.twin-stage canvas) {
   .financial-print-view tr { break-inside: avoid; }
   .financial-print-view p { margin: 8pt 0; }
   .financial-print-view * { color: #000 !important; }
-  .financial-print-view h3 { font-size: 15pt; margin-bottom: 10pt; }
+  .financial-print-view h3 { font: bold 19pt Georgia, serif; margin: 8pt 0 14pt; }
+  .financial-print-view .financial-document-brand { display: block; border-top: 3pt solid #17655e; padding-top: 12pt; font-size: 9pt; letter-spacing: 1pt; text-transform: uppercase; }
+  .financial-print-view thead th { border-top: 1pt solid #b8c9d0; border-bottom: 1pt solid #b8c9d0; background: #f2f6f7; }
+  .financial-print-view tbody tr:nth-child(even) { background: #f8fafb; }
+  .financial-print-view td { border-bottom: .5pt solid #d5dfe4; }
+  .financial-print-view tfoot { display: table-row-group; border-top: 1pt solid #b8c9d0; background: #f2f6f7; }
+  .financial-print-view .financial-document-signatures { display: flex; gap: 40mm; justify-content: center; margin: 25mm 0 12mm; break-inside: avoid; }
+  .financial-document-signatures span { min-width: 65mm; border-top: 1px solid #596c79; padding-top: 3mm; text-align: center; font-size: 9pt; }
+  .financial-document-signatures small { display: block; font-size: 7pt; margin-top: 1mm; }
 }

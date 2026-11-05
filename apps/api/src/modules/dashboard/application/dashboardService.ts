@@ -6,12 +6,16 @@ import { getAdminStatus } from '../../admin/application/adminService.js';
 export async function getDashboard(userId: string, actorRole?: string) {
   const isAdmin = actorRole === 'ADMIN';
   const roomFilter = isAdmin ? {} : { temPlaca: true };
+  const canSeeAlerts = actorRole !== 'STUDENT';
+
   const [currentUser, roomsCount, openIncidents, devicesCount, recentAlerts, recentActivity, core] = await Promise.all([
     getMe(userId),
     prisma.room.count({ where: roomFilter }),
     prisma.incident.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
     prisma.device.count(),
-    prisma.alert.findMany({ orderBy: { createdAt: 'desc' }, take: 5 }),
+    canSeeAlerts
+      ? prisma.alert.findMany({ orderBy: { createdAt: 'desc' }, take: 5 })
+      : Promise.resolve([]),
     prisma.auditEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 8 }),
     getAdminStatus(),
   ]);

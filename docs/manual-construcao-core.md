@@ -232,12 +232,14 @@ Ficheiro: `.env.example` → copiar para `.env`.
 | `JWT_REFRESH_SECRET` | ≥ 32 caracteres | Sim |
 | `JWT_ACCESS_EXPIRES_IN` | `15m` | Não |
 | `JWT_REFRESH_EXPIRES_IN` | `7d` | Não |
-| `RATE_LIMIT_WINDOW_MS` | `900000` | Não |
-| `RATE_LIMIT_MAX` | `200` | Não |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Não |
+| `RATE_LIMIT_MAX` | `600` | Não |
 | `VITE_API_BASE_URL` | `http://localhost:4100/api/v1` | Sim (frontend) |
 | `LOG_LEVEL` | `info` | Não |
 
 Validação no backend: `apps/api/src/config/env.ts` (schema Zod).
+
+O limite normal é de 600 pedidos por minuto, por utilizador com token válido; pedidos anónimos usam o IP. Aplica-se apenas a `/api/v1`: ficheiros da interface, documentação e `/health` não consomem a quota. O login tem ainda um limite independente de 20 tentativas falhadas por IP em 15 minutos; entradas bem-sucedidas não consomem esse limite. As respostas 429 incluem `Retry-After` e o identificador do pedido. Reinicie a API após alterar estas variáveis.
 
 ## 2.4 Credenciais PostgreSQL (Docker local)
 

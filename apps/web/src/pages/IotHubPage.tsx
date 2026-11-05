@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { canViewAlerts } from '../lib/roles';
 import { mapApiDevices, type IotDeviceView } from '../lib/iotDemo';
 import { IotDeviceCard } from '../components/iot/IotDeviceCard';
 import { PageIntro } from '../components/PageIntro';
@@ -10,7 +11,8 @@ import type { AlertDto } from '@smart-campus/shared-types';
 const pipeline = ['Sensor', 'ESP32', 'Wi-Fi', 'MQTT', 'API', 'Dashboard'];
 
 export function IotHubPage() {
-  const { api } = useAuth();
+  const { api, user } = useAuth();
+  const canSeeAlerts = canViewAlerts(user?.role);
   const [devices, setDevices] = useState<IotDeviceView[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function IotHubPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedId) {
+    if (!canSeeAlerts || !selectedId || selectedId.startsWith('demo-')) {
       setAlerts([]);
       setAlertsError(null);
       setAlertsLoading(false);
@@ -74,7 +76,7 @@ export function IotHubPage() {
     return () => {
       cancelled = true;
     };
-  }, [api, selectedId]);
+  }, [api, selectedId, canSeeAlerts]);
 
   const selected = useMemo(() => devices.find((d) => d.id === selectedId) ?? null, [devices, selectedId]);
   const online = devices.filter((d) => d.status === 'ONLINE').length;
@@ -191,34 +193,38 @@ export function IotHubPage() {
 
                 <p className="text-xs text-campus-deep/60">Atualizado {selected.lastSeenLabel}</p>
 
-                <div className="rounded-xl border border-campus-line/70 p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-campus-deep/50">
-                    Alertas deste nó
-                  </p>
-                  {alertsLoading ? (
-                    <p className="mt-2 text-sm text-campus-deep/70">A carregar…</p>
-                  ) : alertsError ? (
-                    <p className="mt-2 text-sm text-red-700">{alertsError}</p>
-                  ) : alerts.length === 0 ? (
-                    <p className="mt-2 text-sm text-campus-deep/70">Nenhum alerta associado.</p>
-                  ) : (
-                    <ul className="mt-2 space-y-2">
-                      {alerts.map((a) => (
-                        <li key={a.id} className="text-sm">
-                          <span className="font-medium text-campus-ink">{a.title}</span>
-                          <span className="ml-2 text-[10px] font-semibold">{a.severity}</span>
-                          <p className="text-xs text-campus-deep/65">
-                            {a.acknowledged ? 'Confirmado' : 'Por confirmar'}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                {canSeeAlerts ? (
+                  <>
+                    <div className="rounded-xl border border-campus-line/70 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-campus-deep/50">
+                        Alertas deste nó
+                      </p>
+                      {alertsLoading ? (
+                        <p className="mt-2 text-sm text-campus-deep/70">A carregar…</p>
+                      ) : alertsError ? (
+                        <p className="mt-2 text-sm text-red-700">{alertsError}</p>
+                      ) : alerts.length === 0 ? (
+                        <p className="mt-2 text-sm text-campus-deep/70">Nenhum alerta associado.</p>
+                      ) : (
+                        <ul className="mt-2 space-y-2">
+                          {alerts.map((a) => (
+                            <li key={a.id} className="text-sm">
+                              <span className="font-medium text-campus-ink">{a.title}</span>
+                              <span className="ml-2 text-[10px] font-semibold">{a.severity}</span>
+                              <p className="text-xs text-campus-deep/65">
+                                {a.acknowledged ? 'Confirmado' : 'Por confirmar'}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
 
-               <Link to={`/alerts?deviceId=${encodeURIComponent(selected.id)}`} className="btn-primary w-full">
-                  Ver alertas relacionados
-                </Link>
+                    <Link to={`/alerts?deviceId=${encodeURIComponent(selected.id)}`} className="btn-primary w-full">
+                      Ver alertas relacionados
+                    </Link>
+                  </>
+                ) : null}
               </div>
             </>
           ) : (

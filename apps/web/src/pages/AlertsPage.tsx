@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { canViewAlerts } from '../lib/roles';
 import type { AlertDto } from '@smart-campus/shared-types';
 import { PageIntro } from '../components/PageIntro';
 import { AlertMessage } from '../components/AlertMessage';
@@ -25,7 +26,8 @@ export function AlertsPage() {
   const [loading, setLoading] = useState(true);
   const [deviceLabel, setDeviceLabel] = useState<string | null>(null);
 
-  const canManage = !!user && ['ADMIN', 'COORDINATOR', 'TECHNICIAN'].includes(user.role);
+  const canSee = canViewAlerts(user?.role);
+  const canManage = canSee;
 
   async function load() {
     const res = await api.alerts(deviceId ?? undefined);
@@ -33,6 +35,7 @@ export function AlertsPage() {
   }
 
   useEffect(() => {
+    if (!canSee) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -50,7 +53,7 @@ export function AlertsPage() {
     return () => {
       cancelled = true;
     };
-  }, [api, deviceId]);
+  }, [api, deviceId, canSee]);
 
   useEffect(() => {
     if (!deviceId) {
@@ -85,6 +88,8 @@ export function AlertsPage() {
       setBusyId(null);
     }
   }
+
+  if (!canSee) return <Navigate to="/dashboard" replace />;
 
   return (
     <div className="space-y-6">

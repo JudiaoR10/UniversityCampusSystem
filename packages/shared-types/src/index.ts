@@ -338,6 +338,8 @@ export type ScheduleDto = {
 };
 
 export type ScheduleFiltersInput = {
+  offset?: string;
+  limit?: string;
   studentId?: string;
   courseId?: string;
   subjectId?: string;
@@ -393,6 +395,12 @@ export type AttendanceRosterEntry = {
 };
 
 export type AttendanceRoster = {
+  semester?: {
+    year: number;
+    number: number;
+    sessions: Array<{ id: string; title: string; startsAt: string; endsAt: string }>;
+    records: Array<{ scheduleId: string; studentId: string; status: AttendanceStatus; note?: string | null }>;
+  };
   schedule: {
     id: string;
     title: string;
@@ -979,13 +987,14 @@ export const campusModules: CampusModule[] = [
     status: "available",
     groupHint: "Grupo IoT",
   },
-  {
+    {
     key: "alerts",
     label: "Alertas",
     path: "/alerts",
     description: "Alertas operacionais e de sensores.",
     status: "available",
     groupHint: "Grupo IoT",
+    requiredRoles: ["ADMIN", "COORDINATOR", "TECHNICIAN"],
   },
   {
     key: "notifications",

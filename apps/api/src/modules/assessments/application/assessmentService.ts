@@ -4,7 +4,6 @@ import { AppError, conflict, forbidden, notFound } from '../../../lib/errors.js'
 import { prisma } from '../../../lib/prisma.js';
 import { audit } from '../../audit/application/auditService.js';
 import { notifyUsers } from '../../notifications/application/notificationService.js';
-import { getStudentStatus } from '../../financial/application/financialService.js';
 
 export type Actor = { id: string; role: string };
 
@@ -42,7 +41,9 @@ export function assertGradeValueInRange(value: number, gradingMode: string, maxS
   const invalid =
     (gradingMode === 'PERCENTAGE' && (value < 0 || value > 20)) ||
     (gradingMode === 'POINTS' && (value < 0 || value > maxScore)) ||
-    (gradingMode === 'SCALE' && (value < 0 || value > 20));  if (invalid) {
+    (gradingMode === 'SCALE' && (value < 0 || value > 20));
+
+  if (invalid) {
     const range =
       gradingMode === 'PERCENTAGE' ? '0 a 20' : gradingMode === 'POINTS' ? `0 a ${maxScore} (pontos)` : '0 a 20';
     throw new AppError('INVALID_GRADE_VALUE', `Nota fora do intervalo permitido para o modo ${gradingMode}: ${range}`, 400);
@@ -70,6 +71,14 @@ export function assertCanManageAssessment(assessment: AssessmentRecord, actor: A
 export async function assertTeacherTeachesSubject(subjectId: string, actor: Actor) {
   if (actor.role !== 'TEACHER') {
     throw forbidden('Criação de avaliações e lançamento de notas é exclusivo do docente da disciplina', 'FORBIDDEN');
+  }
+  // O docente deve estar registado como TeacherProfile activo (módulo de docentes).
+  const teacherProfile = await prisma.teacherProfile.findUnique({
+    where: { userId: actor.id },
+    select: { status: true },
+  });
+  if (!teacherProfile || teacherProfile.status !== 'ACTIVE') {
+    throw forbidden('Docente não está registado/activo no módulo de docentes', 'FORBIDDEN');
   }
   const schedule = await prisma.classSchedule.findFirst({
     where: { subjectId, teacherId: actor.id },
@@ -133,9 +142,9 @@ export function computeAcademicState(input: AcademicStateInput): { state: Academ
 
   const admissionRounded = Math.round(admissionGrade);
 
-  // 2. Dispensa: frequência na banda >= 14 (ou no mínimo extra definido pelo
-  //    docente) e sem nenhuma negativa nas avaliações contínuas.
-  const effectiveExemptionMin = Math.max(14, Math.round(input.exemptionMinGrade ?? 14));
+  // 2. Dispensa: mínimo escolhido pelo docente (14 por omissão),
+  //    sem nenhuma negativa nas avaliações contínuas.
+  const effectiveExemptionMin = (input.exemptionMinGrade ?? 14);
   if (admissionRounded >= effectiveExemptionMin && !input.hasNegativeContinuous) {
     return { state: 'DISPENSADO', reason: null };
   }
@@ -249,8 +258,8 @@ type SubjectAssessmentInput = {
  * avaliações contínuas (EXAM/RECURRENCE ficam de fora).
  *
  * Regra de "completo":
- * - Se o docente definiu `requiredTestCount` para a disciplina: basta que o
- *   estudante tenha nota nesse número de avaliações contínuas.
+ * - Se o docente definiu `requiredTestCount` para a disciplina: todas as avaliações contínuas
+ *   devem ter nota e atingir pelo menos o número definido.
  * - Se não definiu: exigem-se todas as avaliações contínuas com nota E pesos
  *   a somar 100% (ou mais).
  */
@@ -258,16 +267,16 @@ export function computeSituationsByStudent(
   assessments: SubjectAssessmentInput[],
   studentIds: string[],
   requiredTestCount?: number | null,
+  exemptionMinGrade?: number | null,
 ): Map<string, SituacaoAcademica | null> {
-  let base = assessments.filter((a) => !EXAM_ASSESSMENT_TYPES.includes(a.type));
-  if (base.length === 0) base = assessments;
+  const base = assessments.filter((a) => !EXAM_ASSESSMENT_TYPES.includes(a.type));
   const baseWeight = round2(base.reduce((acc, a) => acc + a.weight, 0));
 
   const situacoes = new Map<string, SituacaoAcademica | null>();
   for (const studentId of studentIds) {
     const graded = base.filter((a) => a.grades.some((g) => g.studentId === studentId));
     const complete =
-      base.length > 0 &&
+      base.length > 0 && graded.length === base.length &&
       (requiredTestCount != null
         ? graded.length >= requiredTestCount
         : graded.length === base.length && baseWeight >= 100);
@@ -281,7 +290,9 @@ export function computeSituationsByStudent(
       return acc + grade.valuePercent * a.weight;
     }, 0);
     const grade20 = round2((weightedSum / totalWeight) * 0.2);
-    const situacao = classifySituacao(Math.round(grade20));
+    const situacao: SituacaoAcademica = Math.round(grade20) < 10
+      ? 'EXCLUIDO'
+      : Math.round(grade20) >= (exemptionMinGrade ?? 14) ? 'DISPENSADO' : 'ADMITIDO_AO_EXAME';
     // Basta uma negativa registada (permanente): grades com everNegative vedam
     // a dispensa no percurso legado também.
     const hasNegativeVeto = graded.some((a) =>
@@ -306,13 +317,13 @@ export function assertAssessmentTypeAllowedForStudent(assessmentType: string, si
 export async function loadSituations(subjectId: string, studentIds: string[]): Promise<Map<string, SituacaoAcademica | null>> {
   const subject = await prisma.subject.findUnique({
     where: { id: subjectId },
-    select: { requiredTestCount: true },
+    select: { requiredTestCount: true, exemptionMinGrade: true },
   });
   const subjectAssessments = await prisma.assessment.findMany({
     where: { subjectId },
     include: { grades: { select: { studentId: true, valuePercent: true, everNegative: true } } },
   });
-  return computeSituationsByStudent(subjectAssessments, studentIds, subject?.requiredTestCount ?? null);
+  return computeSituationsByStudent(subjectAssessments, studentIds, subject?.requiredTestCount ?? null, subject?.exemptionMinGrade ?? null);
 }
 
 /** Carrega disciplina + todas as avaliações (com notas) para calcular estados. */
@@ -362,11 +373,22 @@ export async function setSubjectExemption(
   await assertCanManageSubject(subjectId, actor);
   const subject = await prisma.subject.findUnique({ where: { id: subjectId } });
   if (!subject) throw notFound('SUBJECT_NOT_FOUND', 'Disciplina não encontrada');
+  assertSubjectNotPublished(subject.resultsPublishedAt);
 
   const student = await prisma.studentProfile.findUnique({ where: { id: input.studentId } });
   if (!student) throw notFound('STUDENT_NOT_FOUND', 'Estudante não encontrado');
   if (student.courseId && student.courseId !== subject.courseId) {
     throw conflict('STUDENT_COURSE_MISMATCH', 'Estudante fora do curso da disciplina');
+  }
+
+  if (input.exempted) {
+    const enrolment = await prisma.subjectEnrolment.findFirst({
+      where: { subjectId, studentId: student.id, status: { in: ['ACTIVE', 'PENDING'] } },
+      select: { id: true },
+    });
+    if (!enrolment) {
+      throw conflict('STUDENT_NOT_ENROLLED', 'Estudante não está inscrito nesta disciplina');
+    }
   }
 
   if (input.grade != null && (input.grade < 0 || input.grade > 20)) {
@@ -451,7 +473,7 @@ export async function loadAcademicStates(
 /**
  * Regra de posse para dados de um estudante (anti-BOLA):
  * - STUDENT: apenas o próprio (id do perfil coincide com o utilizador autenticado);
- * - TEACHER: apenas estudantes cujas notas já lançou;
+ * - TEACHER: apenas estudantes com notas em disciplinas que leciona;
  * - COORDINATOR/ADMIN: qualquer estudante.
  */
 export async function assertStudentDataAccess(studentId: string, actor: Actor) {
@@ -468,7 +490,9 @@ export async function assertStudentDataAccess(studentId: string, actor: Actor) {
   }
 
   if (actor.role === 'TEACHER') {
-    const graded = await prisma.grade.findFirst({ where: { studentId, gradedById: actor.id } });
+    const graded = await prisma.grade.findFirst({
+      where: { studentId, assessment: { subject: { schedules: { some: { teacherId: actor.id } } } } },
+    });
     if (!graded) {
       throw forbidden('Docente sem relação académica com este estudante', 'FORBIDDEN');
     }
@@ -618,12 +642,26 @@ export async function setSubjectRequiredTestCount(
   subjectId: string,
   requiredTestCount: number | null,
   actor: Actor,
+  correlationId: string,
 ) {
   await assertTeacherTeachesSubject(subjectId, actor);
+  const existing = await prisma.subject.findUnique({ where: { id: subjectId } });
+  if (!existing) throw notFound('SUBJECT_NOT_FOUND', 'Disciplina não encontrada');
+  assertSubjectNotPublished(existing.resultsPublishedAt);
+
   const subject = await prisma.subject.update({
     where: { id: subjectId },
     data: { requiredTestCount },
     select: { id: true, code: true, name: true, requiredTestCount: true },
+  });
+
+  await audit({
+    action: 'SUBJECT_RULES_UPDATE',
+    resource: 'Subject',
+    resourceId: subjectId,
+    actorId: actor.id,
+    correlationId,
+    metadata: { before: existing.requiredTestCount, after: subject.requiredTestCount },
   });
   return subject;
 }
@@ -670,12 +708,11 @@ async function assertExemptionEligible(
   }
 
   const min = subject.exemptionMinGrade;
-  if (min === null) return;
 
   const graded = assessments.filter((a) => gradeByAssessment.has(a.id));
   const baseWeight = assessments.reduce((acc, a) => acc + a.weight, 0);
   const complete =
-    assessments.length > 0 &&
+    assessments.length > 0 && graded.length === assessments.length &&
     (subject.requiredTestCount != null
       ? graded.length >= subject.requiredTestCount
       : graded.length === assessments.length && baseWeight >= 100);
@@ -690,7 +727,7 @@ async function assertExemptionEligible(
       graded.reduce((acc, a) => acc + a.weight, 0),
   );
   const admissionGrade = round2(admissionPercent * 0.2);
-  if (admissionGrade < min) {
+  if (min !== null && Math.round(admissionGrade) < min) {
     throw conflict(
       'EXEMPTION_MIN_GRADE',
       `Admissão ${admissionGrade} abaixo do mínimo de dispensa ${min} definido nesta disciplina`,
@@ -848,11 +885,13 @@ export async function getSubjectBoard(subjectId: string, actor: Actor) {
   const { subject, assessments } = await loadSubjectContext(subjectId);
   const exemptedStudents = await loadSubjectExemptions(subjectId);
 
-  const students = await prisma.studentProfile.findMany({
-    where: { courseId: subject.courseId },
-    include: { user: { select: { fullName: true } } },
-    orderBy: { studentNumber: 'asc' },
+  // Apenas estudantes INSCRITOS na disciplina (módulo de inscrições).
+  const enrolments = await prisma.subjectEnrolment.findMany({
+    where: { subjectId, status: { in: ['ACTIVE', 'PENDING'] } },
+    include: { student: { include: { user: { select: { fullName: true } } } } },
+    orderBy: { student: { studentNumber: 'asc' } },
   });
+  const students = enrolments.map((e) => e.student);
 
   const examAssessment = assessments.find((a) => a.type === 'EXAM') ?? null;
   const recurrenceAssessment = assessments.find((a) => a.type === 'RECURRENCE') ?? null;
@@ -890,7 +929,7 @@ export async function getSubjectBoard(subjectId: string, actor: Actor) {
     const examGrade = examAssessment?.grades.find((g) => g.studentId === student.id) ?? null;
     const recurrenceGrade = recurrenceAssessment?.grades.find((g) => g.studentId === student.id) ?? null;
 
-    const examEditable = state !== 'DISPENSADO' && state !== 'EXCLUIDO';
+    const examEditable = result.complete && state !== 'DISPENSADO' && state !== 'EXCLUIDO';
     const examBlockedReason = state === 'DISPENSADO'
       ? 'Dispensado — sem exame/recorrência'
       : state === 'EXCLUIDO'
@@ -995,8 +1034,9 @@ export async function getAssessmentRoster(id: string, actor: Actor) {
   if (!assessment) throw notFound('ASSESSMENT_NOT_FOUND', 'Avaliação não encontrada');
   assertCanManageAssessment(assessment, actor);
 
+  // Apenas estudantes INSCRITOS na disciplina (módulo de inscrições).
   const enrolments = await prisma.subjectEnrolment.findMany({
-    where: { subjectId: assessment.subjectId, status: 'ACTIVE' },
+    where: { subjectId: assessment.subjectId, status: { in: ['ACTIVE', 'PENDING'] } },
     include: { student: { include: { user: { select: { fullName: true } } } } },
     orderBy: { student: { studentNumber: 'asc' } },
   });
@@ -1117,9 +1157,10 @@ export async function assertStudentFinancialStanding(studentId: string) {
     where: { id: studentId },
     select: { userId: true },
   });
-  if (!profile) return;
-  const standing = await getStudentStatus(profile.userId);
-  if (standing.status === 'BLOCKED') {
+  const row = await prisma.financialStatus.findUnique({
+    where: { studentId: profile?.userId ?? studentId },
+  });
+  if (row?.status === 'BLOCKED') {
     throw forbidden(
       'Deve regularizar a sua situação financeira para consultar as notas',
       'FINANCIAL_BLOCKED',
@@ -1193,6 +1234,20 @@ export async function upsertGrades(assessmentId: string, input: UpsertGradesInpu
     );
   }
 
+  // Apenas estudantes INSCRITOS na disciplina podem receber notas (módulo de inscrições).
+  const enrolments = await prisma.subjectEnrolment.findMany({
+    where: { subjectId: assessment.subject.id, studentId: { in: studentIds }, status: { in: ['ACTIVE', 'PENDING'] } },
+    select: { studentId: true },
+  });
+  const enrolledIds = new Set(enrolments.map((e) => e.studentId));
+  const notEnrolled = students.filter((s) => !enrolledIds.has(s.id));
+  if (notEnrolled.length > 0) {
+    throw conflict(
+      'STUDENT_NOT_ENROLLED',
+      `Estudantes não inscritos nesta disciplina: ${notEnrolled.map((s) => s.studentNumber).join(', ')}`,
+    );
+  }
+
   const states = await loadAcademicStates(assessment.subjectId, studentIds);
   for (const g of input.grades) {
     assertGradeAllowedForState(assessment.type, states.get(g.studentId)?.state ?? null);
@@ -1241,7 +1296,7 @@ export async function upsertGrades(assessmentId: string, input: UpsertGradesInpu
           value: g.value,
           valuePercent: g.valuePercent,
           // A negativa registada fica para sempre, mesmo que a nota melhore.
-          everNegative: Boolean(beforeByStudent.get(g.studentId)?.everNegative) || g.everNegative,
+          everNegative: g.everNegative ? true : undefined,
           comment: g.comment,
           gradedById: g.gradedById,
         },
@@ -1304,14 +1359,16 @@ export async function upsertGrades(assessmentId: string, input: UpsertGradesInpu
 export async function listStudentGrades(studentId: string, actor: Actor) {
   await assertStudentDataAccess(studentId, actor);
 
-  await assertStudentFinancialStanding(studentId);
+  if (actor.role === 'STUDENT') await assertStudentFinancialStanding(studentId);
 
   const grades = await prisma.grade.findMany({
     where: {
       studentId,
-      ...(actor.role === 'STUDENT'
-        ? { assessment: { subject: { resultsPublishedAt: { not: null } } } }
-        : {}),
+      ...(actor.role === 'TEACHER'
+        ? { assessment: { subject: { schedules: { some: { teacherId: actor.id } } } } }
+        : actor.role === 'STUDENT'
+          ? { assessment: { subject: { resultsPublishedAt: { not: null } } } }
+          : {}),
     },
     include: {
       assessment: {
@@ -1397,8 +1454,8 @@ export type SubjectFinalResult = {
  * 4. Classificação a partir da nota inteira: <=9 EXCLUIDO, 10–13 APROVADO,
  *    >=14 DISPENSADO (bandas 9.5–13 e 13.5–20 da regra institucional).
  * 5. O resultado só é calculado quando:
- *    - o docente definiu `requiredTestCount`: o estudante tem nota nesse número
- *      de avaliações contínuas; ou
+ *    - todas as avaliações contínuas têm nota e o número mínimo definido pelo
+ *      docente foi atingido; ou
  *    - não definiu: os pesos contínuos somam 100% (ou mais) e todos têm nota.
  * Função pura — sem acesso à base de dados — para ser testável de forma isolada.
  */
@@ -1416,16 +1473,15 @@ export function computeSubjectFinalResult(
   const hasGrade = (a: SubjectAssessmentForFinal) => a.grades.some((g) => g.studentId === studentId);
   const findGrade = (a: SubjectAssessmentForFinal) => a.grades.find((g) => g.studentId === studentId)!;
 
-  // Ciclo contínuo: EXAM/RECURRENCE ficam de fora. Sem contínuos definidos, tudo conta.
-  const nonExam = assessments.filter((a) => !EXAM_ASSESSMENT_TYPES.includes(a.type));
-  const base = nonExam.length > 0 ? nonExam : assessments;
+  // Exames nunca substituem as notas de frequência em falta.
+  const base = assessments.filter((a) => !EXAM_ASSESSMENT_TYPES.includes(a.type));
   const baseIds = new Set(base.map((a) => a.id));
   const gradedBase = base.filter(hasGrade);
-  // Situação/resultados: regra do número de testes definida pelo docente,
-  // ou (fallback) pesos contínuos a cobrir 100% com todos lançados.
+  // Todas as avaliações contínuas precisam de nota, incluindo quando há
+  // um número mínimo configurado pelo docente.
   const baseWeight = round2(base.reduce((acc, a) => acc + a.weight, 0));
   const complete =
-    base.length > 0 &&
+    base.length > 0 && gradedBase.length === base.length &&
     (requiredTestCount != null
       ? gradedBase.length >= requiredTestCount
       : gradedBase.length === base.length && baseWeight >= 100);
@@ -1442,11 +1498,11 @@ export function computeSubjectFinalResult(
   // veta a dispensa — valor actual da nota não é relevante.
   const hasNegativeContinuous = gradedBase.some((a) => findGrade(a).everNegative === true);
 
-  // Elegível à dispensa automática: admissão >= regra institucional (14) ou
-  // mínimo definido pelo docente, e sem nenhuma negativa nas contínuas.
+  // Dispensa automática apenas com frequência completa, mínimo definido
+  // pelo docente (14 por omissão) e sem negativas nas contínuas.
   const autoExemptible =
     admissionPercent !== null &&
-    Math.round(admissionPercent * 0.2) >= Math.max(14, Math.round(exemptionMinGrade ?? 14)) &&
+    Math.round(admissionPercent * 0.2) >= (exemptionMinGrade ?? 14) &&
     !hasNegativeContinuous;
 
   // Exame e recorrência lançados.
@@ -1465,13 +1521,15 @@ export function computeSubjectFinalResult(
     admissionPercent !== null ? (effectiveExamPercent !== null ? round2((admissionPercent + effectiveExamPercent) / 2) : admissionPercent) : null;
 
   // A nota final só é exibida se houver exame lançado OU se o aluno for DISPENSADO.
-  const statusTemp = finalPercent !== null
-    ? classifySituacao(Math.round(finalPercent * 0.2), effectiveExamPercent !== null, true)
-    : (complete && admissionPercent !== null && effectiveExamPercent === null
-        ? (autoExemptible
-            ? classifySituacao(Math.round(admissionPercent * 0.2), false, false)
-            : 'ADMITIDO_AO_EXAME')
-        : null);
+  const statusTemp: SituacaoAcademica | null = admissionPercent === null
+    ? null
+    : effectiveExamPercent !== null
+      ? classifySituacao(Math.round(finalPercent! * 0.2), true, true)
+      : autoExemptible
+        ? 'DISPENSADO'
+        : Math.round(admissionPercent * 0.2) < 10
+          ? 'EXCLUIDO'
+          : 'ADMITIDO_AO_EXAME';
 
   // Estado académico detalhado (dispensa → exame normal → recorrência).
   const examGradeRecord = normalExam ? findGrade(normalExam) : null;
@@ -1494,7 +1552,7 @@ export function computeSubjectFinalResult(
 
   // Enquanto o estudante aguarda a recorrência não existe nota final: a média
   // do exame normal é provisória e só se torna final com a nota de recorrência.
-  const finalGrade = state === 'ADMITIDO_RECORRENCIA'
+  const finalGrade = state === 'ADMITIDO_RECORRENCIA' || state === 'RECORRENCIA_EM_REVISAO'
     ? null
     : (effectiveExamPercent !== null || statusTemp === 'DISPENSADO')
       ? (finalPercent !== null ? Math.round(finalPercent * 0.2) : null)
@@ -1503,7 +1561,7 @@ export function computeSubjectFinalResult(
   // Dispensa imposta pelo docente/coordenação: sobrepõe-se a qualquer cálculo.
   // O estudante fica DISPENSADO sem nada relacionado a exame/recorrência — a
   // nota final é a que o docente escolheu na dispensa (ou a admissão por omissão).
-  if (manuallyExempted) {
+  if (manuallyExempted && complete) {
     const exemptedGrade =
       exemptionGrade != null
         ? Math.round(exemptionGrade)
@@ -1544,7 +1602,7 @@ export function computeSubjectFinalResult(
     recurrencePercent: recurrenceExamPercent,
     finalPercent: finalGrade !== null ? finalPercent : null,
     finalGrade,
-    status: statusTemp,
+    status: state === 'RECORRENCIA_EM_REVISAO' ? null : statusTemp,
     state,
     stateReason: reason,
     recurrenceEligible:
@@ -1574,13 +1632,24 @@ export async function listMyFinalGrades(userId: string) {
 export async function getFinalGrades(studentId: string, actor: Actor) {
   await assertStudentDataAccess(studentId, actor);
 
-  await assertStudentFinancialStanding(studentId);
+  if (actor.role === 'STUDENT') await assertStudentFinancialStanding(studentId);
 
   const profile = await prisma.studentProfile.findUnique({ where: { id: studentId } });
-  if (!profile || !profile.courseId) throw notFound('STUDENT_PROFILE_NOT_FOUND', 'Estudante sem curso atribuído');
+  if (!profile) throw notFound('STUDENT_PROFILE_NOT_FOUND', 'Perfil de estudante não encontrado');
+
+  // Apenas disciplinas em que o estudante está INSCRITO (módulo de inscrições).
+  const enrolmentRows = await prisma.subjectEnrolment.findMany({
+    where: { studentId, status: { in: ['ACTIVE', 'PENDING', 'COMPLETED'] } },
+    select: { subjectId: true },
+  });
+  const enrolledSubjectIds = enrolmentRows.map((e) => e.subjectId);
+  if (enrolledSubjectIds.length === 0) return [];
 
   const subjects = await prisma.subject.findMany({
-    where: { courseId: profile.courseId },
+    where: {
+      id: { in: enrolledSubjectIds },
+      ...(actor.role === 'TEACHER' ? { schedules: { some: { teacherId: actor.id } } } : {}),
+    },
     include: {
       assessments: { include: { grades: { where: { studentId } } } },
     },
@@ -1698,10 +1767,7 @@ export async function deleteAssessment(assessmentId: string, actor: Actor, corre
     },
   });
   if (!assessment) throw notFound('ASSESSMENT_NOT_FOUND', 'Avaliação não encontrada');
-
-  if (actor.role === 'TEACHER') {
-    await assertTeacherTeachesSubject(assessment.subjectId, actor);
-  }
+  assertCanManageAssessment(assessment, actor);
   assertSubjectNotPublished(assessment.subject.resultsPublishedAt);
   if (assessment._count.grades > 0) {
     throw conflict(

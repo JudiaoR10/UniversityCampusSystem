@@ -797,6 +797,7 @@ function StaffAssessments() {
             : undefined
         }
         confirmLabel="Eliminar"
+        confirmTone="danger"
         busy={deletingId === pendingDelete?.id}
         onCancel={() => {
           if (deletingId === null) setPendingDelete(null);

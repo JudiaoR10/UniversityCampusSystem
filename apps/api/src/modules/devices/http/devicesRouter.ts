@@ -72,7 +72,7 @@ devicesRouter.get('/sensors/:id/readings', authenticate, async (req, res, next) 
   }
 });
 
-devicesRouter.get('/alerts', authenticate, async (req, res, next) => {
+devicesRouter.get('/alerts', authenticate,   authorize('ADMIN', 'COORDINATOR', 'TECHNICIAN'),async (req, res, next) => {
   try {
     const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId : undefined;
     const alerts = await prisma.alert.findMany({

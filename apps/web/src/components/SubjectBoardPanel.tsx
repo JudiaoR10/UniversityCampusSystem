@@ -15,7 +15,7 @@ const MODE_TITLES: Record<BoardMode, string> = {
 };
 
 const MODE_DESCRIPTIONS: Record<BoardMode, string> = {
-  frequencia: 'Média de admissão por estudante, dispensa automática (≥ 14), dispensa ao critério do docente e exclusão por frequência insuficiente (< 10).',
+  frequencia: 'Média de admissão após todas as notas, dispensa pela nota mínima definida pelo docente, dispensa ao critério do docente e exclusão por frequência insuficiente (< 10).',
   exame: 'Notas do exame normal. Dispensados e excluídos não têm campo de lançamento.',
   recorrencia: 'Notas do exame de recorrência, apenas para quem está no processo de recorrência.',
   resultados: 'Pauta final por disciplina: admissão, exame, recorrência, nota final e situação.',
@@ -562,7 +562,7 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                             <span
                               className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${stateBadgeClass(entry.state)}`}
                             >
-                              {entry.state ? STATE_LABELS[entry.state] : '—'}
+                              {entry.complete && entry.state ? STATE_LABELS[entry.state] : '—'}
                             </span>
                           </td>
                         </tr>
@@ -653,7 +653,7 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                       </td>
                        {mode === 'frequencia' ? (
                          <td className="px-3 py-2">
-                           {entry.exempted ? (
+                           {!entry.complete ? '—' : entry.exempted ? (
                              <div className="space-y-1">
                                <span className="text-xs text-campus-deep/60">
                                  {entry.exemptionGrade != null
@@ -665,7 +665,7 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                                    type="button"
                                    className="btn-secondary !px-3 !py-1.5 text-xs"
                                    onClick={() => void toggleExemption(entry)}
-                                   disabled={exemptingId !== null}
+                                   disabled={exemptingId !== null || (!entry.exempted && !entry.complete)}
                                  >
                                    {exemptingId === entry.studentProfileId ? 'A processar...' : 'Anular dispensa'}
                                  </button>
@@ -687,7 +687,7 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                                  type="button"
                                  className="btn-secondary !px-3 !py-1.5 text-xs"
                                  onClick={() => void toggleExemption(entry)}
-                                 disabled={exemptingId !== null}
+                                 disabled={exemptingId !== null || (!entry.exempted && !entry.complete)}
                                >
                                  {exemptingId === entry.studentProfileId ? 'A processar...' : 'Dispensar'}
                                </button>
@@ -714,7 +714,7 @@ export function SubjectBoardPanel({ mode, options, subjectId, onSubjectChange }:
                         <span
                           className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${stateBadgeClass(entry.state)}`}
                         >
-                          {entry.state ? STATE_LABELS[entry.state] : '—'}
+                          {entry.complete && entry.state ? STATE_LABELS[entry.state] : '—'}
                         </span>
                       </td>
                     </tr>

@@ -66,12 +66,12 @@ describe('computeSubjectFinalResult — admissão sem exame', () => {
     expect(computeSituationsByStudent([{ id: 'a1', type: 'TEST', weight: 40, grades: [{ studentId: S, valuePercent: 80 }] }], [S]).get(S)).toBeNull();
   });
 
-  it('casos-limite de classificação: 18.75% → nota 4 EXCLUIDO; 47.5% → nota 10 APROVADO; 65% → 13 APROVADO; 67.5% → 14 DISPENSADO', () => {
+  it('casos-limite de classificação: 18.75% → nota 4 EXCLUIDO; 47.5% → nota 10 ADMITIDO_AO_EXAME; 65% → 13 ADMITIDO_AO_EXAME; 67.5% → 14 DISPENSADO', () => {
     expect(computeSubjectFinalResult([continuous(18.75, 100)], S).status).toBe('EXCLUIDO');
     expect(computeSubjectFinalResult([continuous(47.5, 100)], S).finalGrade).toBeNull();
-    expect(computeSubjectFinalResult([continuous(47.5, 100)], S).status).toBe('APROVADO');
+    expect(computeSubjectFinalResult([continuous(47.5, 100)], S).status).toBe('ADMITIDO_AO_EXAME');
     expect(computeSubjectFinalResult([continuous(65, 100)], S).finalGrade).toBeNull();
-    expect(computeSubjectFinalResult([continuous(65, 100)], S).status).toBe('APROVADO');
+    expect(computeSubjectFinalResult([continuous(65, 100)], S).status).toBe('ADMITIDO_AO_EXAME');
     expect(computeSubjectFinalResult([continuous(67.5, 100)], S).finalGrade).toBe(14);
     expect(computeSubjectFinalResult([continuous(67.5, 100)], S).status).toBe('DISPENSADO');
   });

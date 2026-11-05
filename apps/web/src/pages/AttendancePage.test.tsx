@@ -101,6 +101,28 @@ describe('AttendancePage', () => {
     expect(screen.getByText('Presenças')).toBeInTheDocument();
   });
 
+  it('pagina os registos sem alterar o resumo de assiduidade', async () => {
+    const firstPage = Array.from({ length: 51 }, (_, index) => ({ ...sampleRecord, id: `attendance-${index}` }));
+    const attendance = vi.fn().mockImplementation(({ offset }) => Promise.resolve({
+      data: offset === '0' ? firstPage : [{ ...sampleRecord, classSchedule: { ...sampleRecord.classSchedule!, title: 'Outra sessão' } }],
+      meta: {},
+    }));
+    setAuth('STUDENT', buildApi({ attendance }));
+    render(<AttendancePage />);
+
+    expect(await screen.findByText('Página 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Aula PTP3')).toHaveLength(50);
+    expect(screen.getByRole('button', { name: 'Anterior' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Seguinte' }));
+
+    expect(await screen.findByText('Outra sessão')).toBeInTheDocument();
+    expect(attendance).toHaveBeenLastCalledWith({ offset: '50', limit: '51' });
+    expect(screen.getByText('75%')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Seguinte' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior' }));
+    await waitFor(() => expect(screen.getAllByText('Aula PTP3')).toHaveLength(50));
+  });
+
   it('docente abre uma sessão, ajusta o estado e guarda', async () => {
     const api = setAuth('TEACHER');
     render(<AttendancePage />);

@@ -1,9 +1,11 @@
+import type { Pagination } from '../../../lib/pagination.js';
 import type { CreateResultInput } from '@smart-campus/validation';
 import { conflict, forbidden, notFound } from '../../../lib/errors.js';
 import { prisma } from '../../../lib/prisma.js';
 import { audit } from '../../audit/application/auditService.js';
 import {
   assertGradeAllowedForState,
+  assertStudentFinancialStanding,
   assertGradeValueInRange,
   assertStaff,
   assertSubjectNotPublished,
@@ -81,7 +83,7 @@ const resultInclude = {
  * TEACHER: apenas resultados das avaliações que criou (as suas disciplinas).
  * COORDINATOR/ADMIN: todos, com filtro opcional por studentId (StudentProfile.id).
  */
-export async function listResults(actor: Actor, studentId?: string) {
+export async function listResults(actor: Actor, studentId?: string, page: Pagination = {}) {
   let where: Record<string, unknown> = {};
 
   if (actor.role === 'STUDENT') {
@@ -90,9 +92,13 @@ export async function listResults(actor: Actor, studentId?: string) {
     if (studentId && studentId !== profile.id) {
       throw forbidden('Um estudante só pode consultar os seus próprios resultados', 'FORBIDDEN');
     }
+    await assertStudentFinancialStanding(profile.id);
     where = { studentId: profile.id };
   } else if (actor.role === 'TEACHER') {
-    where = { assessment: { createdById: actor.id }, ...(studentId ? { studentId } : {}) };
+    where = {
+      assessment: { createdById: actor.id, subject: { schedules: { some: { teacherId: actor.id } } } },
+      ...(studentId ? { studentId } : {}),
+    };
   } else if (studentId) {
     const profile = await prisma.studentProfile.findUnique({ where: { id: studentId } });
     if (!profile) throw notFound('STUDENT_NOT_FOUND', 'Estudante não encontrado');
@@ -102,7 +108,8 @@ export async function listResults(actor: Actor, studentId?: string) {
   const results = await prisma.grade.findMany({
     where,
     include: resultInclude,
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    ...page,
   });
   return results.map(mapResult);
 }
@@ -130,6 +137,18 @@ export async function createResult(input: CreateResultInput, actor: Actor, corre
     throw conflict('STUDENT_COURSE_MISMATCH', 'Estudante não pertence ao curso da disciplina da avaliação');
   }
 
+  const enrolment = await prisma.subjectEnrolment.findFirst({
+    where: {
+      subjectId: assessment.subjectId,
+      studentId: profile.id,
+      status: { in: ['ACTIVE', 'PENDING'] },
+    },
+    select: { id: true },
+  });
+  if (!enrolment) {
+    throw conflict('STUDENT_NOT_ENROLLED', 'Estudante não está inscrito nesta disciplina');
+  }
+
   const states = await loadAcademicStates(assessment.subjectId, [profile.id]);
   assertGradeAllowedForState(assessment.type, states.get(profile.id)?.state ?? null);
 
@@ -143,12 +162,14 @@ export async function createResult(input: CreateResultInput, actor: Actor, corre
       studentId: profile.id,
       value: input.value,
       valuePercent,
+      everNegative: valuePercent < 50,
       comment: input.comment ?? null,
       gradedById: actor.id,
     },
     update: {
       value: input.value,
       valuePercent,
+      everNegative: valuePercent < 50 ? true : undefined,
       comment: input.comment ?? null,
       gradedById: actor.id,
     },

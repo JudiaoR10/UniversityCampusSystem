@@ -314,6 +314,8 @@ export type ScheduleDto = {
 };
 
 export type ScheduleFiltersInput = {
+  offset?: string;
+  limit?: string;
   studentId?: string;
   courseId?: string;
   subjectId?: string;

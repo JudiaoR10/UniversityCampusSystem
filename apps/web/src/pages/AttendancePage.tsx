@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AttendanceRoster,
   AttendanceStatus,
@@ -93,6 +93,7 @@ function StaffAttendance() {
   const [rosterError, setRosterError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const rosterRequestId = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,13 +120,14 @@ function StaffAttendance() {
     `${schedule.title} — ${dateFormatter.format(new Date(schedule.startsAt))} · ${timeFormatter.format(new Date(schedule.startsAt))}`;
 
   async function loadRoster(scheduleId: string) {
+    const requestId = ++rosterRequestId.current;
     setRosterError(null);
-    setNotice(null);
     setRosterLoading(true);
     setRoster(null);
     setInputs({});
     try {
       const res = await api.attendanceRoster(scheduleId);
+      if (requestId !== rosterRequestId.current) return;
       setRoster(res.data);
       const next: Record<string, RowInput> = {};
       for (const entry of res.data.entries) {
@@ -133,17 +135,22 @@ function StaffAttendance() {
       }
       setInputs(next);
     } catch (err) {
-      setRosterError(describeError(err, 'Não foi possível abrir a pauta de assiduidade.'));
+      if (requestId === rosterRequestId.current) {
+        setRosterError(describeError(err, 'Não foi possível abrir a pauta de assiduidade.'));
+      }
     } finally {
-      setRosterLoading(false);
+      if (requestId === rosterRequestId.current) setRosterLoading(false);
     }
   }
 
   function onSelect(scheduleId: string) {
+    setNotice(null);
     setSelectedId(scheduleId);
     if (scheduleId) {
       void loadRoster(scheduleId);
     } else {
+      rosterRequestId.current += 1;
+      setRosterLoading(false);
       setRoster(null);
       setInputs({});
     }
@@ -345,6 +352,7 @@ function StaffAttendance() {
 
 function StudentAttendance() {
   const { api } = useAuth();
+  const [page, setPage] = useState(0);
   const [records, setRecords] = useState<Array<{ id: string; status: AttendanceStatus; note: string | null; recordedAt: string; classSchedule?: { title: string; startsAt: string } }>>([]);
   const [summary, setSummary] = useState<AttendanceSummaryDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -354,7 +362,7 @@ function StudentAttendance() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([api.attendance(), api.attendanceSummary()])
+    Promise.all([api.attendance({ offset: String(page * 50), limit: '51' }), api.attendanceSummary()])
       .then(([recordsRes, summaryRes]) => {
         if (cancelled) return;
         setRecords(recordsRes.data);
@@ -369,7 +377,7 @@ function StudentAttendance() {
     return () => {
       cancelled = true;
     };
-  }, [api]);
+  }, [api, page]);
 
   const own = summary[0];
 
@@ -423,7 +431,7 @@ function StudentAttendance() {
                   </tr>
                 </thead>
                 <tbody>
-                  {records.map((record) => (
+                  {records.slice(0, 50).map((record) => (
                     <tr key={record.id} className="border-t border-campus-line/70">
                       <td className="px-4 py-3 font-medium">{record.classSchedule?.title ?? '—'}</td>
                       <td className="px-4 py-3">
@@ -440,6 +448,11 @@ function StudentAttendance() {
                 </tbody>
               </table>
             )}
+            <div className="flex items-center justify-between gap-3 border-t border-campus-line/70 px-4 py-3">
+              <button className="btn-secondary" disabled={loading || page === 0} onClick={() => setPage((value) => value - 1)}>Anterior</button>
+              <span className="text-sm" aria-live="polite">Página {page + 1}</span>
+              <button className="btn-secondary" disabled={loading || records.length <= 50} onClick={() => setPage((value) => value + 1)}>Seguinte</button>
+            </div>
           </section>
         </>
       )}

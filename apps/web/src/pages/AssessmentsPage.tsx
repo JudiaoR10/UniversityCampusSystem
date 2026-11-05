@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import type {
   AcademicState,
   AssessmentDto,
@@ -67,7 +67,7 @@ function isExamType(type: AssessmentType): boolean {
 
 function SituacaoBadge({ situacao }: { situacao: SituacaoAcademica | null }) {
   if (!situacao) {
-    return <span className="text-xs text-campus-deep/60">Em aberto</span>;
+    return <span className="text-xs text-campus-deep/60">—</span>;
   }
   return (
     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${SITUACAO_STYLES[situacao]}`}>
@@ -868,9 +868,8 @@ function StudentAssessments() {
     };
   }, [api]);
 
-  // Mostra todas as disciplinas com frequência completa — mesmo sem nota final
-  // (ex.: admitido ao exame, aguarda nota de exame ou recorrência).
-  const listed = useMemo(() => finalGrades.filter((g) => g.complete), [finalGrades]);
+  // Disciplinas incompletas continuam visíveis, com a situação por preencher.
+  const listed = finalGrades;
 
   /** Texto da coluna Recorrência na pauta do estudante. */
   function recurrenceCellText(subject: FinalGradeDto): string {
@@ -889,7 +888,7 @@ function StudentAssessments() {
       g.admissionGrade !== null ? `Admissão ${g.admissionGrade}` : '—',
       g.examGrade === null ? '—' : String(g.examGrade),
       recurrenceCellText(g),
-      g.state ? STATE_LABELS[g.state] : '—',
+      g.complete && g.state ? STATE_LABELS[g.state] : '—',
       `${g.gradedAssessments}/${g.assessments}`,
     ]);
     const gradeRows = grades.map((g) => [
@@ -973,7 +972,7 @@ function StudentAssessments() {
                          <span className="font-bold text-campus-ink">{subject.finalGrade ?? '—'}</span>
                        </td>
                        <td className="px-4 py-3">
-                         {subject.state ? (
+                         {subject.complete && subject.state ? (
                            <>
                              <span
                                className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${stateBadgeClass(subject.state)}`}
@@ -985,7 +984,7 @@ function StudentAssessments() {
                              ) : null}
                            </>
                          ) : (
-                           <SituacaoBadge situacao={subject.status} />
+                           <SituacaoBadge situacao={subject.complete ? subject.status : null} />
                          )}
                        </td>
                        <td className="px-4 py-3 text-campus-deep/70">

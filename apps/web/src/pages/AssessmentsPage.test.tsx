@@ -323,6 +323,29 @@ describe('AssessmentsPage', () => {
     cleanup();
   });
 
+  it('não apresenta situação nem aprovação enquanto faltam notas', async () => {
+    setAuth('STUDENT', buildApi({ myFinalGrades: vi.fn().mockResolvedValue({
+      data: [{ ...sampleFinal, complete: false, state: 'PENDENTE', status: null, finalGrade: null, admissionGrade: null, stateReason: 'Faltam notas' }], meta: {},
+    }) }));
+    render(<AssessmentsPage />);
+    expect(await screen.findByText('Notas por disciplina')).toBeInTheDocument();
+    expect(screen.queryByText('Dispensado')).not.toBeInTheDocument();
+    expect(screen.queryByText('Frequência incompleta')).not.toBeInTheDocument();
+    expect(screen.queryByText('Aprovado')).not.toBeInTheDocument();
+    expect(screen.queryByText('Faltam notas')).not.toBeInTheDocument();
+  });
+
+  it('guarda a nota mínima de dispensa escolhida pelo docente', async () => {
+    const api = setAuth('TEACHER');
+    render(<AssessmentsPage />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Frequência e Dispensa' }));
+    fireEvent.change(await screen.findByLabelText('Disciplina do quadro'), { target: { value: 'subject-1' } });
+    const minimum = await screen.findByLabelText('Nota mínima de dispensa (0–20)');
+    fireEvent.change(minimum, { target: { value: '16' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar regras' }));
+    await waitFor(() => expect(api.setSubjectRules).toHaveBeenCalledWith('subject-1', expect.objectContaining({ exemptionMinGrade: 16 })));
+  });
+
   it('estudante vê as notas por disciplina (nota inteira + estado, sem rótulo de pauta final) e as notas por avaliação', async () => {
     setAuth('STUDENT');
     render(<AssessmentsPage />);

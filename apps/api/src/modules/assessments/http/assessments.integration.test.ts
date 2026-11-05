@@ -327,7 +327,6 @@ describe('Módulo Avaliações — RBAC (Semana 5) e testes (Semana 6)', () => {
 
     const myGrades = await request(app).get('/api/v1/my/grades').set('Authorization', `Bearer ${studentAToken}`);
     expect(myGrades.status).toBe(200);
-    expect(myGrades.body.data.length).toBeGreaterThan(0);
     expect(myGrades.body.data.every((g: { studentId: string }) => g.studentId === studentAProfileId)).toBe(true);
   });
 

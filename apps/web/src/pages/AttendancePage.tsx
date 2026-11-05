@@ -9,6 +9,7 @@ import type {
 import { useAuth } from '../lib/auth';
 import { printDocument } from '../lib/print';
 import { PageIntro } from '../components/PageIntro';
+import { SelectField } from '../components/SelectField';
 
 const STAFF_ROLES: RoleCode[] = ['TEACHER', 'COORDINATOR', 'ADMIN'];
 
@@ -131,7 +132,7 @@ function StaffAttendance() {
       setRoster(res.data);
       const next: Record<string, RowInput> = {};
       for (const entry of res.data.entries) {
-        next[entry.id] = { status: entry.status ?? 'PRESENT', note: entry.note ?? '' };
+        next[entry.id] = { status: entry.marked === false ? 'ABSENT' : entry.status ?? 'ABSENT', note: entry.note ?? '' };
       }
       setInputs(next);
     } catch (err) {
@@ -194,21 +195,19 @@ function StaffAttendance() {
       />
 
       <div aria-live="polite" className="space-y-2">
-        {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p> : null}
+        {error ? <p className="alert-error">{error}</p> : null}
+        {notice ? <p className="alert-success">{notice}</p> : null}
       </div>
 
       <section className="surface grid gap-3 p-4 sm:p-6">
         <label className="text-xs font-medium text-campus-deep/70">
           Sessão
-          <select className="field-input" value={selectedId} onChange={(e) => onSelect(e.target.value)}>
-            <option value="">Selecionar sessão de horário</option>
-            {sessions.map((schedule) => (
-              <option key={schedule.id} value={schedule.id}>
-                {sessionLabel(schedule)}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            value={selectedId}
+            onChange={onSelect}
+            placeholder="Seleccionar sessão de horário"
+            options={sessions.map((schedule) => ({ value: schedule.id, label: sessionLabel(schedule) }))}
+          />
         </label>
 
         {selectedId ? (
@@ -288,23 +287,18 @@ function StaffAttendance() {
                           <td className="px-3 py-2 whitespace-nowrap font-medium">{entry.studentNumber}</td>
                           <td className="px-3 py-2">{entry.fullName ?? '—'}</td>
                           <td className="px-3 py-2">
-                            <select
-                              className="field-input !mt-0"
+                            <SelectField
+                              size="sm"
                               aria-label={`Estado de ${entry.studentNumber}`}
                               value={inputs[entry.id]?.status ?? 'PRESENT'}
-                              onChange={(e) =>
+                              onChange={(status) =>
                                 setInputs((prev) => ({
                                   ...prev,
-                                  [entry.id]: { status: e.target.value as AttendanceStatus, note: prev[entry.id]?.note ?? '' },
+                                  [entry.id]: { status: status as AttendanceStatus, note: prev[entry.id]?.note ?? '' },
                                 }))
                               }
-                            >
-                              {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                                <option key={value} value={value}>
-                                  {label}
-                                </option>
-                              ))}
-                            </select>
+                              options={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))}
+                            />
                           </td>
                           <td className="px-3 py-2">
                             <input
@@ -389,7 +383,7 @@ function StudentAttendance() {
         description="O teu registo de presenças, faltas, atrasos e justificações por sessão de horário."
       />
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="alert-error">{error}</p> : null}
 
       {loading ? (
         <div className="surface p-6 text-sm text-campus-deep/70">A carregar assiduidade...</div>

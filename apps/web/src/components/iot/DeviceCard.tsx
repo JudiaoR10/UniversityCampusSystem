@@ -1,4 +1,6 @@
 import type { DeviceDto, DeviceStatus } from '@smart-campus/shared-types';
+import { SelectField } from '../SelectField';
+import { DeleteAction, TableActions } from '../ActionButtons';
 
 const statusStyle: Record<DeviceStatus, string> = {
   ONLINE: 'bg-emerald-50 text-emerald-800 border-emerald-200',
@@ -17,7 +19,7 @@ type DeviceCardProps = {
 
 export function DeviceCard({ device, onDelete, onStatusChange }: DeviceCardProps) {
   return (
-    <article className="rounded-2xl border border-campus-line/80 bg-white/90 p-4 shadow-soft">
+    <article className="surface p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-mono text-[11px] font-semibold tracking-wide text-campus-teal">{device.code}</p>
@@ -48,29 +50,21 @@ export function DeviceCard({ device, onDelete, onStatusChange }: DeviceCardProps
       {onStatusChange || onDelete ? (
         <div className="mt-4 flex items-center justify-between gap-2 border-t border-campus-line/60 pt-3">
           {onStatusChange ? (
-            <select
+            <SelectField
+              size="sm"
+              className="max-w-[11rem]"
               value={device.status}
-              onChange={(e) => onStatusChange(device, e.target.value as DeviceStatus)}
-              className="rounded-xl border border-campus-line bg-white px-2 py-1.5 text-xs font-semibold"
+              onChange={(status) => onStatusChange(device, status as DeviceStatus)}
               aria-label={`Estado de ${device.code}`}
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+              options={STATUSES.map((s) => ({ value: s, label: s }))}
+            />
           ) : (
             <span />
           )}
           {onDelete ? (
-            <button
-              type="button"
-              onClick={() => onDelete(device)}
-              className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50"
-            >
-              Eliminar
-            </button>
+            <TableActions>
+              <DeleteAction onClick={() => onDelete(device)} />
+            </TableActions>
           ) : null}
         </div>
       ) : null}

@@ -9,6 +9,9 @@ import { useAuth } from '../lib/auth';
 import { AlertMessage, type AlertState } from '../components/AlertMessage';
 import { useConfirm } from '../components/ConfirmDialog';
 import { PageIntro } from '../components/PageIntro';
+import { EmptyState, StatusPill } from '../components/ui';
+import { SelectField } from '../components/SelectField';
+import { BanIcon, CheckIcon, DeleteAction, IconActionButton, TableActions } from '../components/ActionButtons';
 
 const statusLabel: Record<EnrolmentStatus, string> = {
   PENDING: 'Pendente',
@@ -229,37 +232,28 @@ export function EnrolmentsPage() {
 
       {!isStudent || ownStudentId ? (
         <form onSubmit={create} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+          <h2 className="section-title md:col-span-2 xl:col-span-4">Nova inscrição</h2>
           {isStudent ? null : (
-            <select
-              className="field-input !mt-0"
+            <SelectField
               aria-label="Estudante"
               value={form.studentId}
-              onChange={(event) =>
-                setForm({ ...form, studentId: event.target.value, subjectId: '' })
-              }
+              onChange={(studentId) => setForm({ ...form, studentId, subjectId: '' })}
               required
-            >
-              <option value="" disabled>
-                {students.length === 0 ? 'Sem estudantes registados' : 'Selecionar estudante'}
-              </option>
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.studentNumber} — {student.user.fullName}
-                  {student.course ? ` (${student.course.code})` : ''}
-                </option>
-              ))}
-            </select>
+              placeholder={students.length === 0 ? 'Sem estudantes registados' : 'Seleccionar estudante'}
+              options={students.map((student) => ({
+                value: student.id,
+                label: `${student.studentNumber} — ${student.user.fullName}${student.course ? ` (${student.course.code})` : ''}`,
+              }))}
+            />
           )}
-          <select
-            className="field-input !mt-0"
+          <SelectField
             aria-label="Disciplina"
             value={form.subjectId}
-            onChange={(event) => setForm({ ...form, subjectId: event.target.value })}
+            onChange={(subjectId) => setForm({ ...form, subjectId })}
             disabled={!courseId || loadingSubjects}
             required
-          >
-            <option value="" disabled>
-              {isStudent && !ownCourseId
+            placeholder={
+              isStudent && !ownCourseId
                 ? 'O seu perfil não tem curso associado'
                 : !courseId
                   ? 'Escolha primeiro o estudante'
@@ -267,14 +261,13 @@ export function EnrolmentsPage() {
                     ? 'A carregar disciplinas…'
                     : subjects.length === 0
                       ? 'Sem disciplinas no curso'
-                      : 'Selecionar disciplina'}
-            </option>
-            {subjects.map((subject) => (
-              <option key={subject.id} value={subject.id}>
-                {subject.code} — {subject.name}
-              </option>
-            ))}
-          </select>
+                      : 'Seleccionar disciplina'
+            }
+            options={subjects.map((subject) => ({
+              value: subject.id,
+              label: `${subject.code} — ${subject.name}`,
+            }))}
+          />
           <input
             className="field-input !mt-0"
             type="number"
@@ -302,7 +295,7 @@ export function EnrolmentsPage() {
       {loading ? (
         <p className="text-campus-deep/70">A carregar inscrições…</p>
       ) : enrolments.length === 0 ? (
-        <p className="surface p-5 text-sm text-campus-deep/70">Ainda não há inscrições.</p>
+        <EmptyState title="Ainda não há inscrições" description="Inscreva um estudante numa disciplina para começar." />
       ) : (
         <div className="table-scroll surface">
           <table className="min-w-[760px] w-full text-left text-sm">
@@ -326,24 +319,48 @@ export function EnrolmentsPage() {
                     {enrolment.subject.code} — {enrolment.subject.name}
                   </td>
                   <td className="px-4 py-3">{enrolment.academicYear}</td>
-                  <td className="px-4 py-3">{statusLabel[enrolment.status]}</td>
+                  <td className="px-4 py-3">
+                    <StatusPill
+                      tone={
+                        enrolment.status === 'ACTIVE' || enrolment.status === 'COMPLETED'
+                          ? 'success'
+                          : enrolment.status === 'CANCELLED'
+                            ? 'danger'
+                            : 'warning'
+                      }
+                    >
+                      {statusLabel[enrolment.status]}
+                    </StatusPill>
+                  </td>
                   {canManage ? (
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
+                      <TableActions>
                         {enrolment.status === 'PENDING' ? (
-                          <Action label="Activar" onClick={() => void changeStatus(enrolment, 'ACTIVE')} />
+                          <IconActionButton
+                            label="Activar"
+                            icon={<CheckIcon />}
+                            tone="success"
+                            onClick={() => void changeStatus(enrolment, 'ACTIVE')}
+                          />
                         ) : null}
                         {enrolment.status === 'ACTIVE' && canComplete ? (
-                          <Action label="Concluir" onClick={() => void changeStatus(enrolment, 'COMPLETED')} />
+                          <IconActionButton
+                            label="Concluir"
+                            icon={<CheckIcon />}
+                            tone="success"
+                            onClick={() => void changeStatus(enrolment, 'COMPLETED')}
+                          />
                         ) : null}
                         {enrolment.status === 'PENDING' || enrolment.status === 'ACTIVE' ? (
-                          <Action
+                          <IconActionButton
                             label="Cancelar"
+                            icon={<BanIcon />}
+                            danger
                             onClick={() => void changeStatus(enrolment, 'CANCELLED')}
                           />
                         ) : null}
-                        <Action label="Eliminar" onClick={() => void remove(enrolment)} />
-                      </div>
+                        <DeleteAction onClick={() => void remove(enrolment)} />
+                      </TableActions>
                     </td>
                   ) : null}
                 </tr>
@@ -356,14 +373,3 @@ export function EnrolmentsPage() {
   );
 }
 
-function Action({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className="rounded-lg border border-campus-line px-2.5 py-1 text-xs hover:bg-campus-mist"
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}

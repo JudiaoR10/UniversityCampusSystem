@@ -41,6 +41,30 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   }
 }
 
+export async function authenticateIngest(req: Request, _res: Response, next: NextFunction) {
+  try {
+    const header = req.header('x-device-token') ?? req.header('authorization');
+    const token = header?.startsWith('Bearer ') ? header.slice(7) : header?.trim();
+    if (!token) {
+      throw unauthorized('Token de dispositivo em falta', 'DEVICE_TOKEN_MISSING');
+    }
+    const env = getEnv();
+    if (env.INGEST_API_KEY && token === env.INGEST_API_KEY) {
+      req.ingest = { actorId: null, sensorCode: 'CAM-LPR-API' };
+      next();
+      return;
+    }
+    const device = await prisma.device.findUnique({ where: { ingestToken: token } });
+    if (!device) {
+      throw unauthorized('Token de dispositivo inválido', 'DEVICE_TOKEN_INVALID');
+    }
+    req.ingest = { actorId: null, sensorCode: device.code };
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
 export function authorize(...roles: string[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {

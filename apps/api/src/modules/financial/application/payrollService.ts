@@ -79,3 +79,11 @@ export async function paySalary(actor: FinancialActor, id: string, input: Salary
     return toSalaryDto(row);
   });
 }
+
+export async function getSalaryReceipt(actor: FinancialActor, id: string) {
+  authorizeFinancialRead(actor);
+  const row = await prisma.teacherSalary.findUnique({ where: { id }, include: salaryInclude });
+  if (!row) throw notFound('SALARY_NOT_FOUND', 'Salário não encontrado.');
+  if (row.status !== 'PAID') throw conflict('SALARY_NOT_PAID', 'O comprovativo só está disponível após o pagamento.');
+  return { kind: 'salary' as const, salary: toSalaryDto(row) };
+}

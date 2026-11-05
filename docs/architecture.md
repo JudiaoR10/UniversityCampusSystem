@@ -513,8 +513,8 @@ main.tsx
                     └── / (Protected + AppLayout)
                           ├── /ops → CampusOpsPage (home)
                           ├── /dashboard → DashboardPage
-                          ├── /users, /rooms, /incidents, ...
-                          └── placeholders → ModulePlaceholderPage
+                          ├── /users, /rooms, /incidents, /campus/twin, ...
+                          └── hubs académicos e de campus com módulos available
 ```
 
 - **Layout:** sidebar fixa (desktop) / drawer (mobile), header sticky, safe-area  
@@ -525,9 +525,9 @@ main.tsx
 
 | Estado | Páginas |
 | --- | --- |
-| **available** | Ops, Dashboard, Users, Rooms, Incidents, Parking, Audit |
-| **partial** | Academic hub, Campus hub, Buildings, IoT, Devices, Alerts, Admin, Maintenance |
-| **development** | Departments, Courses, Subjects, Enrolments, Assessments, Schedules, Labs, Equipment, Sensors, Readings, Notifications, Reports |
+| **available** | Todos os módulos do catálogo `campusModules` (ops, académico, campus, IoT, relatórios, admin) |
+| **partial** | — |
+| **development** | — |
 
 O catálogo `campusModules` em `@smart-campus/shared-types` define label, path, status e `requiredRoles` para cada módulo.
 
@@ -535,10 +535,10 @@ O catálogo `campusModules` em `@smart-campus/shared-types` define label, path, 
 
 | Área | Componentes | Descrição |
 | --- | --- | --- |
-| **Campus Ops** | `CampusMap`, `BuildingDetailPanel`, `MetricFilters`, `OccupancyPulse`, `WeeklyPatternChart`, `LiveTicker` | Centro de operações com mapa SVG e métricas demo |
-| **IoT** | `IotDeviceCard`, `iotDemo.ts` | Hub IoT com fluxo Sensor→ESP32→MQTT→API simulado |
+| **Campus Ops** | `CampusMap`, `CampusTwinCanvas`, `BuildingDetailPanel`, `MetricFilters`, `OccupancyPulse`, `WeeklyPatternChart`, `LiveTicker` | Mapa do D2, gémeo 3D e métricas vivas |
+| **IoT** | `IotDeviceCard`, `iotDemo.ts` | Hub IoT com malha posicionada por sala/tópico |
 | **Estacionamento** | `ParkingPage` | Mapa de vagas, LPR, matrículas moçambicanas |
-| **Core UI** | `BrandMark`, `PageIntro`, `ModuleStatusBadge`, `ModulePlaceholder` | Identidade visual e placeholders |
+| **Core UI** | `BrandMark`, `PageIntro`, `ModuleStatusBadge`, `HubCard` | Identidade visual e hubs |
 
 ### 9.4 Design system
 
@@ -793,11 +793,11 @@ npm run test:web      # só frontend
 
 | Área | Estado actual | Próximo passo |
 | --- | --- | --- |
-| MQTT / IoT real | Dados demo + schema preparado | Broker MQTT + serviço ingestão |
-| Módulos académicos | Schema + placeholders | CRUD completo + UI |
-| Notificações | Modelo na BD | WebSocket ou polling + UI |
-| Relatórios | Placeholder | Agregações e export PDF/CSV |
-| MQTT tópicos | Campo `mqttTopic` em Device | Subscrição e persistência de readings |
+| MQTT / IoT | Mosquitto + `npm run iot:sim` + ingestão persistida | Hardware ESP32 físico |
+| Identidade | Conta em `/users` e perfil por `userId` | — |
+| Gémeo digital | Modelo 3D esquemático do D2 | Fotogrametria / gémeo fotorealista |
+| LPR | `POST /parking/ingest` + `npm run lpr:sim` | Câmara física |
+| Relatórios | Resumo + export CSV/PDF | Relatórios institucionais extra |
 | Produção | Docker funcional | Secrets management, HTTPS, backups BD |
 
 ---

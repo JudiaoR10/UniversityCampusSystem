@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { MonthlyPaymentReportDto } from '@smart-campus/shared-types';
 import { useAuth } from '../../lib/auth';
 import { LoadState, money, useFinancialLoad } from './shared';
+import { SelectField } from '../SelectField';
 
 export const currentFinancialMonth = () => {
   const parts = new Intl.DateTimeFormat('en', { timeZone: 'Africa/Maputo', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
@@ -18,7 +19,7 @@ export function FinancialMonthlyReports() {
     <h2 className="font-display text-xl font-semibold">Relatórios mensais</h2>
     <p className="text-sm text-campus-deep/75">Pagamentos efectivamente registados no mês, pela hora de Moçambique. Finance e Admin podem consultar e imprimir.</p>
     <div className="flex flex-wrap gap-4">
-      <div><label htmlFor="monthly-report-kind" className="text-sm font-medium">Relatório</label><select id="monthly-report-kind" className="field-input" value={kind} onChange={event => setKind(event.target.value as 'payments' | 'salaries')}><option value="payments">Pagamentos dos estudantes</option><option value="salaries">Salários pagos aos docentes</option></select></div>
+      <div className="min-w-[16rem]"><label htmlFor="monthly-report-kind" className="text-sm font-medium">Relatório</label><SelectField id="monthly-report-kind" value={kind} onChange={(value) => setKind(value as 'payments' | 'salaries')} options={[{ value: 'payments', label: 'Pagamentos dos estudantes' }, { value: 'salaries', label: 'Salários pagos aos docentes' }]} /></div>
       <label className="text-sm font-medium">Mês do pagamento<input className="field-input" type="month" min="2000-01" max="2100-12" required value={month} onChange={event => setMonth(event.target.value)} /></label>
     </div>
     {/^(20\d{2}|2100)-(0[1-9]|1[0-2])$/.test(month) ? <MonthlyReport key={`${kind}:${month}`} kind={kind} month={month} /> : <p>Seleccione um mês válido.</p>}

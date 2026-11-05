@@ -10,6 +10,10 @@ declare global {
         email: string;
         role: string;
       };
+      ingest?: {
+        actorId: string | null;
+        sensorCode: string;
+      };
     }
   }
 }

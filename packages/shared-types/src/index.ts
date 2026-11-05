@@ -50,6 +50,8 @@ export type AuthUser = {
   fullName: string;
   role: RoleCode;
   isActive: boolean;
+  hasStudentProfile?: boolean;
+  hasTeacherProfile?: boolean;
 };
 
 export type LoginResponse = {
@@ -75,6 +77,8 @@ export type BuildingDto = {
   name: string;
   description: string | null;
   floors: number;
+  mapX: number | null;
+  mapY: number | null;
   roomsCount: number;
   createdAt: string;
   updatedAt: string;
@@ -367,6 +371,7 @@ export type AttendanceRosterEntry = {
   attendanceId: string | null;
   status: AttendanceStatus | null;
   note: string | null;
+  marked?: boolean;
 };
 
 export type AttendanceRoster = {
@@ -559,8 +564,29 @@ export type SensorDto = {
   metric: string;
   unit: string | null;
   deviceId: string;
+  warningMin: number | null;
+  warningMax: number | null;
+  criticalMin: number | null;
+  criticalMax: number | null;
   createdAt: string;
   updatedAt: string;
+  device?: { id: string; code: string; name: string; status?: DeviceStatus };
+};
+
+export type ReadingDto = {
+  id: string;
+  sensorId: string;
+  value: number;
+  recordedAt: string;
+  isDemo: boolean;
+  sensor?: {
+    id: string;
+    code: string;
+    name: string;
+    metric: string;
+    unit: string | null;
+    device?: { id: string; code: string; name: string };
+  };
 };
 
 export type DeviceDto = {
@@ -571,10 +597,115 @@ export type DeviceDto = {
   status: DeviceStatus;
   roomId: string | null;
   mqttTopic: string | null;
+  lastSeenAt: string | null;
+  signal: number | null;
+  battery: number | null;
   createdAt: string;
   updatedAt: string;
   sensors: SensorDto[];
   room: { id: string; code: string; name: string } | null;
+};
+
+export type MaintenanceStatus = 'OPEN' | 'IN_PROGRESS' | 'DONE';
+
+export type MaintenanceActionDto = {
+  id: string;
+  incidentId: string;
+  performedBy: string;
+  notes: string;
+  status: MaintenanceStatus;
+  createdAt: string;
+  updatedAt: string;
+  performer: { id: string; fullName: string };
+  incident: { id: string; title: string; status: string; priority: string };
+};
+
+export type OpsMetricStatus = 'GOOD' | 'WARN' | 'LOW' | 'CRITICAL';
+
+export type OpsBuildingMetric = {
+  value: number | null;
+  unit: string;
+  status: OpsMetricStatus;
+  isDemo: boolean;
+};
+
+export type OpsBuildingView = {
+  id: string;
+  code: string;
+  name: string;
+  floors: number;
+  roomsCount: number;
+  devicesCount: number;
+  mapX: number;
+  mapY: number;
+  temperature: OpsBuildingMetric;
+  co2: OpsBuildingMetric;
+  humidity: OpsBuildingMetric;
+  utilisation: OpsBuildingMetric;
+  isDemo: boolean;
+};
+
+export type OpsWeeklyCell = {
+  day: number;
+  hour: number;
+  intensity: number;
+  isDemo: boolean;
+};
+
+export type OpsRoomView = {
+  id: string;
+  code: string;
+  name: string;
+  floor: number;
+  buildingId: string;
+  buildingCode: string;
+  occupied: boolean;
+  people: number;
+  capacity: number;
+  temperature: number | null;
+  co2: number | null;
+};
+
+export type OpsSnapshot = {
+  buildings: OpsBuildingView[];
+  rooms: OpsRoomView[];
+  weeklyPattern: OpsWeeklyCell[];
+  occupancyPeople: number;
+  occupancyPercent: number;
+  occupancyIsDemo: boolean;
+};
+
+export type ReportSummaryDto = {
+  roomsCount: number;
+  occupiedRooms: number;
+  occupancyPercent: number;
+  openIncidents: number;
+  devicesOnline: number;
+  devicesOffline: number;
+  unreadAlerts: number;
+  liveReadingsLastHour: number;
+  demoReadingsLastHour: number;
+  openMaintenance: number;
+};
+
+export type AdminSettingsDto = {
+  parkingLabMode: boolean;
+  tempWarningMax: number;
+  co2WarningMax: number;
+  co2CriticalMax: number;
+  readingRetentionDays: number;
+  mqttUrl: string;
+  mqttConnected: boolean;
+};
+
+export type AdminStatusDto = {
+  coreStatus: 'healthy' | 'degraded';
+  mqttConnected: boolean;
+  mqttUrl: string;
+  devicesOnline: number;
+  devicesOffline: number;
+  openIncidents: number;
+  unreadAlerts: number;
 };
 
 export type AlertDto = {
@@ -637,7 +768,7 @@ export const campusModules: CampusModule[] = [
     label: "Gestão académica",
     path: "/academic",
     description: "Hub académico: departamentos, cursos e planos.",
-    status: "partial",
+    status: "available",
     groupHint: "Grupo Académico",
   },
   {
@@ -645,7 +776,7 @@ export const campusModules: CampusModule[] = [
     label: "Departamentos",
     path: "/departments",
     description: "Estrutura departamental da universidade.",
-    status: "development",
+    status: "available",
     groupHint: "Grupo Académico",
   },
   {
@@ -653,7 +784,7 @@ export const campusModules: CampusModule[] = [
     label: "Cursos",
     path: "/courses",
     description: "Catálogo de cursos e programas.",
-    status: "development",
+    status: "available",
     groupHint: "Grupo Académico",
   },
   {
@@ -661,7 +792,7 @@ export const campusModules: CampusModule[] = [
     label: "Disciplinas",
     path: "/subjects",
     description: "Disciplinas e planos curriculares.",
-    status: "development",
+    status: "available",
     groupHint: "Grupo Académico",
   },
   {
@@ -723,7 +854,15 @@ export const campusModules: CampusModule[] = [
     label: "Campus físico",
     path: "/campus",
     description: "Edifícios, salas e espaços do campus.",
-    status: "partial",
+    status: "available",
+    groupHint: "Grupo Infraestrutura",
+  },
+  {
+    key: "campus-twin",
+    label: "Gémeo digital",
+    path: "/campus/twin",
+    description: "Modelo 3D esquemático do D2 com ocupação e ambiente ao vivo.",
+    status: "available",
     groupHint: "Grupo Infraestrutura",
   },
   {
@@ -771,7 +910,7 @@ export const campusModules: CampusModule[] = [
     label: "Manutenção",
     path: "/maintenance",
     description: "Acções de manutenção associadas a ocorrências.",
-    status: "partial",
+    status: "available",
     groupHint: "Grupo Manutenção",
   },
   {
@@ -803,15 +942,15 @@ export const campusModules: CampusModule[] = [
     label: "Sensores",
     path: "/sensors",
     description: "Sensores associados a dispositivos.",
-    status: "development",
+    status: "available",
     groupHint: "Grupo IoT",
   },
   {
     key: "readings",
     label: "Leituras",
     path: "/readings",
-    description: "Leituras de sensores (MQTT futuro).",
-    status: "development",
+    description: "Leituras de sensores (MQTT).",
+    status: "available",
     groupHint: "Grupo IoT",
   },
   {
@@ -835,7 +974,7 @@ export const campusModules: CampusModule[] = [
     label: "Relatórios",
     path: "/reports",
     description: "Indicadores e relatórios agregados.",
-    status: "development",
+    status: "available",
     groupHint: "Grupo Relatórios",
   },
   {
@@ -851,7 +990,7 @@ export const campusModules: CampusModule[] = [
     label: "Administração",
     path: "/admin",
     description: "Administração do sistema e configuração.",
-    status: "partial",
+    status: "available",
     requiredRoles: ["ADMIN"],
   },
 ];
@@ -859,6 +998,8 @@ export const campusModules: CampusModule[] = [
 // Tipos do módulo academic (preservados do upstream — grupo académico)
 export type Ref = { id: string; code: string; name: string };
 export type DebtStatus = "PENDENTE" | "VENCIDA" | "REGULARIZADA" | "CANCELADA";
+export type DebtOrigin = "TUITION" | "FEE" | "FINE" | "OTHER";
+export const DEBT_ORIGINS: DebtOrigin[] = ["TUITION", "FEE", "FINE", "OTHER"];
 export type FinancialStatusType = "ACTIVE" | "BLOCKED";
 export type AnalysisRequestStatus =
   | "PENDENTE_ANALISE"
@@ -883,6 +1024,7 @@ export interface DebtDto {
   status: DebtStatus;
   createdAt: string;
   updatedAt: string;
+  student?: StudentIdentitySummaryDto;
 }
 
 // DTO de Pagamento
@@ -935,14 +1077,56 @@ export interface StudentIdentitySummaryDto {
 export interface FinancialAnalysisRequestViewDto extends AnalysisRequestDto {
   student: StudentIdentitySummaryDto;
   debt: { id: string; code: string; title: string; amount: number };
+  slaOverdue: boolean;
 }
 
 export interface FinancialReportDto {
   totalDebts: number;
   byStatus: { pendentes: number; vencidas: number; regularizadas: number; canceladas: number };
+  totals: { outstanding: number; overdue: number; collectedMonth: number };
   totalPayments: number;
   studentsBlocked: number;
   generatedAt: string;
+}
+
+export interface BlockedStudentDto {
+  student: StudentIdentitySummaryDto;
+  status: FinancialStatusType;
+  reason: string | null;
+  overdueDebtsCount: number;
+  totalOverdueAmount: number;
+  blockedAt: string | null;
+}
+
+export interface FinancialNotificationQueueItemDto {
+  id: string;
+  student: StudentIdentitySummaryDto;
+  title: string;
+  message: string;
+  eventType: string;
+  deliveryStatus: FinancialNotificationDeliveryDto["deliveryStatus"];
+  attempts: number;
+  lastError: string | null;
+  nextAttemptAt: string | null;
+  createdAt: string;
+}
+
+export interface PaymentReceiptDto {
+  kind: "payment";
+  payment: PaymentDto;
+  student: StudentIdentitySummaryDto;
+  debt: { id: string; code: string; title: string; amount: number };
+}
+
+export interface SalaryReceiptDto {
+  kind: "salary";
+  salary: TeacherSalaryDto;
+}
+
+export interface DebtsFromEnrolmentsResultDto {
+  created: number;
+  skipped: number;
+  debts: DebtDto[];
 }
 
 export interface TeacherIdentitySummaryDto {
@@ -1098,15 +1282,23 @@ export type StudentProfileDto = {
   updatedAt: string;
 };
 
-export type CreateStudentProfilePayload = {
-  email: string;
-  password: string;
-  fullName: string;
-  studentNumber: string;
-  courseId: string;
-  yearOfStudy?: number;
-  phone?: string;
-};
+export type CreateStudentProfilePayload =
+  | {
+      userId: string;
+      studentNumber: string;
+      courseId: string;
+      yearOfStudy?: number;
+      phone?: string;
+    }
+  | {
+      email: string;
+      password: string;
+      fullName: string;
+      studentNumber: string;
+      courseId: string;
+      yearOfStudy?: number;
+      phone?: string;
+    };
 
 export type UpdateStudentProfilePayload = {
   courseId?: string;
@@ -1131,15 +1323,23 @@ export type TeacherProfileDto = {
   updatedAt: string;
 };
 
-export type CreateTeacherProfilePayload = {
-  email: string;
-  password: string;
-  fullName: string;
-  employeeCode: string;
-  departmentId: string;
-  title?: string;
-  phone?: string;
-};
+export type CreateTeacherProfilePayload =
+  | {
+      userId: string;
+      employeeCode: string;
+      departmentId: string;
+      title?: string;
+      phone?: string;
+    }
+  | {
+      email: string;
+      password: string;
+      fullName: string;
+      employeeCode: string;
+      departmentId: string;
+      title?: string;
+      phone?: string;
+    };
 
 export type UpdateTeacherProfilePayload = {
   departmentId?: string;

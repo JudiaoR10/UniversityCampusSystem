@@ -1,8 +1,10 @@
-import type { DebtDto, PaymentDto, AnalysisRequestDto, AnalysisRequestStatus, StudentIdentitySummaryDto, FinancialAnalysisRequestViewDto, FinancialReportDto, FinancialStatusSummaryDto, FinancialHistoryDto, FinancialNotificationDto, FinancialNotificationDeliveryDto, FinancialPolicyDto } from '@smart-campus/shared-types';
+import type { DebtDto, DebtOrigin, DebtStatus, PaymentDto, AnalysisRequestDto, AnalysisRequestStatus, StudentIdentitySummaryDto, FinancialAnalysisRequestViewDto, FinancialReportDto, FinancialStatusSummaryDto, FinancialHistoryDto, FinancialNotificationDto, FinancialNotificationDeliveryDto, FinancialNotificationQueueItemDto, FinancialPolicyDto, BlockedStudentDto, PaymentReceiptDto, SalaryReceiptDto, DebtsFromEnrolmentsResultDto } from '@smart-campus/shared-types';
 import type {
   TeacherIdentitySummaryDto,
   TeacherSalaryDto,
   MonthlyPaymentReportDto,
+  AdminSettingsDto,
+  AdminStatusDto,
   AlertDto,
   ApiError,
   ApiSuccess,
@@ -28,12 +30,17 @@ import type {
   IncidentDto,
   LaboratoryDto,
   LoginResponse,
+  MaintenanceActionDto,
   NotificationDto,
+  OpsSnapshot,
   ParkingLotOverview,
   PlateReadingDto,
+  ReadingDto,
+  ReportSummaryDto,
   ResultDto,
   RoomDto,
   ScheduleDto,
+  SensorDto,
   ScheduleFiltersInput,
   ScheduleOptions,
   SubjectBoard,
@@ -137,6 +144,10 @@ export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
     logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken: tokenStore.getRefreshToken() }) }),
     me: () => request<AuthUser>('/me'),
     users: () => request<AuthUser[]>('/users'),
+    createUser: (payload: unknown) =>
+      request<AuthUser>('/users', { method: 'POST', body: JSON.stringify(payload) }),
+    updateUser: (id: string, payload: unknown) =>
+      request<AuthUser>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     rooms: () => request<RoomDto[]>('/rooms'),
     room: (id: string) => request<RoomDto>(`/rooms/${id}`),
     createRoom: (payload: unknown) => request<RoomDto>('/rooms', { method: 'POST', body: JSON.stringify(payload) }),
@@ -169,6 +180,8 @@ export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
     devices: () => request<DeviceDto[]>('/devices'),
     createDevice: (payload: unknown) =>
       request<DeviceDto>('/devices', { method: 'POST', body: JSON.stringify(payload) }),
+    updateDevice: (id: string, payload: unknown) =>
+      request<DeviceDto>(`/devices/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     alerts: (deviceId?: string) =>
       request<AlertDto[]>(deviceId ? `/alerts?deviceId=${encodeURIComponent(deviceId)}` : '/alerts'),
     updateDeviceStatus: (id: string, payload: unknown) =>
@@ -182,6 +195,31 @@ export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
       request<NotificationDto>(`/notifications/${id}/read`, { method: 'PATCH', body: JSON.stringify({}) }),
     auditEvents: () => request<unknown[]>('/audit-events'),
     dashboard: () => request<DashboardSummary>('/dashboard'),
+    opsSnapshot: () => request<OpsSnapshot>('/ops/snapshot'),
+    sensors: () => request<SensorDto[]>('/sensors'),
+    createSensor: (payload: unknown) =>
+      request<SensorDto>('/sensors', { method: 'POST', body: JSON.stringify(payload) }),
+    updateSensor: (id: string, payload: unknown) =>
+      request<SensorDto>(`/sensors/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteSensor: (id: string) => request<{ id: string }>(`/sensors/${id}`, { method: 'DELETE' }),
+    sensorReadings: (id: string) => request<ReadingDto[]>(`/sensors/${id}/readings`),
+    readings: (params?: { sensorId?: string; metric?: string; includeDemo?: boolean; limit?: number }) =>
+      request<ReadingDto[]>(`/readings${buildQuery({
+        sensorId: params?.sensorId,
+        metric: params?.metric,
+        includeDemo: params?.includeDemo === false ? 'false' : undefined,
+        limit: params?.limit,
+      })}`),
+    maintenance: () => request<MaintenanceActionDto[]>('/maintenance'),
+    createMaintenance: (payload: unknown) =>
+      request<MaintenanceActionDto>('/maintenance', { method: 'POST', body: JSON.stringify(payload) }),
+    updateMaintenance: (id: string, payload: unknown) =>
+      request<MaintenanceActionDto>(`/maintenance/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    reportSummary: () => request<ReportSummaryDto>('/reports/summary'),
+    adminSettings: () => request<AdminSettingsDto>('/admin/settings'),
+    updateAdminSettings: (payload: unknown) =>
+      request<AdminSettingsDto>('/admin/settings', { method: 'PATCH', body: JSON.stringify(payload) }),
+    adminStatus: () => request<AdminStatusDto>('/admin/status'),
     parkingOverview: () => request<ParkingLotOverview[]>('/parking/overview'),
     parkingReadings: () => request<PlateReadingDto[]>('/parking/readings'),
     createPlateReading: (payload: unknown) =>
@@ -256,14 +294,20 @@ export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
     updateSchedule: (id: string, payload: unknown) =>
       request<ScheduleDto>(`/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     deleteSchedule: (id: string) => request<{ id: string }>(`/schedules/${id}`, { method: 'DELETE' }),
-    financialDebts: (params: { studentId?: string; offset?: number; limit?: number } = {}) => {
-      const query = new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)] as [string, string]));
-      return request<DebtDto[]>(`/financial/debts?${query}`);
-    },
+    financialDebts: (params: { studentId?: string; status?: DebtStatus; origin?: DebtOrigin; dueBefore?: string; offset?: number; limit?: number } = {}) =>
+      request<DebtDto[]>(`/financial/debts?${queryString(params)}`),
     financialDebt: (id: string) => request<DebtDto>(`/financial/debts/${encodeURIComponent(id)}`),
     createDebt: (payload: unknown) => request<DebtDto>('/financial/debts', { method: 'POST', body: JSON.stringify(payload) }),
+    cancelDebt: (id: string) => request<DebtDto>(`/financial/debts/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: '{}' }),
+    createDebtsFromEnrolments: (payload: unknown) => request<DebtsFromEnrolmentsResultDto>('/financial/debts/from-enrolments', { method: 'POST', body: JSON.stringify(payload) }),
     createPayment: (payload: unknown) => request<{ payment: PaymentDto; debtStatus: string; studentFinancialStatus: 'ACTIVE' | 'BLOCKED' }>('/financial/payments', { method: 'POST', body: JSON.stringify(payload) }),
+    paymentReceipt: (id: string) => request<PaymentReceiptDto>(`/financial/payments/${encodeURIComponent(id)}/receipt`),
+    salaryReceipt: (id: string) => request<SalaryReceiptDto>(`/financial/salaries/${encodeURIComponent(id)}/receipt`),
     financialStatus: (id: string) => request<FinancialStatusSummaryDto>(`/financial/students/${encodeURIComponent(id)}/status`),
+    financialBlockedStudents: (params: { offset?: number; limit?: number } = {}) => request<BlockedStudentDto[]>(`/financial/students/blocked?${queryString(params)}`),
+    financialNotificationQueue: (params: { deliveryStatus?: FinancialNotificationDeliveryDto['deliveryStatus']; offset?: number; limit?: number } = {}) =>
+      request<FinancialNotificationQueueItemDto[]>(`/financial/notifications?${queryString(params)}`),
+    retryFailedNotifications: () => request<{ retried: number; results: FinancialNotificationDeliveryDto[] }>('/financial/notifications/retry-failed', { method: 'POST', body: '{}' }),
     financialHistory: (id: string, params: { offset?: number; limit?: number } = {}) => request<FinancialHistoryDto>(`/financial/students/${encodeURIComponent(id)}/history?${queryString(params)}`),
     financialNotifications: (id: string, params: { offset?: number; limit?: number } = {}) => request<FinancialNotificationDto[]>(`/financial/students/${encodeURIComponent(id)}/notifications?${queryString(params)}`),
     financialStudents: (params: { q?: string; offset?: number; limit?: number } = {}) => request<StudentIdentitySummaryDto[]>(`/financial/students?${queryString(params)}`),

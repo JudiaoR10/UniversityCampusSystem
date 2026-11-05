@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import type { EquipmentDto, LaboratoryDto, RoomDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { PageIntro } from '../components/PageIntro';
+import { SelectField } from '../components/SelectField';
+import { DeleteAction, EditAction, TableActions } from '../components/ActionButtons';
 
 type EquipmentForm = { code: string; name: string; description: string; roomId: string; laboratoryId: string };
 
@@ -94,30 +96,25 @@ export function EquipmentPage() {
         description="Inventário de equipamentos por sala ou laboratório."
       />
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="alert-error">{error}</p> : null}
       {loading ? <p className="text-sm text-campus-deep/70">A carregar equipamentos…</p> : null}
 
       {canManage ? (
         <form onSubmit={onSubmit} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-6">
+          <h2 className="section-title md:col-span-2 xl:col-span-6">{editingId ? 'Editar equipamento' : 'Novo equipamento'}</h2>
           <input className="field-input !mt-0" placeholder="Código" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
           <input className="field-input !mt-0" placeholder="Nome" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
           <input className="field-input !mt-0" placeholder="Descrição" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <select className="field-input !mt-0" value={form.roomId} onChange={(e) => setForm({ ...form, roomId: e.target.value })}>
-            <option value="">Sem sala</option>
-            {rooms.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.code} — {r.name}
-              </option>
-            ))}
-          </select>
-          <select className="field-input !mt-0" value={form.laboratoryId} onChange={(e) => setForm({ ...form, laboratoryId: e.target.value })}>
-            <option value="">Sem laboratório</option>
-            {labs.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.code} — {l.name}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            value={form.roomId}
+            onChange={(roomId) => setForm({ ...form, roomId })}
+            options={[{ value: '', label: 'Sem sala' }, ...rooms.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}` }))]}
+          />
+          <SelectField
+            value={form.laboratoryId}
+            onChange={(laboratoryId) => setForm({ ...form, laboratoryId })}
+            options={[{ value: '', label: 'Sem laboratório' }, ...labs.map((l) => ({ value: l.id, label: `${l.code} — ${l.name}` }))]}
+          />
           <div className="flex flex-col gap-2">
             <button type="submit" className="btn-primary w-full">
               {editingId ? 'Guardar alterações' : 'Criar equipamento'}
@@ -153,14 +150,10 @@ export function EquipmentPage() {
                 <td className="px-4 py-3">{item.description ?? '—'}</td>
                 {canManage ? (
                   <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <button type="button" className="btn-ghost" onClick={() => startEdit(item)}>
-                        Editar
-                      </button>
-                      <button type="button" className="btn-ghost text-red-600 hover:text-red-700" onClick={() => onDelete(item.id)}>
-                        Eliminar
-                      </button>
-                    </div>
+                    <TableActions>
+                      <EditAction onClick={() => startEdit(item)} />
+                      <DeleteAction onClick={() => onDelete(item.id)} />
+                    </TableActions>
                   </td>
                 ) : null}
               </tr>

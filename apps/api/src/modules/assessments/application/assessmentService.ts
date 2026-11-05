@@ -4,6 +4,7 @@ import { AppError, conflict, forbidden, notFound } from '../../../lib/errors.js'
 import { prisma } from '../../../lib/prisma.js';
 import { audit } from '../../audit/application/auditService.js';
 import { notifyUsers } from '../../notifications/application/notificationService.js';
+import { getStudentStatus } from '../../financial/application/financialService.js';
 
 export type Actor = { id: string; role: string };
 
@@ -1035,12 +1036,12 @@ export async function getAssessmentRoster(id: string, actor: Actor) {
   assertCanManageAssessment(assessment, actor);
 
   // Apenas estudantes INSCRITOS na disciplina (módulo de inscrições).
-  const enrolmentsRoster = await prisma.subjectEnrolment.findMany({
-    where: { subjectId: assessment.subject.id, status: { in: ['ACTIVE', 'PENDING'] } },
+  const enrolments = await prisma.subjectEnrolment.findMany({
+    where: { subjectId: assessment.subjectId, status: { in: ['ACTIVE', 'PENDING'] } },
     include: { student: { include: { user: { select: { fullName: true } } } } },
     orderBy: { student: { studentNumber: 'asc' } },
   });
-  const students = enrolmentsRoster.map((e) => e.student);
+  const students = enrolments.map((row) => row.student);
 
   const grades = await prisma.grade.findMany({ where: { assessmentId: id } });
   const byStudent = new Map(grades.map((g) => [g.studentId, g]));
@@ -1157,10 +1158,9 @@ export async function assertStudentFinancialStanding(studentId: string) {
     where: { id: studentId },
     select: { userId: true },
   });
-  const row = await prisma.financialStatus.findUnique({
-    where: { studentId: profile?.userId ?? studentId },
-  });
-  if (row?.status === 'BLOCKED') {
+  if (!profile) return;
+  const standing = await getStudentStatus(profile.userId);
+  if (standing.status === 'BLOCKED') {
     throw forbidden(
       'Deve regularizar a sua situação financeira para consultar as notas',
       'FINANCIAL_BLOCKED',
@@ -1366,7 +1366,9 @@ export async function listStudentGrades(studentId: string, actor: Actor) {
       studentId,
       ...(actor.role === 'TEACHER'
         ? { assessment: { subject: { schedules: { some: { teacherId: actor.id } } } } }
-        : {}),
+        : actor.role === 'STUDENT'
+          ? { assessment: { subject: { resultsPublishedAt: { not: null } } } }
+          : {}),
     },
     include: {
       assessment: {

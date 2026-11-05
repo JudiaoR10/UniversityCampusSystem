@@ -1,4 +1,12 @@
-export function OccupancyPulse({ people, percent }: { people: number; percent: number }) {
+export function OccupancyPulse({
+  people,
+  percent,
+  isDemo = false,
+}: {
+  people: number;
+  percent: number;
+  isDemo?: boolean;
+}) {
   const radius = 42;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - Math.min(percent, 100) / 100);
@@ -35,7 +43,9 @@ export function OccupancyPulse({ people, percent }: { people: number; percent: n
       <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-campus-deep/55">Ocupação</p>
         <p className="font-display text-xl font-semibold text-campus-ink sm:text-2xl">{people} pessoas</p>
-        <p className="text-xs text-campus-brass">Estimativa DEMO sobre capacidade</p>
+        <p className="text-xs text-campus-brass">
+          {isDemo ? 'Estimativa DEMO sobre capacidade' : 'Inscritos em sessões a decorrer'}
+        </p>
       </div>
     </div>
   );

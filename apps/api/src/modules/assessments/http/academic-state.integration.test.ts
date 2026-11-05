@@ -43,6 +43,7 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
       await prisma.assessment.deleteMany({ where: { subjectId: subject.id } });
       await prisma.subjectEnrolment.deleteMany({ where: { subjectId: subject.id } });
       await prisma.classSchedule.deleteMany({ where: { subjectId: subject.id } });
+      await prisma.subjectEnrolment.deleteMany({ where: { subjectId: subject.id } });
       await prisma.subject.delete({ where: { id: subject.id } }).catch(() => undefined);
     }
   }
@@ -140,6 +141,9 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
       },
     });
     subjectId = subject.id;
+    await prisma.subjectEnrolment.create({
+      data: { studentId: studentAId, subjectId, academicYear: 2026, status: 'ACTIVE' },
+    });
 
     // Ligação docente↔disciplina exigida para criar avaliações e lançar notas.
     const dayMs = 24 * 60 * 60 * 1000;

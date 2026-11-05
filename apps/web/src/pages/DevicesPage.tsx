@@ -1,9 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import type { DeviceDto, DeviceStatus } from '@smart-campus/shared-types';
+import type { DeviceDto, DeviceStatus, RoomDto } from '@smart-campus/shared-types';
 import { DeviceCard } from '../components/iot/DeviceCard';
 import { PageIntro } from '../components/PageIntro';
+import { ChipTabs, EmptyState, LoadingState } from '../components/ui';
+import { SelectField } from '../components/SelectField';
+import { EditAction, TableActions } from '../components/ActionButtons';
 
 export function DevicesPage() {
   const { api, user } = useAuth();
@@ -11,15 +14,18 @@ export function DevicesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'ALL' | DeviceStatus>('ALL');
-  const [form, setForm] = useState({ code: '', name: '', type: '' });
+  const [rooms, setRooms] = useState<RoomDto[]>([]);
+  const [form, setForm] = useState({ code: '', name: '', type: '', mqttTopic: '', roomId: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const canManage = !!user && ['ADMIN', 'COORDINATOR', 'TECHNICIAN'].includes(user.role);
   const canDelete = !!user && ['ADMIN', 'COORDINATOR'].includes(user.role);
 
   async function load() {
-    const res = await api.devices();
+    const [res, roomsRes] = await Promise.all([api.devices(), api.rooms()]);
     setDevices(res.data);
+    setRooms(roomsRes.data);
   }
 
   useEffect(() => {
@@ -33,12 +39,25 @@ export function DevicesPage() {
     setError(null);
     setSaving(true);
     try {
-      await api.createDevice({
+      const payload = {
         code: form.code.trim(),
         name: form.name.trim(),
         type: form.type.trim(),
-      });
-      setForm({ code: '', name: '', type: '' });
+        mqttTopic: form.mqttTopic.trim() || null,
+        roomId: form.roomId || null,
+      };
+      if (editingId) {
+        await api.updateDevice(editingId, {
+          name: payload.name,
+          type: payload.type,
+          mqttTopic: payload.mqttTopic,
+          roomId: payload.roomId,
+        });
+        setEditingId(null);
+      } else {
+        await api.createDevice(payload);
+      }
+      setForm({ code: '', name: '', type: '', mqttTopic: '', roomId: '' });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar dispositivo');
@@ -87,14 +106,16 @@ export function DevicesPage() {
       />
 
       {canManage ? (
-        <form onSubmit={onCreate} className="grid gap-3 rounded-2xl border border-campus-line bg-white p-4 sm:grid-cols-4">
+        <form onSubmit={onCreate} className="surface grid gap-3 p-4 sm:p-5 sm:grid-cols-2 xl:grid-cols-3">
+          <h2 className="section-title sm:col-span-2 xl:col-span-3">{editingId ? 'Editar dispositivo' : 'Novo dispositivo'}</h2>
           <input
             value={form.code}
             onChange={(e) => setForm({ ...form, code: e.target.value })}
             placeholder="Código (ex.: TEMP-A-01)"
             required
             minLength={2}
-            className="rounded-xl border border-campus-line px-3 py-2 text-sm"
+            disabled={Boolean(editingId)}
+            className="field-input !mt-0"
           />
           <input
             value={form.name}
@@ -102,7 +123,7 @@ export function DevicesPage() {
             placeholder="Nome"
             required
             minLength={2}
-            className="rounded-xl border border-campus-line px-3 py-2 text-sm"
+            className="field-input !mt-0"
           />
           <input
             value={form.type}
@@ -110,48 +131,88 @@ export function DevicesPage() {
             placeholder="Tipo (ex.: sensor)"
             required
             minLength={2}
-            className="rounded-xl border border-campus-line px-3 py-2 text-sm"
+            className="field-input !mt-0"
           />
-          <button type="submit" disabled={saving} className="btn-primary">
-            {saving ? 'A criar…' : 'Criar dispositivo'}
-          </button>
+          <input
+            value={form.mqttTopic}
+            onChange={(e) => setForm({ ...form, mqttTopic: e.target.value })}
+            placeholder="Tópico MQTT (ex.: campus/d2/d2-101/env)"
+            className="field-input !mt-0"
+          />
+          <SelectField
+            value={form.roomId}
+            onChange={(roomId) => setForm({ ...form, roomId })}
+            aria-label="Sala"
+            options={[{ value: '', label: 'Sem sala' }, ...rooms.map((room) => ({ value: room.id, label: `${room.code} — ${room.name}` }))]}
+          />
+          <div className="flex gap-2">
+            <button type="submit" disabled={saving} className="btn-primary flex-1">
+              {saving ? 'A guardar…' : editingId ? 'Guardar' : 'Criar dispositivo'}
+            </button>
+            {editingId ? (
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => {
+                  setEditingId(null);
+                  setForm({ code: '', name: '', type: '', mqttTopic: '', roomId: '' });
+                }}
+              >
+                Cancelar
+              </button>
+            ) : null}
+          </div>
         </form>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {(['ALL', 'ONLINE', 'MAINTENANCE', 'OFFLINE', 'UNKNOWN'] as const).map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => setFilter(f)}
-            className={`rounded-xl border px-3 py-1.5 text-sm font-semibold transition ${
-              filter === f
-                ? 'border-campus-teal bg-campus-teal text-white'
-                : 'border-campus-line bg-white text-campus-deep/75 hover:bg-campus-mist'
-            }`}
-          >
-            {f === 'ALL' ? 'Todos' : f}
-          </button>
-        ))}
-      </div>
+      <ChipTabs
+        items={[
+          { id: 'ALL', label: 'Todos' },
+          { id: 'ONLINE', label: 'ONLINE' },
+          { id: 'MAINTENANCE', label: 'MAINTENANCE' },
+          { id: 'OFFLINE', label: 'OFFLINE' },
+          { id: 'UNKNOWN', label: 'UNKNOWN' },
+        ]}
+        value={filter}
+        onChange={setFilter}
+        ariaLabel="Filtrar dispositivos"
+      />
 
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="alert-error">{error}</p> : null}
 
       {loading ? (
-        <p className="text-sm text-campus-deep/70">A carregar dispositivos…</p>
+        <LoadingState label="A carregar dispositivos…" />
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-campus-deep/70">Nenhum dispositivo para mostrar.</p>
+        <EmptyState title="Nenhum dispositivo" description="Nenhum dispositivo para mostrar neste filtro." />
       ) : (
-   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-  {filtered.map((device) => (
-    <DeviceCard
-      key={device.id}
-      device={device}
-      onDelete={canDelete ? onDelete : undefined}
-      onStatusChange={canManage ? onStatusChange : undefined}
-    />
-  ))}
-</div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((device) => (
+            <div key={device.id} className="space-y-2">
+              <DeviceCard
+                device={device}
+                onDelete={canDelete ? onDelete : undefined}
+                onStatusChange={canManage ? onStatusChange : undefined}
+              />
+              {canManage ? (
+                <TableActions>
+                  <EditAction
+                    label="Editar tópico e sala"
+                    onClick={() => {
+                      setEditingId(device.id);
+                      setForm({
+                        code: device.code,
+                        name: device.name,
+                        type: device.type,
+                        mqttTopic: device.mqttTopic ?? '',
+                        roomId: device.roomId ?? '',
+                      });
+                    }}
+                  />
+                </TableActions>
+              ) : null}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

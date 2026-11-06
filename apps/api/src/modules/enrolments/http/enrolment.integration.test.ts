@@ -299,13 +299,13 @@ describe('API Inscrições em disciplinas', () => {
     expect(res.status).toBe(403);
   });
 
-  it('admin activa mas não conclui inscrição (403) e nada é alterado', async () => {
+  it('admin não activa nem conclui inscrição (403) e nada é alterado', async () => {
     const activate = await request(app)
       .patch(`${api}/enrolments/${managedEnrolmentId}/status`)
       .set(bearer(adminToken))
       .send({ status: 'ACTIVE' });
-    expect(activate.status).toBe(200);
-    expect(activate.body.data.status).toBe('ACTIVE');
+    expect(activate.status).toBe(403);
+    expect(activate.body.code).toBe('FORBIDDEN');
 
     const complete = await request(app)
       .patch(`${api}/enrolments/${managedEnrolmentId}/status`)
@@ -317,10 +317,17 @@ describe('API Inscrições em disciplinas', () => {
     const unchanged = await prisma.subjectEnrolment.findUniqueOrThrow({
       where: { id: managedEnrolmentId },
     });
-    expect(unchanged.status).toBe('ACTIVE');
+    expect(unchanged.status).toBe('PENDING');
   });
 
-  it('coordenação conclui a inscrição e bloqueia transição final (409)', async () => {
+  it('coordenação activa e conclui a inscrição e bloqueia transição final (409)', async () => {
+    const activate = await request(app)
+      .patch(`${api}/enrolments/${managedEnrolmentId}/status`)
+      .set(bearer(coordinatorToken))
+      .send({ status: 'ACTIVE' });
+    expect(activate.status).toBe(200);
+    expect(activate.body.data.status).toBe('ACTIVE');
+
     const complete = await request(app)
       .patch(`${api}/enrolments/${managedEnrolmentId}/status`)
       .set(bearer(coordinatorToken))

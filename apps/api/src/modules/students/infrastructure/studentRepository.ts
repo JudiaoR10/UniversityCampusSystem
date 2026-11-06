@@ -115,10 +115,7 @@ export async function updateStudent(id: string, data: UpdateStudentData) {
   });
 }
 
-// Remove a conta (User) e o perfil em conjunto: a conta não pode ficar órfã a permitir login.
-// Devolve null quando o estudante tem inscrições activas em disciplinas.
-// A matrícula no curso (StudentProfile.courseId) e o legado Enrolment são apagados por cascade
-// com o perfil: a matrícula não é um vínculo independente neste sistema.
+
 export async function deleteStudentProfile(id: string) {
   return prisma.$transaction(async (tx) => {
     const profile = await tx.studentProfile.findFirst({

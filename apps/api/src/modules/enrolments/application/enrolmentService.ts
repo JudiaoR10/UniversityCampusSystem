@@ -163,8 +163,12 @@ export async function updateStatus(
   requester: Requester,
   ctx: AuditContext,
 ) {
-  if (input.status === 'COMPLETED' && requester.role === 'ADMIN') {
-    throw forbidden('Apenas a coordenação pode concluir inscrições');
+  if (requester.role === 'ADMIN' && (input.status === 'ACTIVE' || input.status === 'COMPLETED')) {
+    throw forbidden(
+      input.status === 'ACTIVE'
+        ? 'Apenas a coordenação pode activar inscrições'
+        : 'Apenas a coordenação pode concluir inscrições',
+    );
   }
 
   const existing = await enrolmentRepository.findEnrolmentById(id);

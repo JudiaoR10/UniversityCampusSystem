@@ -1,12 +1,12 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import type { AuthUser, CourseDto, StudentProfileDto } from '@smart-campus/shared-types';
+import type { CourseDto, StudentProfileDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { AlertMessage, type AlertState } from '../components/AlertMessage';
 import { useConfirm } from '../components/ConfirmDialog';
 import { PageIntro } from '../components/PageIntro';
 import { EmptyState, StatusPill } from '../components/ui';
 import { SelectField } from '../components/SelectField';
-import { DeleteAction, TableActions } from '../components/ActionButtons';
+import { DeleteAction, EditAction, TableActions } from '../components/ActionButtons';
 
 const statusLabel: Record<StudentProfileDto['status'], string> = {
   ACTIVE: 'Activo',
@@ -28,7 +28,7 @@ export function StudentsPage() {
 }
 
 function OwnStudentProfile() {
-  const { api } = useAuth();
+  const { api, user } = useAuth();
   const [state, setState] = useState<
     { status: 'loading' } | { status: 'error'; message: string } | { status: 'ok'; data: StudentProfileDto }
   >({ status: 'loading' });
@@ -104,6 +104,8 @@ function OwnStudentProfile() {
       />
 
       <section className="surface grid gap-4 p-5 sm:grid-cols-2">
+        <Field label="Nome completo" value={student.user.fullName} />
+        <Field label="Email" value={user?.email ?? '—'} />
         <Field label="Número de estudante" value={student.studentNumber} />
         <Field label="Estado" value={statusLabel[student.status]} />
         <Field
@@ -111,6 +113,7 @@ function OwnStudentProfile() {
           value={student.course ? `${student.course.code} — ${student.course.name}` : 'Sem curso associado'}
         />
         <Field label="Ano de estudo" value={student.yearOfStudy ?? '—'} />
+        <Field label="Telefone" value={student.phone ?? '—'} />
       </section>
 
       <form onSubmit={save} className="surface space-y-3 p-5 sm:max-w-md">
@@ -138,17 +141,14 @@ function OwnStudentProfile() {
 
 function StudentsDirectory({ canManage }: { canManage: boolean }) {
   const { api } = useAuth();
-  const prefillUserId = new URLSearchParams(window.location.search).get('userId') ?? '';
   const [students, setStudents] = useState<StudentProfileDto[]>([]);
   const [courses, setCourses] = useState<CourseDto[]>([]);
-  const [accounts, setAccounts] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState<AlertState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { confirm, dialog } = useConfirm();
-  const [mode, setMode] = useState<'existing' | 'new'>('existing');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    userId: prefillUserId,
     email: '',
     password: '',
     fullName: '',
@@ -156,18 +156,14 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
     courseId: '',
     yearOfStudy: '1',
     phone: '',
+    status: 'ACTIVE' as StudentProfileDto['status'],
   });
 
   async function load() {
     try {
-      const [resStudents, resCourses, resUsers] = await Promise.all([
-        api.students.list(),
-        api.courses(),
-        api.users().catch(() => ({ data: [] as AuthUser[] })),
-      ]);
+      const [resStudents, resCourses] = await Promise.all([api.students.list(), api.courses()]);
       setStudents(resStudents.data);
       setCourses(resCourses.data);
-      setAccounts(resUsers.data);
       const first = resCourses.data[0];
       setForm((current) =>
         current.courseId || !first ? current : { ...current, courseId: first.id },
@@ -183,58 +179,78 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
     void load();
   }, [api]);
 
-  async function create(event: FormEvent) {
+  function resetForm() {
+    setEditingId(null);
+    setForm({
+      email: '',
+      password: '',
+      fullName: '',
+      studentNumber: '',
+      courseId: courses[0]?.id ?? '',
+      yearOfStudy: '1',
+      phone: '',
+      status: 'ACTIVE',
+    });
+  }
+
+  function startEdit(student: StudentProfileDto) {
+    setEditingId(student.id);
+    setForm({
+      email: '',
+      password: '',
+      fullName: student.user.fullName,
+      studentNumber: student.studentNumber,
+      courseId: student.courseId ?? '',
+      yearOfStudy: student.yearOfStudy ? String(student.yearOfStudy) : '',
+      phone: student.phone ?? '',
+      status: student.status,
+    });
+    setAlert(null);
+  }
+
+  async function submit(event: FormEvent) {
     event.preventDefault();
     const course = courses.find((item) => item.id === form.courseId);
+    const editing = editingId !== null;
     const confirmed = await confirm({
-      title: 'Criar perfil de estudante',
-      message:
-        mode === 'existing'
-          ? 'Ligar esta conta existente ao perfil académico?'
-          : 'Criar conta de acesso e perfil de estudante?',
+      title: editing ? 'Actualizar perfil de estudante' : 'Criar perfil de estudante',
+      message: editing
+        ? 'Guardar as alterações ao perfil de estudante?'
+        : 'Criar conta de acesso e perfil de estudante?',
       details: [
         { label: 'Nº de estudante', value: form.studentNumber },
         { label: 'Curso', value: course ? `${course.code} — ${course.name}` : '—' },
       ],
-      confirmLabel: 'Criar perfil',
+      confirmLabel: editing ? 'Guardar alterações' : 'Criar perfil',
     });
     if (!confirmed) return;
     setAlert(null);
     setSubmitting(true);
     try {
-      await api.students.create(
-        mode === 'existing'
-          ? {
-              userId: form.userId,
-              studentNumber: form.studentNumber,
-              courseId: form.courseId,
-              yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : undefined,
-              phone: form.phone || undefined,
-            }
-          : {
-              email: form.email,
-              password: form.password,
-              fullName: form.fullName,
-              studentNumber: form.studentNumber,
-              courseId: form.courseId,
-              yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : undefined,
-              phone: form.phone || undefined,
-            },
-      );
-      setAlert({
-        tone: 'success',
-        message: 'Estudante criado com sucesso.',
-      });
-      setForm({
-        userId: '',
-        email: '',
-        password: '',
-        fullName: '',
-        studentNumber: '',
-        courseId: form.courseId,
-        yearOfStudy: '1',
-        phone: '',
-      });
+      if (editingId) {
+        await api.students.update(editingId, {
+          courseId: form.courseId,
+          yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : null,
+          phone: form.phone || null,
+          status: form.status,
+        });
+        setAlert({ tone: 'success', message: 'Estudante actualizado com sucesso.' });
+      } else {
+        await api.students.create({
+          email: form.email,
+          password: form.password,
+          fullName: form.fullName,
+          studentNumber: form.studentNumber,
+          courseId: form.courseId,
+          yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : undefined,
+          phone: form.phone || undefined,
+        });
+        setAlert({
+          tone: 'success',
+          message: 'Estudante criado com sucesso.',
+        });
+      }
+      resetForm();
       setLoading(true);
       await load();
     } catch (err) {
@@ -275,31 +291,16 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
       />
 
       {canManage ? (
-        <form onSubmit={create} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+        <form onSubmit={submit} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
           <div className="md:col-span-2 xl:col-span-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="section-title">Novo perfil de estudante</h2>
-            <div className="flex gap-2">
-              <button type="button" className={mode === 'existing' ? 'btn-primary' : 'btn-ghost'} onClick={() => setMode('existing')}>
-                Conta existente
+            <h2 className="section-title">{editingId ? 'Editar perfil de estudante' : 'Novo perfil de estudante'}</h2>
+            {editingId ? (
+              <button type="button" className="btn-ghost" onClick={resetForm}>
+                Cancelar edição
               </button>
-              <button type="button" className={mode === 'new' ? 'btn-primary' : 'btn-ghost'} onClick={() => setMode('new')}>
-                Criar conta
-              </button>
-            </div>
+            ) : null}
           </div>
-          {mode === 'existing' ? (
-            <SelectField
-              className="md:col-span-2"
-              value={form.userId}
-              onChange={(userId) => setForm({ ...form, userId })}
-              required
-              aria-label="Conta STUDENT sem perfil"
-              placeholder="Seleccionar conta de estudante sem perfil"
-              options={accounts
-                .filter((item) => item.role === 'STUDENT' && item.isActive && !item.hasStudentProfile)
-                .map((item) => ({ value: item.id, label: `${item.fullName} · ${item.email}` }))}
-            />
-          ) : (
+          {editingId ? null : (
             <>
           <input
             className="field-input !mt-0"
@@ -332,6 +333,8 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
             placeholder="Nº de estudante"
             value={form.studentNumber}
             onChange={(event) => setForm({ ...form, studentNumber: event.target.value })}
+            readOnly={editingId !== null}
+            title={editingId ? 'O número de estudante não pode ser alterado.' : undefined}
             required
           />
           <SelectField
@@ -357,8 +360,19 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
             value={form.phone}
             onChange={(event) => setForm({ ...form, phone: event.target.value })}
           />
-          <button type="submit" className="btn-primary" disabled={submitting || !form.courseId || (mode === 'existing' && !form.userId)}>
-            {submitting ? 'A criar…' : 'Criar perfil'}
+          {editingId ? (
+            <SelectField
+              aria-label="Estado"
+              value={form.status}
+              onChange={(status) => setForm({ ...form, status: status as StudentProfileDto['status'] })}
+              options={(Object.keys(statusLabel) as StudentProfileDto['status'][]).map((status) => ({
+                value: status,
+                label: statusLabel[status],
+              }))}
+            />
+          ) : null}
+          <button type="submit" className="btn-primary" disabled={submitting || !form.courseId}>
+            {submitting ? 'A guardar…' : editingId ? 'Guardar alterações' : 'Criar perfil'}
           </button>
         </form>
       ) : null}
@@ -399,6 +413,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
                   {canManage ? (
                     <td className="px-4 py-3">
                       <TableActions>
+                        <EditAction title={`Editar ${student.user.fullName}`} onClick={() => startEdit(student)} />
                         <DeleteAction label="Remover" title={`Remover ${student.user.fullName}`} onClick={() => void remove(student)} />
                       </TableActions>
                     </td>

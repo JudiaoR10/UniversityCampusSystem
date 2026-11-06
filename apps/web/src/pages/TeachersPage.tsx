@@ -1,12 +1,12 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import type { AuthUser, DepartmentDto, TeacherProfileDto } from '@smart-campus/shared-types';
+import type { DepartmentDto, TeacherProfileDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { AlertMessage, type AlertState } from '../components/AlertMessage';
 import { useConfirm } from '../components/ConfirmDialog';
 import { PageIntro } from '../components/PageIntro';
 import { EmptyState, StatusPill } from '../components/ui';
 import { SelectField } from '../components/SelectField';
-import { DeleteAction, TableActions } from '../components/ActionButtons';
+import { DeleteAction, EditAction, TableActions } from '../components/ActionButtons';
 
 const statusLabel: Record<TeacherProfileDto['status'], string> = {
   ACTIVE: 'Activo',
@@ -32,11 +32,8 @@ export function TeachersPage() {
   const [ownAlert, setOwnAlert] = useState<AlertState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { confirm, dialog } = useConfirm();
-  const prefillUserId = new URLSearchParams(window.location.search).get('userId') ?? '';
-  const [accounts, setAccounts] = useState<AuthUser[]>([]);
-  const [mode, setMode] = useState<'existing' | 'new'>('existing');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    userId: prefillUserId,
     email: '',
     password: '',
     fullName: '',
@@ -44,16 +41,12 @@ export function TeachersPage() {
     departmentId: '',
     title: '',
     phone: '',
+    status: 'ACTIVE' as TeacherProfileDto['status'],
   });
 
   async function load() {
     try {
-      const [resTeachers, resDepartments, resUsers] = await Promise.all([
-        api.teachers.list(),
-        api.departments(),
-        api.users().catch(() => ({ data: [] as AuthUser[] })),
-      ]);
-      setAccounts(resUsers.data);
+      const [resTeachers, resDepartments] = await Promise.all([api.teachers.list(), api.departments()]);
       setTeachers(resTeachers.data);
       setDepartments(resDepartments.data);
       const first = resDepartments.data[0];
@@ -89,55 +82,78 @@ export function TeachersPage() {
     };
   }, [api, isTeacher]);
 
-  async function create(event: FormEvent) {
+  function resetForm() {
+    setEditingId(null);
+    setForm({
+      email: '',
+      password: '',
+      fullName: '',
+      employeeCode: '',
+      departmentId: departments[0]?.id ?? '',
+      title: '',
+      phone: '',
+      status: 'ACTIVE',
+    });
+  }
+
+  function startEdit(teacher: TeacherProfileDto) {
+    setEditingId(teacher.id);
+    setForm({
+      email: '',
+      password: '',
+      fullName: teacher.user.fullName,
+      employeeCode: teacher.employeeCode,
+      departmentId: teacher.departmentId ?? '',
+      title: teacher.title ?? '',
+      phone: teacher.phone ?? '',
+      status: teacher.status,
+    });
+    setAlert(null);
+  }
+
+  async function submit(event: FormEvent) {
     event.preventDefault();
     const department = departments.find((item) => item.id === form.departmentId);
+    const editing = editingId !== null;
     const confirmed = await confirm({
-      title: 'Criar docente',
-      message: mode === 'existing' ? 'Ligar esta conta existente ao perfil de docente?' : 'Criar conta e perfil de docente?',
+      title: editing ? 'Actualizar docente' : 'Criar docente',
+      message: editing
+        ? 'Guardar as alterações ao perfil do docente?'
+        : 'Criar conta e perfil de docente?',
       details: [
         { label: 'Código', value: form.employeeCode },
         { label: 'Departamento', value: department ? `${department.code} — ${department.name}` : '—' },
       ],
-      confirmLabel: 'Criar docente',
+      confirmLabel: editing ? 'Guardar alterações' : 'Criar docente',
     });
     if (!confirmed) return;
     setAlert(null);
     setSubmitting(true);
     try {
-      await api.teachers.create(
-        mode === 'existing'
-          ? {
-              userId: form.userId,
-              employeeCode: form.employeeCode,
-              departmentId: form.departmentId,
-              title: form.title || undefined,
-              phone: form.phone || undefined,
-            }
-          : {
-              email: form.email,
-              password: form.password,
-              fullName: form.fullName,
-              employeeCode: form.employeeCode,
-              departmentId: form.departmentId,
-              title: form.title || undefined,
-              phone: form.phone || undefined,
-            },
-      );
-      setAlert({
-        tone: 'success',
-        message: 'Docente criado com sucesso.',
-      });
-      setForm({
-        userId: '',
-        email: '',
-        password: '',
-        fullName: '',
-        employeeCode: '',
-        departmentId: departments[0]?.id ?? '',
-        title: '',
-        phone: '',
-      });
+      if (editingId) {
+        await api.teachers.update(editingId, {
+          departmentId: form.departmentId,
+          title: form.title || undefined,
+          phone: form.phone || null,
+          status: form.status,
+        });
+        setAlert({ tone: 'success', message: 'Docente actualizado com sucesso.' });
+      } else {
+        await api.teachers.create({
+          email: form.email,
+          password: form.password,
+          fullName: form.fullName,
+          employeeCode: form.employeeCode,
+          departmentId: form.departmentId,
+          title: form.title || undefined,
+          phone: form.phone || undefined,
+        });
+        setAlert({
+          tone: 'success',
+          message: 'Docente criado com sucesso.',
+        });
+      }
+      resetForm();
       setLoading(true);
       await load();
     } catch (err) {
@@ -200,56 +216,61 @@ export function TeachersPage() {
       />
 
       {isTeacher && own ? (
-        <form onSubmit={saveOwn} className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:p-5">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-wide text-campus-deep/55">O meu perfil</p>
-            <p className="mt-1 text-sm font-medium text-campus-ink">
-              {own.employeeCode} · {own.department?.code ?? 'Sem departamento'}
-            </p>
-          </div>
-          <label className="block text-sm font-medium text-campus-ink">
-            Telefone
-            <input
-              className="field-input"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              placeholder="+258 84 000 0000"
-              required
-            />
-          </label>
-          <button type="submit" className="btn-primary" disabled={submitting}>
-            {submitting ? 'A guardar…' : 'Guardar contacto'}
-          </button>
-          {ownAlert ? <AlertMessage {...ownAlert} /> : null}
-        </form>
+        <div className="space-y-6">
+          <section className="surface space-y-4 p-5">
+            <h2 className="section-title">O meu perfil</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Nome completo" value={own.user.fullName} />
+              <Field label="Email" value={user?.email ?? '—'} />
+              <Field label="Código de docente" value={own.employeeCode} />
+              <Field
+                label="Departamento"
+                value={
+                  own.department ? `${own.department.code} — ${own.department.name}` : 'Sem departamento'
+                }
+              />
+              <Field label="Título" value={own.title ?? '—'} />
+              <Field label="Estado" value={statusLabel[own.status]} />
+              <Field label="Telefone" value={own.phone ?? '—'} />
+            </div>
+          </section>
+
+          <form onSubmit={saveOwn} className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:p-5">
+            <div className="min-w-0 flex-1">
+              <h2 className="section-title">Contacto</h2>
+              <p className="mt-1 text-sm text-campus-deep/70">
+                Actualize o número de telefone associado ao seu perfil.
+              </p>
+            </div>
+            <label className="block text-sm font-medium text-campus-ink">
+              Telefone
+              <input
+                className="field-input"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="+258 84 000 0000"
+                required
+              />
+            </label>
+            <button type="submit" className="btn-primary" disabled={submitting}>
+              {submitting ? 'A guardar…' : 'Guardar contacto'}
+            </button>
+            {ownAlert ? <AlertMessage {...ownAlert} /> : null}
+          </form>
+        </div>
       ) : null}
 
       {isAdmin ? (
-        <form onSubmit={create} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+        <form onSubmit={submit} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
           <div className="md:col-span-2 xl:col-span-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="section-title">Novo perfil de docente</h2>
-            <div className="flex gap-2">
-              <button type="button" className={mode === 'existing' ? 'btn-primary' : 'btn-ghost'} onClick={() => setMode('existing')}>
-                Conta existente
+            <h2 className="section-title">{editingId ? 'Editar perfil de docente' : 'Novo perfil de docente'}</h2>
+            {editingId ? (
+              <button type="button" className="btn-ghost" onClick={resetForm}>
+                Cancelar edição
               </button>
-              <button type="button" className={mode === 'new' ? 'btn-primary' : 'btn-ghost'} onClick={() => setMode('new')}>
-                Criar conta
-              </button>
-            </div>
+            ) : null}
           </div>
-          {mode === 'existing' ? (
-            <SelectField
-              className="md:col-span-2"
-              value={form.userId}
-              onChange={(userId) => setForm({ ...form, userId })}
-              required
-              aria-label="Conta TEACHER sem perfil"
-              placeholder="Seleccionar conta de docente sem perfil"
-              options={accounts
-                .filter((item) => item.role === 'TEACHER' && item.isActive && !item.hasTeacherProfile)
-                .map((item) => ({ value: item.id, label: `${item.fullName} · ${item.email}` }))}
-            />
-          ) : (
+          {editingId ? null : (
             <>
           <input
             className="field-input !mt-0"
@@ -282,6 +303,8 @@ export function TeachersPage() {
             placeholder="Código de docente"
             value={form.employeeCode}
             onChange={(event) => setForm({ ...form, employeeCode: event.target.value })}
+            readOnly={editingId !== null}
+            title={editingId ? 'O código de docente não pode ser alterado.' : undefined}
             required
           />
           <SelectField
@@ -307,8 +330,19 @@ export function TeachersPage() {
             value={form.phone}
             onChange={(event) => setForm({ ...form, phone: event.target.value })}
           />
-          <button type="submit" className="btn-primary" disabled={submitting || !form.departmentId || (mode === 'existing' && !form.userId)}>
-            {submitting ? 'A criar…' : 'Criar perfil'}
+          {editingId ? (
+            <SelectField
+              aria-label="Estado"
+              value={form.status}
+              onChange={(status) => setForm({ ...form, status: status as TeacherProfileDto['status'] })}
+              options={(Object.keys(statusLabel) as TeacherProfileDto['status'][]).map((status) => ({
+                value: status,
+                label: statusLabel[status],
+              }))}
+            />
+          ) : null}
+          <button type="submit" className="btn-primary" disabled={submitting || !form.departmentId}>
+            {submitting ? 'A guardar…' : editingId ? 'Guardar alterações' : 'Criar perfil'}
           </button>
         </form>
       ) : null}
@@ -349,6 +383,7 @@ export function TeachersPage() {
                   {isAdmin ? (
                     <td className="px-4 py-3">
                       <TableActions>
+                        <EditAction title={`Editar ${teacher.user.fullName}`} onClick={() => startEdit(teacher)} />
                         <DeleteAction label="Remover" title={`Remover ${teacher.user.fullName}`} onClick={() => void remove(teacher)} />
                       </TableActions>
                     </td>
@@ -359,6 +394,15 @@ export function TeachersPage() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-campus-deep/55">{label}</p>
+      <p className="mt-1 text-sm font-medium text-campus-ink">{value}</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import type { AuthUser, RoleCode } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
-import { Link, Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { PageIntro } from '../components/PageIntro';
 import { AlertMessage } from '../components/AlertMessage';
 import { ChipTabs, EmptyState, FormField, LoadingState, StatusPill } from '../components/ui';
@@ -18,7 +18,9 @@ function roleTone(role: AuthUser['role']) {
   return 'info' as const;
 }
 
-const roles: RoleCode[] = ['STUDENT', 'TEACHER', 'TECHNICIAN', 'COORDINATOR', 'ADMIN', 'FINANCE'];
+// Estudantes e docentes têm conta criada nas abas Estudantes/Docentes, por isso
+// não aparecem em Utilizadores e perfis (incluindo as contas novas).
+const staffRoles: RoleCode[] = ['TECHNICIAN', 'COORDINATOR', 'ADMIN', 'FINANCE'];
 type RoleFilter = 'ALL' | RoleCode;
 
 export function UsersPage() {
@@ -29,7 +31,7 @@ export function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('ALL');
-  const [form, setForm] = useState({ email: '', password: '', fullName: '', role: 'STUDENT' as RoleCode });
+  const [form, setForm] = useState({ email: '', password: '', fullName: '', role: 'TECHNICIAN' as RoleCode });
   const allowed = !!user && ['ADMIN', 'COORDINATOR'].includes(user.role);
   const canCreate = user?.role === 'ADMIN';
 
@@ -45,27 +47,24 @@ export function UsersPage() {
       .finally(() => setLoading(false));
   }, [api, allowed]);
 
-  const stats = useMemo(() => {
-    const withoutProfile = users.filter(
-      (item) =>
-        (item.role === 'STUDENT' && !item.hasStudentProfile) ||
-        (item.role === 'TEACHER' && !item.hasTeacherProfile),
-    ).length;
-    return {
-      total: users.length,
-      active: users.filter((item) => item.isActive).length,
-      withoutProfile,
-    };
-  }, [users]);
+  const staff = useMemo(() => users.filter((item) => staffRoles.includes(item.role)), [users]);
+
+  const stats = useMemo(
+    () => ({
+      total: staff.length,
+      active: staff.filter((item) => item.isActive).length,
+    }),
+    [staff],
+  );
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return users.filter((item) => {
+    return staff.filter((item) => {
       if (roleFilter !== 'ALL' && item.role !== roleFilter) return false;
       if (!needle) return true;
       return `${item.fullName} ${item.email} ${roleLabels[item.role]}`.toLowerCase().includes(needle);
     });
-  }, [users, query, roleFilter]);
+  }, [staff, query, roleFilter]);
 
   if (user && !allowed) {
     return <Navigate to="/dashboard" replace />;
@@ -77,7 +76,7 @@ export function UsersPage() {
     setError(null);
     try {
       await api.createUser(form);
-      setForm({ email: '', password: '', fullName: '', role: 'STUDENT' });
+      setForm({ email: '', password: '', fullName: '', role: 'TECHNICIAN' });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar conta');
@@ -101,19 +100,12 @@ export function UsersPage() {
       <PageIntro
         eyebrow="Identidade"
         title="Utilizadores e perfis"
-        description="Crie a conta aqui. Depois ligue o perfil académico em Estudantes ou Docentes — sem repetir email e password."
+        description="Contas de gestão, coordenação, técnicos e finanças. Estudantes e docentes têm conta própria, criada em Estudantes ou Docentes."
       />
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2">
         <StatCard label="Contas" value={stats.total} hint="Acessos à plataforma" icon={<ModuleGlyph name="users" />} />
         <StatCard label="Activas" value={stats.active} hint="Podem entrar agora" icon={<ModuleGlyph name="dashboard" />} />
-        <StatCard
-          label="Sem perfil"
-          value={stats.withoutProfile}
-          hint="Estudantes ou docentes por completar"
-          to="/students"
-          icon={<ModuleGlyph name="students" />}
-        />
       </section>
 
       {error ? <AlertMessage tone="error" message={error} /> : null}
@@ -134,7 +126,7 @@ export function UsersPage() {
             <SelectField
               value={form.role}
               onChange={(role) => setForm({ ...form, role: role as RoleCode })}
-              options={roles.map((role) => ({ value: role, label: roleLabels[role] }))}
+              options={staffRoles.map((role) => ({ value: role, label: roleLabels[role] }))}
             />
           </FormField>
           <div className="flex items-end">
@@ -158,7 +150,7 @@ export function UsersPage() {
           />
         </label>
         <ChipTabs
-          items={[{ id: 'ALL' as RoleFilter, label: 'Todos' }, ...roles.map((role) => ({ id: role as RoleFilter, label: roleLabels[role] }))]}
+          items={[{ id: 'ALL' as RoleFilter, label: 'Todos' }, ...staffRoles.map((role) => ({ id: role as RoleFilter, label: roleLabels[role] }))]}
           value={roleFilter}
           onChange={setRoleFilter}
           ariaLabel="Filtrar por papel"
@@ -170,8 +162,8 @@ export function UsersPage() {
         <LoadingState label="A carregar utilizadores…" />
       ) : visible.length === 0 ? (
         <EmptyState
-          title={users.length === 0 ? 'Ainda não há contas' : 'Nenhum resultado'}
-          description={users.length === 0 ? 'Crie a primeira conta para abrir acesso à plataforma.' : 'Ajuste a pesquisa ou o filtro de papel.'}
+          title={staff.length === 0 ? 'Ainda não há contas' : 'Nenhum resultado'}
+          description={staff.length === 0 ? 'Crie a primeira conta para abrir acesso à plataforma.' : 'Ajuste a pesquisa ou o filtro de papel.'}
         />
       ) : (
         <div className="table-scroll surface">
@@ -181,42 +173,18 @@ export function UsersPage() {
                 <th>Nome</th>
                 <th>Email</th>
                 <th>Papel</th>
-                <th>Perfil</th>
                 <th>Estado</th>
                 {canCreate ? <th className="text-right">Acções</th> : null}
               </tr>
             </thead>
             <tbody>
               {visible.map((item) => {
-                const needsStudent = item.role === 'STUDENT' && !item.hasStudentProfile;
-                const needsTeacher = item.role === 'TEACHER' && !item.hasTeacherProfile;
                 return (
                   <tr key={item.id}>
                     <td className="font-medium text-campus-ink">{item.fullName}</td>
                     <td className="text-campus-deep/80">{item.email}</td>
                     <td>
                       <StatusPill tone={roleTone(item.role)}>{roleLabels[item.role]}</StatusPill>
-                    </td>
-                    <td>
-                      {item.hasStudentProfile ? (
-                        <Link to={`/students?userId=${item.id}`} className="text-sm font-semibold text-campus-teal">
-                          Estudante
-                        </Link>
-                      ) : item.hasTeacherProfile ? (
-                        <Link to={`/teachers?userId=${item.id}`} className="text-sm font-semibold text-campus-teal">
-                          Docente
-                        </Link>
-                      ) : needsStudent ? (
-                        <Link to={`/students?userId=${item.id}`} className="text-sm font-semibold text-campus-accent">
-                          Completar perfil
-                        </Link>
-                      ) : needsTeacher ? (
-                        <Link to={`/teachers?userId=${item.id}`} className="text-sm font-semibold text-campus-accent">
-                          Completar perfil
-                        </Link>
-                      ) : (
-                        <span className="text-sm text-campus-deep/55">—</span>
-                      )}
                     </td>
                     <td>
                       <StatusPill tone={item.isActive ? 'success' : 'muted'}>

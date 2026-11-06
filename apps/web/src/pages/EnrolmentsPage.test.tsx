@@ -22,12 +22,12 @@ const enrolment: SubjectEnrolmentDto = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
 
-function setupApi() {
+function setupApi(status: SubjectEnrolmentDto['status'] = 'ACTIVE') {
   const updateStatus = vi.fn().mockResolvedValue({ data: { ...enrolment, status: 'COMPLETED' } });
 
   auth.api = {
     enrolments: {
-      list: vi.fn().mockResolvedValue({ data: [enrolment] }),
+      list: vi.fn().mockResolvedValue({ data: [{ ...enrolment, status }] }),
       updateStatus,
       remove: vi.fn(),
       create: vi.fn(),
@@ -100,5 +100,29 @@ describe('EnrolmentsPage', () => {
 
     expect(await screen.findByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Concluir' })).toBeNull();
+  });
+
+  it('admin não vê a acção de activar inscrição pendente', async () => {
+    signIn('ADMIN');
+    setupApi('PENDING');
+
+    render(<EnrolmentsPage />);
+
+    expect(await screen.findByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Activar' })).toBeNull();
+  });
+
+  it('coordenação activa uma inscrição pendente', async () => {
+    signIn('COORDINATOR');
+    const { updateStatus } = setupApi('PENDING');
+
+    render(<EnrolmentsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Activar' }));
+
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Activar inscrição' }));
+
+    await waitFor(() => expect(updateStatus).toHaveBeenCalledWith('enr-1', 'ACTIVE'));
   });
 });

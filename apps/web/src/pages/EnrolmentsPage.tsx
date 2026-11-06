@@ -28,6 +28,7 @@ export function EnrolmentsPage() {
   const { user, api } = useAuth();
   const isStudent = user?.role === 'STUDENT';
   const canManage = user?.role === 'ADMIN' || user?.role === 'COORDINATOR';
+  const canActivate = user?.role === 'COORDINATOR';
   const canComplete = user?.role === 'COORDINATOR';
 
   const [enrolments, setEnrolments] = useState<SubjectEnrolmentDto[]>([]);
@@ -335,7 +336,7 @@ export function EnrolmentsPage() {
                   {canManage ? (
                     <td className="px-4 py-3">
                       <TableActions>
-                        {enrolment.status === 'PENDING' ? (
+                        {enrolment.status === 'PENDING' && canActivate ? (
                           <IconActionButton
                             label="Activar"
                             icon={<CheckIcon />}

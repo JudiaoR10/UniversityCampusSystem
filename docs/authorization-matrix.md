@@ -12,6 +12,24 @@
 
 A autorização é aplicada no backend (`authenticate` + `authorize`).
 
+## Inscrições em disciplinas
+
+Uma inscrição nasce sempre `PENDING`. A activação e a conclusão são decisões
+académicas da coordenação; o ADMIN pode criar/cancelar/eliminar, mas não activar
+nem concluir.
+
+| Operação | STUDENT | TEACHER | TECHNICIAN | COORDINATOR | ADMIN |
+| --- | --- | --- | --- | --- | --- |
+| Consultar inscrições | Apenas próprias | Sim | Não | Sim | Sim |
+| Criar inscrição (fica pendente) | Apenas própria | Não | Não | Sim | Sim |
+| Activar inscrição (`ACTIVE`) | Não | Não | Não | Sim | **Não** |
+| Concluir inscrição (`COMPLETED`) | Não | Não | Não | Sim | **Não** |
+| Cancelar inscrição | Não | Não | Não | Sim | Sim |
+| Eliminar inscrição | Não | Não | Não | Sim | Sim |
+
+A restrição de activação/conclusão é aplicada no router, no serviço e na
+interface; a API devolve `403 FORBIDDEN`.
+
 ## Extensão financeira
 
 FINANCE é um perfil acrescentado pelo módulo financeiro. Não recebe permissões ADMIN/COORDINATOR nos outros módulos.

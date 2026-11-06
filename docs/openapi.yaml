@@ -6638,8 +6638,9 @@ paths:
       description: >-
         Roles ADMIN, COORDINATOR. Transições permitidas: PENDING → ACTIVE |
         CANCELLED; ACTIVE → COMPLETED | CANCELLED; COMPLETED e CANCELLED são
-        estados finais. A conclusão (COMPLETED) está reservada à coordenação:
-        ADMIN pode activar e cancelar, mas recebe 403 ao tentar concluir.
+        estados finais. A activação (ACTIVE) e a conclusão (COMPLETED) estão
+        reservadas à coordenação: o ADMIN recebe 403 ao tentar qualquer uma
+        delas e só pode cancelar.
       parameters:
         - in: path
           name: id
@@ -6664,7 +6665,8 @@ paths:
           description: Dados inválidos (VALIDATION_ERROR)
         '403':
           description: >-
-            Sem permissão, ou ADMIN a tentar concluir uma inscrição (FORBIDDEN)
+            Sem permissão, ou ADMIN a tentar activar ou concluir uma inscrição
+            (FORBIDDEN)
         '404':
           description: Não encontrada (ENROLMENT_NOT_FOUND)
         '409':

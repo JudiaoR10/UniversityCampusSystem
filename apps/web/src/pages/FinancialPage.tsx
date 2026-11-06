@@ -16,6 +16,7 @@ import { AdminFinancialOverview } from '../components/financial/AdminFinancialOv
 import { FinancialCourseTuitions } from '../components/financial/FinancialCourseTuitions';
 import { FinancialTuitionIssuance } from '../components/financial/FinancialTuitionIssuance';
 import { FinancialStandingBanner } from '../components/financial/FinancialStandingBanner';
+import { FinancialGuide } from '../components/financial/guide/FinancialGuide';
 
 export function FinancialPage() {
   const { user } = useAuth();
@@ -53,24 +54,24 @@ function FinancialWorkspace({ user }: { user: AuthUser }) {
   return <div className="space-y-6">
     <PageIntro eyebrow="Finanças" title="Gestão financeira"
       description={isAdmin ? 'Acompanhar indicadores, relatórios, políticas e auditoria financeira.' : isFinance ? 'Registar operações financeiras, analisar contestações e gerir salários.' : 'Acompanhar as suas dívidas, pagamentos e pedidos de análise.'}
-      actions={user.role === 'ADMIN' && <button className="btn-secondary" aria-expanded={policiesOpen} aria-controls="financial-policy" onClick={() => setPoliciesOpen(!policiesOpen)}><span aria-hidden="true">⚙</span> Políticas financeiras</button>} />
-    <ChipTabs items={tabs} value={tab} onChange={setTab} ariaLabel="Secções financeiras" />
-    {isAdmin && policiesOpen && <FinancialPolicy onChanged={changed} />}
-    {isAdmin && tab === 'student' && <nav className="flex flex-wrap gap-2" aria-label="Dados financeiros do estudante">
+      actions={<><FinancialGuide role={user.role as 'ADMIN' | 'FINANCE' | 'STUDENT'} navigate={step => { if (step.tab) setTab(step.tab); if (step.section) setStudentSection(step.section); if (step.policy) setPoliciesOpen(true); }} />{isAdmin && <button data-financial-guide="policy-button" className="btn-secondary" aria-expanded={policiesOpen} aria-controls="financial-policy" onClick={() => setPoliciesOpen(!policiesOpen)}><span aria-hidden="true">⚙</span> Políticas financeiras</button>}</>} />
+    <div data-financial-guide="tabs"><ChipTabs items={tabs} value={tab} onChange={setTab} ariaLabel="Secções financeiras" /></div>
+    {isAdmin && policiesOpen && <div data-financial-guide="policy"><FinancialPolicy onChanged={changed} /></div>}
+    {isAdmin && tab === 'student' && <nav data-financial-guide="student-sections" className="flex flex-wrap gap-2" aria-label="Dados financeiros do estudante">
       {[{ id: 'debts', label: 'Dívidas' }, { id: 'history', label: 'Histórico de pagamentos' }, { id: 'notices', label: 'Avisos' }].map(item => <button key={item.id} className={studentSection === item.id ? 'btn-primary' : 'btn-secondary'} onClick={() => setStudentSection(item.id)}>{item.label}</button>)}
     </nav>}
-    {needsStudent && <StudentPicker selected={selected} onSelect={setSelected} />}
+    {needsStudent && <div data-financial-guide="student-picker"><StudentPicker selected={selected} onSelect={setSelected} /></div>}
     {studentId && <FinancialStandingBanner key={`${studentId}:${revision}`} studentId={studentId} />}
     {isAdmin && tab === 'overview' && <AdminFinancialOverview revision={revision} onOpenReports={() => setTab('monthly-reports')} onOpenPolicies={() => setPoliciesOpen(true)} />}
     {operationalTab === 'debts' && studentId && <FinancialDebts key={`${studentId}:${revision}`} studentId={studentId} />}
-    {operationalTab === 'history' && studentId && <FinancialHistory key={studentId} studentId={studentId} revision={revision} />}
-    {tab === 'analysis' && <FinancialAnalysis key={studentId ?? 'all'} studentId={studentId} manager={manager} canResolve={isFinance} onChanged={changed} />}
-    {operationalTab === 'notices' && studentId && <FinancialNotifications key={studentId} studentId={studentId} manager={manager} />}
+    {operationalTab === 'history' && studentId && <div data-financial-guide="history"><FinancialHistory key={studentId} studentId={studentId} revision={revision} /></div>}
+    {tab === 'analysis' && <div data-financial-guide="analysis"><FinancialAnalysis key={studentId ?? 'all'} studentId={studentId} manager={manager} canResolve={isFinance} onChanged={changed} /></div>}
+    {operationalTab === 'notices' && studentId && <div data-financial-guide="notices"><FinancialNotifications key={studentId} studentId={studentId} manager={manager} /></div>}
     {tab === 'report' && isFinance && <FinancialReport revision={revision} />}
-    {tab === 'tuition' && isFinance && <FinancialTuitionIssuance onCreated={changed} />}
+    {tab === 'tuition' && isFinance && <div data-financial-guide="tuition"><FinancialTuitionIssuance onCreated={changed} /></div>}
     {tab === 'employees' && manager && <FinancialSalaries />}
     {tab === 'course-tuitions' && manager && <FinancialCourseTuitions />}
-    {tab === 'monthly-reports' && manager && <FinancialMonthlyReports />}
+    {tab === 'monthly-reports' && manager && <div data-financial-guide="monthly-reports"><FinancialMonthlyReports /></div>}
     {!studentId && manager && ['debts', 'history', 'notices'].includes(operationalTab) && <p className="surface p-4">Seleccione um estudante acima para consultar esta secção.</p>}
     {manager && tab === 'analysis' && !studentId && <p className="text-sm text-campus-deep/75">A apresentar contestações de todos os estudantes.</p>}
   </div>;

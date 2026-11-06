@@ -60,7 +60,7 @@ export function FinancialSalaries() {
       <Metric label="Propostas pendentes" value={requests.loading ? '…' : String(pending.length)} accent={pending.length > 0} />
     </div>
 
-    <div className="surface space-y-3 p-4">
+    <div data-financial-guide="employees-search" className="surface space-y-3 p-4">
       <h3 className="font-semibold">Pesquisar no quadro de pessoal</h3>
       <div className="grid gap-3 md:grid-cols-[minmax(14rem,2fr)_minmax(11rem,1fr)_minmax(9rem,1fr)_auto] md:items-end">
         <label className="text-sm font-medium">Nome, código ou função
@@ -85,7 +85,7 @@ export function FinancialSalaries() {
 
     <LoadState {...employees} label="A carregar funcionários…" />
     {!employees.loading && !employees.error && !list.length && <p className="surface p-4">Nenhum funcionário corresponde aos filtros.</p>}
-    {!!list.length && <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    {!!list.length && <div data-financial-guide="employees-list" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {list.map(employee => <EmployeeCard key={employee.employeeKey} employee={employee} canOperate={canOperate} api={api} onChanged={changed} onSuccess={setFeedback} />)}
     </div>}
 
@@ -206,7 +206,7 @@ function ApprovalQueue({ requests, loading, error, reload, api, onChanged, onSuc
   requests: SalaryChangeRequestDto[]; loading: boolean; error: string; reload: () => void;
   api: ReturnType<typeof useAuth>['api']; onChanged: () => void; onSuccess: (message: string) => void;
 }) {
-  return <section className="surface space-y-4 p-5" aria-label="Aprovações salariais">
+  return <section data-financial-guide="salary-approvals" className="surface space-y-4 p-5" aria-label="Aprovações salariais">
     <div><h3 className="font-display text-xl font-semibold">Aprovações salariais</h3><p className="text-sm text-campus-deep/70">As propostas da área Financeira só alteram o salário depois da sua decisão.</p></div>
     <LoadState loading={loading} error={error} reload={reload} label="A carregar propostas…" />
     {!loading && !error && !requests.length && <p>Não existem propostas pendentes.</p>}

@@ -136,7 +136,7 @@ export function FinancialDebts({ studentId }: { studentId?: string }) {
         </p>
       )}
       <LoadState loading={loading} error="" reload={() => void reload()} label="A carregar dívidas…" />
-      <form className="surface grid gap-4 p-4 sm:p-5 md:grid-cols-3" onSubmit={(event) => event.preventDefault()}>
+      <form data-financial-guide="debt-filters" className="surface grid gap-4 p-4 sm:p-5 md:grid-cols-3" onSubmit={(event) => event.preventDefault()}>
         <h2 className="font-display text-xl font-semibold text-campus-ink md:col-span-3">
           {campus ? "Dívidas do campus" : "Filtros"}
         </h2>
@@ -177,6 +177,7 @@ export function FinancialDebts({ studentId }: { studentId?: string }) {
       </form>
       {canManage && studentId && (
         <form
+          data-financial-guide="debt-create"
           className="surface grid gap-4 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3"
           onSubmit={(e) => void submit(e, "debt")}
         >
@@ -224,7 +225,7 @@ export function FinancialDebts({ studentId }: { studentId?: string }) {
       )}
       {!loading && !error ? (
         <>
-          <div className="surface table-scroll">
+          <div data-financial-guide="debt-list" className="surface table-scroll">
             <table className="w-full min-w-[720px] text-left text-sm">
               <caption className="px-4 py-4 text-left font-display text-xl font-semibold text-campus-ink">
                 Dívidas — página {offset / 20 + 1}

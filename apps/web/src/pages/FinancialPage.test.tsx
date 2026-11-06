@@ -115,7 +115,8 @@ describe('Acções financeiras por perfil', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enviar para aprovação' }));
     await screen.findByText('Proposta enviada ao administrador.');
     expect(mocks.api.createSalaryChange).toHaveBeenCalledWith({ employeeKey: employee.employeeKey, proposedAmount: 16500, reason: 'Progressão salarial.' });
-    fireEvent.click(screen.getByRole('button', { name: 'Gerar salário mensal' }));
+    await waitFor(() => expect(mocks.api.financialEmployees).toHaveBeenCalledTimes(2));
+    fireEvent.click(await screen.findByRole('button', { name: 'Gerar salário mensal' }));
     fireEvent.click(screen.getByRole('button', { name: 'Gerar salário' }));
     await screen.findByText('Salário mensal gerado com o valor aprovado.');
     expect(mocks.api.createSalary).toHaveBeenCalledWith(expect.objectContaining({ employeeKey: employee.employeeKey }));
@@ -248,9 +249,74 @@ describe('Acções financeiras por perfil', () => {
     expect(within(screen.getByRole('region', { name: 'Histórico de pagamentos' })).queryByText('SEGREDO-ANA')).not.toBeInTheDocument();
   });
 
+  it('identifica o relatório salarial como abrangendo funcionários de várias categorias', async () => {
+    asRole('ADMIN');
+    mocks.api.monthlyPaymentReport.mockImplementation(async (kind: 'payments' | 'salaries') => response({
+      kind, month: '2026-10', timezone: 'Africa/Maputo', totalPayments: 1, totalAmount: 100,
+      generatedAt: '2026-10-24T10:00:00Z',
+      rows: [{ id: 'salary-test', fullName: 'Funcionário Externo', identityCode: 'EXT-1', description: 'Salário', amount: 100, paymentMethod: 'BANK_TRANSFER', referenceCode: 'SAL-001', paidAt: '2026-10-23T10:00:00Z' }],
+    }));
+    render(<FinancialPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Relatórios mensais' }));
+    changeSelect('Relatório', 'salaries');
+    expect(await screen.findByRole('columnheader', { name: 'Funcionário / código' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Smart Campus — Salários pagos aos funcionários' })).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Relatórios mensais' })).getByRole('cell', { name: /Funcionário Externo/ })).toBeInTheDocument();
+  });
+
   it.each(['TEACHER', 'TECHNICIAN', 'COORDINATOR'] as RoleCode[])('%s não acede nem carrega dados financeiros', role => {
     asRole(role); render(<FinancialPage />);
     expect(screen.getByText('O seu perfil não tem acesso à gestão financeira.')).toBeInTheDocument();
     for (const method of Object.values(mocks.api)) expect(method).not.toHaveBeenCalled();
+  });
+});
+
+describe('Guia financeiro por perfil', () => {
+  it('mostra apenas percursos do estudante e fecha com Escape devolvendo o foco', async () => {
+    asRole('STUDENT');
+    render(<FinancialPage />);
+    const trigger = screen.getByRole('button', { name: 'Guia' });
+    fireEvent.click(trigger);
+    const guide = screen.getByRole('region', { name: 'Guia financeiro' });
+    expect(within(guide).getByRole('button', { name: 'Contestar uma cobrança' })).toBeInTheDocument();
+    expect(within(guide).queryByRole('button', { name: 'Gerir salários' })).not.toBeInTheDocument();
+    expect(within(guide).queryByRole('button', { name: 'Configurar políticas' })).not.toBeInTheDocument();
+    fireEvent.click(within(guide).getByRole('button', { name: 'Contestar uma cobrança' }));
+    expect(await within(guide).findByText(/Contestar uma cobrança · 1 \/ 3/)).toBeInTheDocument();
+    expect(guide).toHaveFocus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('region', { name: 'Guia financeiro' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(mocks.api.createDebt).not.toHaveBeenCalled();
+    expect(mocks.api.createAnalysisRequest).not.toHaveBeenCalled();
+  });
+
+  it('orienta FINANCE quando o estudante ainda não foi seleccionado e permite continuar após a selecção', async () => {
+    asRole('FINANCE');
+    render(<FinancialPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Guia' }));
+    const guide = screen.getByRole('region', { name: 'Guia financeiro' });
+    expect(within(guide).queryByRole('button', { name: 'Configurar políticas' })).not.toBeInTheDocument();
+    fireEvent.click(within(guide).getByRole('button', { name: 'Registar dívida e pagamento' }));
+    expect(await within(guide).findByText(/Registar dívida e pagamento · 1 \/ 3/)).toBeInTheDocument();
+    fireEvent.click(within(guide).getByRole('button', { name: 'Próximo' }));
+    expect(await within(guide).findByText(/Esta área ainda não está disponível/)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Seleccionar Ana Estudante' }));
+    await waitFor(() => expect(within(guide).getByText(/A área indicada está contornada/)).toBeInTheDocument());
+    expect(mocks.api.createDebt).not.toHaveBeenCalled();
+    expect(mocks.api.createPayment).not.toHaveBeenCalled();
+  });
+
+  it('abre a política para ADMIN sem guardar alterações e permite sair com Escape', async () => {
+    asRole('ADMIN');
+    render(<FinancialPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Guia' }));
+    const guide = screen.getByRole('region', { name: 'Guia financeiro' });
+    expect(within(guide).queryByRole('button', { name: 'Registar dívida e pagamento' })).not.toBeInTheDocument();
+    fireEvent.click(within(guide).getByRole('button', { name: 'Configurar políticas' }));
+    expect(await screen.findByLabelText('Dias de tolerância')).toBeInTheDocument();
+    expect(mocks.api.updateFinancialPolicy).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('region', { name: 'Guia financeiro' })).not.toBeInTheDocument();
   });
 });

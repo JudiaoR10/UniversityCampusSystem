@@ -51,7 +51,6 @@ function renderAsAdmin() {
 }
 
 async function fillForm() {
-  fireEvent.click(await screen.findByRole('button', { name: 'Criar conta' }));
   fireEvent.change(await screen.findByPlaceholderText('Email da conta'), {
     target: { value: 'ana@ujac.ac.mz' },
   });

@@ -109,6 +109,123 @@ async function main() {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Dados reais — Edital de Admissão aos cursos de Graduação da UJAC (ano lectivo 2026)
+  // Unidades orgânicas (Faculdade e Institutos) modeladas como Department.
+  // O schema não tem campos para vagas/regime/mensalidade; ficam na descrição.
+  // Taxas gerais do edital: inscrição 800,00 MT · matrícula 3.000,00 MT.
+  // ---------------------------------------------------------------------------
+  const unidadesUjac = [
+    {
+      code: 'FACISH',
+      name: 'Faculdade de Ciências Sociais e Humanas',
+      description: 'Unidade orgânica da UJAC. Mensalidade: 5.000,00 MT.',
+    },
+    {
+      code: 'ISET',
+      name: 'Instituto Superior de Engenharias e Tecnologias',
+      description: 'Unidade orgânica da UJAC. Mensalidade: 8.500,00 MT.',
+    },
+    {
+      code: 'ISCEG',
+      name: 'Instituto Superior de Ciências Económicas e de Gestão',
+      description: 'Unidade orgânica da UJAC. Mensalidade: 6.500,00 MT.',
+    },
+  ];
+
+  const unidadeIds: Record<string, string> = {};
+  for (const unidade of unidadesUjac) {
+    const registo = await prisma.department.upsert({
+      where: { code: unidade.code },
+      update: { name: unidade.name, description: unidade.description },
+      create: unidade,
+    });
+    unidadeIds[unidade.code] = registo.id;
+  }
+
+  const vagas = 'Vagas: 35 no período matutino e 35 no vespertino (total 70).';
+  const posLaboral = ' Regime: Pós-Laboral (On-line).';
+  const cursosUjac = [
+    {
+      code: 'LCE',
+      unidade: 'FACISH',
+      name: 'Licenciatura em Ciências da Educação',
+      description:
+        'Habilidade em: Gestão de Projectos Educativos; Educação de Infância; Tecnologia Educacional. ' +
+        vagas +
+        posLaboral,
+    },
+    {
+      code: 'LEI',
+      unidade: 'ISET',
+      name: 'Licenciatura em Engenharia Informática',
+      description: vagas,
+    },
+    {
+      code: 'LIACD',
+      unidade: 'ISET',
+      name: 'Licenciatura em Inteligência Artificial e Ciência de Dados',
+      description: vagas,
+    },
+    {
+      code: 'LGE',
+      unidade: 'ISCEG',
+      name: 'Licenciatura em Gestão de Empresas',
+      description: 'Habilitação em: Transporte e Logística; Ciências Atuariais. ' + vagas + posLaboral,
+    },
+    {
+      code: 'LCA',
+      unidade: 'ISCEG',
+      name: 'Licenciatura em Contabilidade e Auditoria',
+      description: vagas,
+    },
+    {
+      code: 'LGFB',
+      unidade: 'ISCEG',
+      name: 'Licenciatura em Gestão Financeira e Bancária',
+      description: vagas,
+    },
+    {
+      code: 'LGRH',
+      unidade: 'ISCEG',
+      name: 'Licenciatura em Gestão de Recursos Humanos',
+      description: vagas + posLaboral,
+    },
+  ];
+
+  // O curso demo LEI é a mesma Engenharia Informática do edital: passa para o ISET em vez de duplicar.
+  for (const curso of cursosUjac) {
+    const dados = {
+      name: curso.name,
+      description: curso.description,
+      departmentId: unidadeIds[curso.unidade],
+    };
+    await prisma.course.upsert({
+      where: { code: curso.code },
+      update: dados,
+      create: { code: curso.code, ...dados },
+    });
+  }
+
+  // Disciplinas de Engenharia Informática (LEI). A PTP3 já foi criada acima.
+  const cursoLei = await prisma.course.findUniqueOrThrow({ where: { code: 'LEI' } });
+  const disciplinasLei = [
+    { code: 'LP', name: 'Linguagem de Programação', credits: 1 },
+    { code: 'MD', name: 'Matemática Discreta', credits: 5 },
+    { code: 'MN', name: 'Métodos Numéricos', credits: 4 },
+    { code: 'PE', name: 'Probabilidade e Estatística', credits: 8 },
+    { code: 'RC', name: 'Redes de Comunicação', credits: 7 },
+    { code: 'SD', name: 'Sistemas Distribuídos', credits: 3 },
+    { code: 'SGDB', name: 'Gestão e Administração de Base de Dados', credits: 2 },
+  ];
+  for (const disciplina of disciplinasLei) {
+    await prisma.subject.upsert({
+      where: { code: disciplina.code },
+      update: { name: disciplina.name, credits: disciplina.credits, courseId: cursoLei.id },
+      create: { ...disciplina, courseId: cursoLei.id },
+    });
+  }
+
   const studentProfile = await prisma.studentProfile.upsert({
     where: { userId: studentAId },
     update: {},

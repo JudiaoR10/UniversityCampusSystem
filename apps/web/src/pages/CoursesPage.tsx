@@ -11,6 +11,8 @@ export function CoursesPage() {
   const [filtroDepartamento, setFiltroDepartamento] = useState('');
   const [aCarregar, setACarregar] = useState(true);
   const [aGuardar, setAGuardar] = useState(false);
+  const [idAEliminar, setIdAEliminar] = useState<string | null>(null);
+  const [idEmEdicao, setIdEmEdicao] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [formulario, setFormulario] = useState({ code: '', name: '', description: '', departmentId: '' });
   const podeGerir = !!user && ['ADMIN', 'COORDINATOR'].includes(user.role);
@@ -42,23 +44,66 @@ export function CoursesPage() {
     void carregar(valor);
   }
 
-  async function aoCriar(e: FormEvent) {
+  async function aoGuardar(e: FormEvent) {
     e.preventDefault();
     setErro(null);
     setAGuardar(true);
     try {
-      await api.createCourse({
-        code: formulario.code.trim(),
-        name: formulario.name.trim(),
-        description: formulario.description.trim() || undefined,
-        departmentId: formulario.departmentId,
-      });
+      const descricao = formulario.description.trim();
+      if (idEmEdicao) {
+        await api.updateCourse(idEmEdicao, {
+          code: formulario.code.trim(),
+          name: formulario.name.trim(),
+          description: descricao || null,
+          departmentId: formulario.departmentId,
+        });
+        setIdEmEdicao(null);
+      } else {
+        await api.createCourse({
+          code: formulario.code.trim(),
+          name: formulario.name.trim(),
+          description: descricao || undefined,
+          departmentId: formulario.departmentId,
+        });
+      }
       setFormulario((f) => ({ ...f, code: '', name: '', description: '' }));
       await carregar();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : 'Erro ao criar curso');
+      setErro(err instanceof Error ? err.message : idEmEdicao ? 'Erro ao actualizar curso' : 'Erro ao criar curso');
     } finally {
       setAGuardar(false);
+    }
+  }
+
+  function aoEditar(curso: CourseDto) {
+    setErro(null);
+    setIdEmEdicao(curso.id);
+    setFormulario({
+      code: curso.code,
+      name: curso.name,
+      description: curso.description ?? '',
+      departmentId: curso.departmentId,
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function aoCancelarEdicao() {
+    setIdEmEdicao(null);
+    setFormulario((f) => ({ ...f, code: '', name: '', description: '' }));
+  }
+
+  async function aoEliminar(curso: CourseDto) {
+    if (!window.confirm(`Eliminar o curso ${curso.code} — ${curso.name}?`)) return;
+    setErro(null);
+    setIdAEliminar(curso.id);
+    try {
+      await api.deleteCourse(curso.id);
+      if (idEmEdicao === curso.id) aoCancelarEdicao();
+      await carregar();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Erro ao eliminar curso');
+    } finally {
+      setIdAEliminar(null);
     }
   }
 
@@ -92,8 +137,8 @@ export function CoursesPage() {
             Crie primeiro um departamento para poder registar cursos.
           </p>
         ) : (
-          <form onSubmit={aoCriar} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-5">
-            <h2 className="section-title md:col-span-2 xl:col-span-5">Novo curso</h2>
+          <form onSubmit={aoGuardar} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-5">
+            <h2 className="section-title md:col-span-2 xl:col-span-5">{idEmEdicao ? 'Editar curso' : 'Novo curso'}</h2>
             <input
               className="field-input !mt-0"
               placeholder="Código (ex.: LEI)"
@@ -127,8 +172,13 @@ export function CoursesPage() {
               options={departamentos.map((d) => ({ value: d.id, label: `${d.code} — ${d.name}` }))}
             />
             <button type="submit" className="btn-primary w-full" disabled={aGuardar || !formulario.departmentId}>
-              {aGuardar ? 'A criar...' : 'Criar curso'}
+              {aGuardar ? 'A guardar...' : idEmEdicao ? 'Guardar alterações' : 'Criar curso'}
             </button>
+            {idEmEdicao ? (
+              <button type="button" className="btn-secondary w-full" onClick={aoCancelarEdicao}>
+                Cancelar edição
+              </button>
+            ) : null}
           </form>
         )
       ) : null}
@@ -141,18 +191,19 @@ export function CoursesPage() {
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 font-semibold">Departamento</th>
               <th className="px-4 py-3 font-semibold">Descrição</th>
+              {podeGerir ? <th className="px-4 py-3 font-semibold">Acções</th> : null}
             </tr>
           </thead>
           <tbody>
             {aCarregar ? (
               <tr>
-                <td className="px-4 py-3 text-campus-deep/70" colSpan={4}>
+                <td className="px-4 py-3 text-campus-deep/70" colSpan={podeGerir ? 5 : 4}>
                   A carregar cursos...
                 </td>
               </tr>
             ) : cursos.length === 0 ? (
               <tr>
-                <td className="px-4 py-3 text-campus-deep/70" colSpan={4}>
+                <td className="px-4 py-3 text-campus-deep/70" colSpan={podeGerir ? 5 : 4}>
                   Não existem cursos para mostrar.
                 </td>
               </tr>
@@ -163,6 +214,23 @@ export function CoursesPage() {
                   <td className="px-4 py-3">{curso.name}</td>
                   <td className="px-4 py-3">{curso.department.code}</td>
                   <td className="px-4 py-3">{curso.description ?? '—'}</td>
+                  {podeGerir ? (
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <button type="button" className="btn-secondary" onClick={() => aoEditar(curso)}>
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={idAEliminar === curso.id}
+                          onClick={() => void aoEliminar(curso)}
+                        >
+                          {idAEliminar === curso.id ? 'A eliminar...' : 'Eliminar'}
+                        </button>
+                      </div>
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}

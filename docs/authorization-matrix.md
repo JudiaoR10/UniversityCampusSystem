@@ -9,6 +9,8 @@
 | Gerir salas | Não | Não | Parcial | Sim | Sim |
 | Gerir utilizadores | Não | Não | Não | Parcial (listar) | Sim |
 | Consultar auditoria | Não | Não | Não | Sim | Sim |
+| Consultar departamentos, cursos e disciplinas | Sim | Sim | Sim | Sim | Sim |
+| Gerir departamentos, cursos e disciplinas (criar e eliminar; editar cursos e disciplinas) | Não | Não | Não | Sim | Sim |
 
 A autorização é aplicada no backend (`authenticate` + `authorize`).
 
@@ -65,3 +67,4 @@ Novas consultas: `GET /api/v1/financial/students`, `GET /api/v1/financial/analys
 | Consultar/imprimir relatórios mensais de recebimentos e salários pagos | Não | Sim | Sim | Não |
 
 O Financeiro propõe o valor salarial e o ADMIN decide. Só depois da aprovação é possível gerar o salário mensal; o valor não possui endpoint de edição directa. Docentes, técnicos e outros utilizadores são lidos do Core. Guardas, agentes de limpeza e outros trabalhadores sem conta recebem apenas um cadastro externo mínimo. Os cursos também são lidos do módulo académico, ficando apenas a mensalidade no domínio financeiro.
+O Financeiro lê o cadastro académico e não edita perfis de docentes. Ver [decisão e endpoints](decisions/salarios-relatorios-mensais.md).

@@ -349,12 +349,18 @@ export function createApiClient(baseUrl: string, tokenStore: TokenStore) {
       request<CourseDto[]>(`/courses${departmentId ? `?departmentId=${encodeURIComponent(departmentId)}` : ''}`),
     createCourse: (payload: unknown) =>
       request<CourseDto>('/courses', { method: 'POST', body: JSON.stringify(payload) }),
+    updateCourse: (id: string, payload: unknown) =>
+      request<CourseDto>(`/courses/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteCourse: (id: string) => request<{ ok: true }>(`/courses/${id}`, { method: 'DELETE' }),
     createCourseWithSubjects: (payload: unknown) =>
       request<{ course: CourseDto; subjects: SubjectDto[] }>('/courses/batch-with-subjects', { method: 'POST', body: JSON.stringify(payload) }),
     subjects: (courseId?: string) =>
       request<SubjectDto[]>(`/subjects${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''}`),
     createSubject: (payload: unknown) =>
       request<SubjectDto>('/subjects', { method: 'POST', body: JSON.stringify(payload) }),
+    updateSubject: (id: string, payload: unknown) =>
+      request<SubjectDto>(`/subjects/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteSubject: (id: string) => request<{ ok: true }>(`/subjects/${id}`, { method: 'DELETE' }),
     students: {
       list: (params?: { courseId?: string; status?: StudentProfileStatus }) =>
         request<StudentProfileDto[]>(`/students${buildQuery(params)}`),

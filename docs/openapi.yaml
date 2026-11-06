@@ -1756,6 +1756,43 @@ components:
         updatedAt:
           type: string
           format: date-time
+    UpdateCourseRequest:
+      type: object
+      minProperties: 1
+      description: Todos os campos são opcionais, mas é preciso indicar pelo menos um.
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 10
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        departmentId:
+          type: string
+    UpdateSubjectRequest:
+      type: object
+      minProperties: 1
+      description: Todos os campos são opcionais, mas é preciso indicar pelo menos um.
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 10
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        credits:
+          type: integer
+          minimum: 1
+        courseId:
+          type: string
     BatchCreateCourseWithSubjectsRequest:
       type: object
       required:
@@ -4652,6 +4689,122 @@ paths:
           description: Curso não encontrado (COURSE_NOT_FOUND)
         '409':
           description: Código já existe (SUBJECT_CODE_EXISTS)
+  /courses/{id}:
+    patch:
+      tags:
+      - Academic
+      summary: Editar curso
+      description: Roles ADMIN, COORDINATOR. Actualização parcial.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCourseRequest'
+      responses:
+        '200':
+          description: Curso actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CourseDto'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Dados inválidos ou corpo vazio (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Curso ou departamento não encontrado (COURSE_NOT_FOUND, DEPARTMENT_NOT_FOUND)
+        '409':
+          description: Código já existe (COURSE_CODE_EXISTS)
+    delete:
+      tags:
+      - Academic
+      summary: Eliminar curso
+      description: >-
+        Roles ADMIN, COORDINATOR. Rejeita com `400 BUSINESS_RULE_VIOLATION`
+        se existirem disciplinas, estudantes ou matrículas associados.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Curso eliminado
+        '400':
+          description: Regra de negócio bloqueou a eliminação (BUSINESS_RULE_VIOLATION)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Não encontrado (COURSE_NOT_FOUND)
+  /subjects/{id}:
+    patch:
+      tags:
+      - Academic
+      summary: Editar disciplina
+      description: Roles ADMIN, COORDINATOR. Actualização parcial; `courseId` permite mudar a disciplina de curso.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSubjectRequest'
+      responses:
+        '200':
+          description: Disciplina actualizada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SubjectDto'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Dados inválidos ou corpo vazio (VALIDATION_ERROR)
+        '403':
+          description: Sem permissão
+        '404':
+          description: Disciplina ou curso não encontrado (SUBJECT_NOT_FOUND, COURSE_NOT_FOUND)
+        '409':
+          description: Código já existe (SUBJECT_CODE_EXISTS)
+    delete:
+      tags:
+      - Academic
+      summary: Eliminar disciplina
+      description: Roles ADMIN, COORDINATOR.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Disciplina eliminada
+        '403':
+          description: Sem permissão
+        '404':
+          description: Não encontrada (SUBJECT_NOT_FOUND)
   /financial/notifications/{notificationId}/delivery:
     get:
       tags:

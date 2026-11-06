@@ -226,7 +226,26 @@ Marca o alerta como confirmado (`acknowledged: true`). Sem corpo. Idempotente: c
 | GET | `/attendance/sessions/:id` | Sim | TEACHER, COORDINATOR, ADMIN | Pauta de assiduidade da sessão |
 | POST | `/attendance/sessions/:id` | Sim | TEACHER, COORDINATOR, ADMIN | Registar/actualizar assiduidade em bloco |
 
-**Total Core documentado:** 1 health + **68 endpoints** em `/api/v1` (23 do Core base, incluindo 2 novos em `/rooms`, + 10 da Gestão Académica + 14 do Grupo Infraestrutura + 21 do Grupo Académico G3 — avaliações, notas, resultados, horários e assiduidade).
+### 3.10 Gestão Académica (departamentos, cursos, disciplinas)
+
+| Método | Rota | Auth | Roles | Descrição |
+| --- | --- | --- | --- | --- |
+| GET | `/departments` | Sim | Qualquer | Listar departamentos |
+| GET | `/departments/:id` | Sim | Qualquer | Obter departamento |
+| POST | `/departments` | Sim | ADMIN, COORDINATOR | Criar departamento |
+| DELETE | `/departments/:id` | Sim | ADMIN, COORDINATOR | Eliminar departamento (só se não tiver cursos nem docentes) |
+| GET | `/courses` | Sim | Qualquer | Listar cursos (`?departmentId=`) |
+| POST | `/courses` | Sim | ADMIN, COORDINATOR | Criar curso |
+| PATCH | `/courses/:id` | Sim | ADMIN, COORDINATOR | Editar curso (actualização parcial) |
+| DELETE | `/courses/:id` | Sim | ADMIN, COORDINATOR | Eliminar curso (só se não tiver disciplinas, estudantes nem matrículas) |
+| POST | `/courses/batch-with-subjects` | Sim | ADMIN, COORDINATOR | Criar curso + disciplinas numa transação atómica |
+| GET | `/courses/:courseId/subjects` | Sim | Qualquer | Listar disciplinas de um curso |
+| GET | `/subjects` | Sim | Qualquer | Listar disciplinas (`?courseId=`) |
+| POST | `/subjects` | Sim | ADMIN, COORDINATOR | Criar disciplina |
+| PATCH | `/subjects/:id` | Sim | ADMIN, COORDINATOR | Editar disciplina (actualização parcial) |
+| DELETE | `/subjects/:id` | Sim | ADMIN, COORDINATOR | Eliminar disciplina |
+
+**Total Core documentado:** 1 health + **72 endpoints** em `/api/v1` (23 do Core base, incluindo 2 novos em `/rooms`, + 14 da Gestão Académica + 14 do Grupo Infraestrutura + 21 do Grupo Académico G3 — avaliações, notas, resultados, horários e assiduidade).
 
 ---
 
@@ -799,6 +818,136 @@ Taxa de assiduidade por estudante: `(PRESENT + LATE) / total * 100`. Scoping igu
 
 ---
 
+### 5.12 Gestão Académica (`academic`)
+
+Hierarquia: **Department (1) → Course (N) → Subject (N)**. Os três recursos partilham o mesmo router e o mesmo serviço.
+
+| Item | Detalhe |
+| --- | --- |
+| Router | `apps/api/src/modules/academic/http/academicRouter.ts` |
+| Serviço | `apps/api/src/modules/academic/application/academicService.ts` |
+| Modelos Prisma | `Department`, `Course`, `Subject` (já existentes no Core) |
+| Leitura | Qualquer utilizador autenticado |
+| Escrita | ADMIN, COORDINATOR |
+| Páginas | `DepartmentsPage`, `CoursesPage`, `SubjectsPage` (`/departments`, `/courses`, `/subjects`) |
+
+Os campos seguem o padrão do Core (`id`, `name`). Os códigos (`code`) são **únicos globalmente** em cada recurso.
+
+#### GET `/departments` / GET `/departments/:id`
+
+DTO: `{ id, code, name, description, createdAt, updatedAt }`.
+
+#### POST `/departments`
+
+**Body:**
+
+```json
+{
+  "code": "DEI",
+  "name": "Departamento de Engenharia Informática",
+  "description": "Opcional"
+}
+```
+
+Resposta `201`. Código repetido → `409 DEPARTMENT_CODE_EXISTS`. Regista o evento de auditoria `DEPARTMENT_CREATE`.
+
+#### DELETE `/departments/:id`
+
+Resposta `200` com `{ "ok": true }`. Regra de negócio: se o departamento tiver cursos ou docentes associados, devolve `400 BUSINESS_RULE_VIOLATION` e não elimina. Regista `DEPARTMENT_DELETE`.
+
+#### GET `/courses`
+
+Filtro opcional `?departmentId=<id>`. DTO inclui `department: { id, code, name }`.
+
+#### POST `/courses`
+
+**Body:**
+
+```json
+{
+  "code": "LEI",
+  "name": "Licenciatura em Engenharia Informática",
+  "description": "Opcional",
+  "departmentId": "<id-do-departamento>"
+}
+```
+
+`departmentId` obtém-se de `GET /departments`. Departamento inexistente → `404 DEPARTMENT_NOT_FOUND`; código repetido → `409 COURSE_CODE_EXISTS`.
+
+#### POST `/courses/batch-with-subjects`
+
+Cria o curso e as disciplinas **numa única transação**: se algo falhar (por exemplo, dois códigos de disciplina iguais), nada é gravado.
+
+```json
+{
+  "course": {
+    "code": "LEI",
+    "name": "Licenciatura em Engenharia Informática",
+    "departmentId": "<id-do-departamento>"
+  },
+  "subjects": [
+    { "code": "PROG1", "name": "Programação I", "credits": 6 },
+    { "code": "PROG2", "name": "Programação II", "credits": 6 }
+  ]
+}
+```
+
+Resposta `201`: `{ "course": CourseDto, "subjects": SubjectDto[] }`. Código duplicado → `409 DUPLICATE_CODE` (rollback total).
+
+#### GET `/subjects` / GET `/courses/:courseId/subjects`
+
+Filtro opcional `?courseId=<id>` em `/subjects`. DTO inclui `course: { id, code, name }` e `credits`.
+
+#### POST `/subjects`
+
+**Body:**
+
+```json
+{
+  "code": "PROG1",
+  "name": "Programação I",
+  "credits": 6,
+  "courseId": "<id-do-curso>"
+}
+```
+
+`courseId` obtém-se de `GET /courses`. Curso inexistente → `404 COURSE_NOT_FOUND`; código repetido → `409 SUBJECT_CODE_EXISTS`.
+
+#### PATCH `/courses/:id`
+
+Actualização parcial: envia só os campos a alterar (`code`, `name`, `description`, `departmentId`); `description: null` limpa a descrição. Corpo vazio → `400 VALIDATION_ERROR`; curso inexistente → `404 COURSE_NOT_FOUND`; `departmentId` inexistente → `404 DEPARTMENT_NOT_FOUND`; código repetido → `409 COURSE_CODE_EXISTS`. Roles: ADMIN, COORDINATOR. Regista `COURSE_UPDATE`.
+
+```json
+{ "name": "Licenciatura em Engenharia Informática (novo plano)", "description": null }
+```
+
+#### DELETE `/courses/:id`
+
+Resposta `200` com `{ "ok": true }`. Regra de negócio: se o curso tiver disciplinas, estudantes ou matrículas associados, devolve `400 BUSINESS_RULE_VIOLATION` (a mensagem indica quantos) e não elimina. Curso inexistente → `404 COURSE_NOT_FOUND`. Roles: ADMIN, COORDINATOR. Regista `COURSE_DELETE`.
+
+#### PATCH `/subjects/:id`
+
+Actualização parcial: `code`, `name`, `credits`, `courseId` (permite mudar a disciplina de curso). Corpo vazio ou créditos inválidos → `400 VALIDATION_ERROR`; disciplina inexistente → `404 SUBJECT_NOT_FOUND`; `courseId` inexistente → `404 COURSE_NOT_FOUND`; código repetido → `409 SUBJECT_CODE_EXISTS`. Roles: ADMIN, COORDINATOR. Regista `SUBJECT_UPDATE`.
+
+```json
+{ "name": "Programação I (revista)", "credits": 5 }
+```
+
+#### DELETE `/subjects/:id`
+
+Resposta `200` com `{ "ok": true }`. Disciplina inexistente → `404 SUBJECT_NOT_FOUND`. Roles: ADMIN, COORDINATOR. Regista `SUBJECT_DELETE`.
+
+**Passos de criação:**
+
+1. Reutilizar os modelos `Department`, `Course`, `Subject` (sem migração nova)  
+2. `createDepartmentSchema`, `createCourseSchema`, `createSubjectSchema`, `batchCreateCourseWithSubjectsSchema`  
+3. Serviço com Prisma, `$transaction` no lote e `audit()` nas mutações  
+4. Roles de escrita: ADMIN, COORDINATOR (leitura: qualquer autenticado)  
+5. DTOs em `shared-types`, métodos em `api-client` e três páginas no `apps/web`  
+6. Testes: `Academic.integration.test.ts`  
+
+---
+
 ## 6. Testar com Swagger
 
 ### 6.1 Abrir a UI
@@ -1049,6 +1198,7 @@ npm run test:api
 | Ficheiro | Cobertura |
 | --- | --- |
 | `apps/api/src/modules/auth/http/auth.integration.test.ts` | health, login, /me, dashboard 401, fluxo salas→ocorrências→audit, students sem /users |
+| `apps/api/src/modules/academic/http/Academic.integration.test.ts` | Gestão Académica: auth/RBAC, departamentos, cursos e disciplinas (criar, editar, eliminar), regras de eliminação, rollback do lote, auditoria |
 | `apps/api/src/modules/auth/domain/validation.test.ts` | validação |
 | `apps/api/src/modules/parking/domain/mozambiquePlate.test.ts` | matrículas MZ |
 
@@ -1168,10 +1318,12 @@ Só `ADMIN` e `COORDINATOR`. Um dispositivo `ONLINE` não se elimina.
 | HTTP | code típico | Significado |
 | --- | --- | --- |
 | 400 | `VALIDATION_ERROR` | Body inválido (Zod) |
+| 400 | `BUSINESS_RULE_VIOLATION` | Regra de negócio (ex.: eliminar departamento com cursos ou docentes, ou curso com disciplinas, estudantes ou matrículas) |
 | 401 | `UNAUTHORIZED` / `TOKEN_INVALID` / `USER_INACTIVE` | Sem auth ou token inválido |
 | 403 | `FORBIDDEN` | Role sem permissão |
-| 404 | `ROOM_NOT_FOUND`, `SENSOR_NOT_FOUND`, `PARKING_LOT_NOT_FOUND`, … | Recurso inexistente |
+| 404 | `ROOM_NOT_FOUND`, `SENSOR_NOT_FOUND`, `PARKING_LOT_NOT_FOUND`, `DEPARTMENT_NOT_FOUND`, `COURSE_NOT_FOUND`, `SUBJECT_NOT_FOUND`, … | Recurso inexistente |
 | 409 | `CONFLICT` | Ex.: email duplicado |
+| 409 | `DEPARTMENT_CODE_EXISTS`, `COURSE_CODE_EXISTS`, `SUBJECT_CODE_EXISTS`, `DUPLICATE_CODE` | Código académico já existente |
 | 429 | `RATE_LIMITED` | Demasiados pedidos |
 | 500 | `INTERNAL_ERROR` | Erro não tratado |
 
@@ -1239,6 +1391,18 @@ Marcar ao validar o Core:
 - [ ] Matrícula inválida → 400  
 - [ ] Patch spot  
 
+### Académico
+
+- [ ] Listar departamentos, cursos e disciplinas (qualquer role autenticado)  
+- [ ] Criar departamento / curso / disciplina com ADMIN ou COORDINATOR → 201  
+- [ ] Estudante a criar, editar ou eliminar → 403  
+- [ ] Código repetido → 409  
+- [ ] Editar curso e disciplina com ADMIN ou COORDINATOR → 200; corpo vazio → 400  
+- [ ] Eliminar departamento com cursos → 400 `BUSINESS_RULE_VIOLATION`  
+- [ ] Eliminar curso com disciplinas, estudantes ou matrículas → 400 `BUSINESS_RULE_VIOLATION`  
+- [ ] Eliminar disciplina com ADMIN ou COORDINATOR → 200  
+- [ ] Lote com código duplicado → 409 e nada gravado  
+
 ### Documentação
 
 - [ ] Swagger abre e autentica  
@@ -1261,6 +1425,7 @@ Marcar ao validar o Core:
 | `/devices`, `/sensors/:id/readings`, `/alerts` | `modules/devices/http/devicesRouter.ts` |
 | Criação de dispositivos | `modules/devices/application/deviceService.ts` |
 | `/parking/*` | `modules/parking/http/parkingRouter.ts` |
+| `/departments`, `/courses`, `/subjects` | `modules/academic/http/academicRouter.ts` |
 | `/financial/*` | `modules/financial/http/financialRouter.ts` |
 | Middleware JWT/RBAC | `apps/api/src/middleware/auth.ts` |
 | Schemas Zod | `packages/validation/src/index.ts` |

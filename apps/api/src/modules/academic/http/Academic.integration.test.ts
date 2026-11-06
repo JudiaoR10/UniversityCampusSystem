@@ -370,6 +370,229 @@ describe('API Gestão Académica (departamentos, cursos, disciplinas)', () => {
     });
   });
 
+  describe('Eliminar cursos e disciplinas', () => {
+    let cursoDescartavelId = '';
+    let disciplinaDescartavelId = '';
+
+    it('sem token devolve 401 e estudante ou docente recebem 403 FORBIDDEN', async () => {
+      const semToken = await request(app).delete(`${api}/subjects/qualquer`);
+      expect(semToken.status).toBe(401);
+
+      for (const token of [estudanteToken, docenteToken]) {
+        const curso = await request(app).delete(`${api}/courses/qualquer`).set(auth(token));
+        expect(curso.status).toBe(403);
+        expect(curso.body.code).toBe('FORBIDDEN');
+
+        const disciplina = await request(app).delete(`${api}/subjects/qualquer`).set(auth(token));
+        expect(disciplina.status).toBe(403);
+        expect(disciplina.body.code).toBe('FORBIDDEN');
+      }
+    });
+
+    it('curso com disciplinas não é eliminado (400 BUSINESS_RULE_VIOLATION)', async () => {
+      const curso = await request(app)
+        .post(`${api}/courses`)
+        .set(auth(adminToken))
+        .send({ code: `TX${sufixo}`, name: 'Curso descartável', departmentId: departamentoId });
+      expect(curso.status).toBe(201);
+      cursoDescartavelId = curso.body.data.id;
+
+      const disciplina = await request(app)
+        .post(`${api}/subjects`)
+        .set(auth(adminToken))
+        .send({ code: `${codigoDisciplina}X`, name: 'Disciplina descartável', credits: 3, courseId: cursoDescartavelId });
+      expect(disciplina.status).toBe(201);
+      disciplinaDescartavelId = disciplina.body.data.id;
+
+      const res = await request(app).delete(`${api}/courses/${cursoDescartavelId}`).set(auth(adminToken));
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('BUSINESS_RULE_VIOLATION');
+    });
+
+    it('coordenador elimina disciplina (200) e repetir devolve 404 SUBJECT_NOT_FOUND', async () => {
+      const res = await request(app).delete(`${api}/subjects/${disciplinaDescartavelId}`).set(auth(coordenadorToken));
+      expect(res.status).toBe(200);
+      expect(res.body.data.ok).toBe(true);
+
+      const lista = await request(app).get(`${api}/subjects?courseId=${cursoDescartavelId}`).set(auth(adminToken));
+      expect(lista.body.data).toHaveLength(0);
+
+      const repetido = await request(app).delete(`${api}/subjects/${disciplinaDescartavelId}`).set(auth(adminToken));
+      expect(repetido.status).toBe(404);
+      expect(repetido.body.code).toBe('SUBJECT_NOT_FOUND');
+    });
+
+    it('admin elimina curso vazio (200) e repetir devolve 404 COURSE_NOT_FOUND', async () => {
+      const res = await request(app).delete(`${api}/courses/${cursoDescartavelId}`).set(auth(adminToken));
+      expect(res.status).toBe(200);
+      expect(res.body.data.ok).toBe(true);
+
+      const lista = await request(app).get(`${api}/courses?departmentId=${departamentoId}`).set(auth(adminToken));
+      expect(lista.body.data.some((c: { id: string }) => c.id === cursoDescartavelId)).toBe(false);
+
+      const repetido = await request(app).delete(`${api}/courses/${cursoDescartavelId}`).set(auth(adminToken));
+      expect(repetido.status).toBe(404);
+      expect(repetido.body.code).toBe('COURSE_NOT_FOUND');
+    });
+
+    it('o curso demo LEI (com estudante e disciplina) fica protegido (400)', async () => {
+      const lei = await prisma.course.findUnique({ where: { code: 'LEI' } });
+      expect(lei).not.toBeNull();
+      const res = await request(app).delete(`${api}/courses/${lei!.id}`).set(auth(adminToken));
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('BUSINESS_RULE_VIOLATION');
+    });
+
+    it('as eliminações ficam registadas na auditoria', async () => {
+      const audit = await request(app).get(`${api}/audit-events?limit=50`).set(auth(adminToken));
+      expect(audit.status).toBe(200);
+      const acoes = audit.body.data.map((e: { action: string }) => e.action);
+      expect(acoes).toContain('SUBJECT_DELETE');
+      expect(acoes).toContain('COURSE_DELETE');
+    });
+  });
+
+  describe('Editar cursos e disciplinas', () => {
+    let cursoEditavelId = '';
+    let disciplinaEditavelId = '';
+
+    it('sem token devolve 401 e estudante ou docente recebem 403 FORBIDDEN', async () => {
+      const semToken = await request(app).patch(`${api}/courses/qualquer`).send({ name: 'Novo nome' });
+      expect(semToken.status).toBe(401);
+
+      for (const token of [estudanteToken, docenteToken]) {
+        const curso = await request(app).patch(`${api}/courses/qualquer`).set(auth(token)).send({ name: 'Novo nome' });
+        expect(curso.status).toBe(403);
+        expect(curso.body.code).toBe('FORBIDDEN');
+
+        const disciplina = await request(app)
+          .patch(`${api}/subjects/qualquer`)
+          .set(auth(token))
+          .send({ name: 'Novo nome' });
+        expect(disciplina.status).toBe(403);
+        expect(disciplina.body.code).toBe('FORBIDDEN');
+      }
+    });
+
+    it('admin edita curso (200) e as alterações persistem; descrição pode ser limpa', async () => {
+      const criado = await request(app)
+        .post(`${api}/courses`)
+        .set(auth(adminToken))
+        .send({ code: `TU${sufixo}`, name: 'Curso para editar', description: 'Descrição inicial', departmentId: departamentoId });
+      expect(criado.status).toBe(201);
+      cursoEditavelId = criado.body.data.id;
+
+      const res = await request(app)
+        .patch(`${api}/courses/${cursoEditavelId}`)
+        .set(auth(adminToken))
+        .send({ name: 'Curso editado', description: 'Nova descrição' });
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({ code: `TU${sufixo}`, name: 'Curso editado', description: 'Nova descrição' });
+
+      const lista = await request(app).get(`${api}/courses?departmentId=${departamentoId}`).set(auth(estudanteToken));
+      expect(lista.body.data.find((c: { id: string }) => c.id === cursoEditavelId).name).toBe('Curso editado');
+
+      const limpa = await request(app)
+        .patch(`${api}/courses/${cursoEditavelId}`)
+        .set(auth(adminToken))
+        .send({ description: null });
+      expect(limpa.status).toBe(200);
+      expect(limpa.body.data.description).toBeNull();
+    });
+
+    it('rejeita edições inválidas de curso (400, 404 e 409)', async () => {
+      const vazio = await request(app).patch(`${api}/courses/${cursoEditavelId}`).set(auth(adminToken)).send({});
+      expect(vazio.status).toBe(400);
+      expect(vazio.body.code).toBe('VALIDATION_ERROR');
+
+      const inexistente = await request(app)
+        .patch(`${api}/courses/id-inexistente`)
+        .set(auth(adminToken))
+        .send({ name: 'Novo nome' });
+      expect(inexistente.status).toBe(404);
+      expect(inexistente.body.code).toBe('COURSE_NOT_FOUND');
+
+      const semDepartamento = await request(app)
+        .patch(`${api}/courses/${cursoEditavelId}`)
+        .set(auth(adminToken))
+        .send({ departmentId: 'id-inexistente' });
+      expect(semDepartamento.status).toBe(404);
+      expect(semDepartamento.body.code).toBe('DEPARTMENT_NOT_FOUND');
+
+      const repetido = await request(app)
+        .patch(`${api}/courses/${cursoEditavelId}`)
+        .set(auth(adminToken))
+        .send({ code: codigoCurso });
+      expect(repetido.status).toBe(409);
+      expect(repetido.body.code).toBe('COURSE_CODE_EXISTS');
+    });
+
+    it('coordenador edita disciplina (200) e consegue mudá-la de curso', async () => {
+      const criada = await request(app)
+        .post(`${api}/subjects`)
+        .set(auth(adminToken))
+        .send({ code: `${codigoDisciplina}U`, name: 'Disciplina para editar', credits: 6, courseId: cursoEditavelId });
+      expect(criada.status).toBe(201);
+      disciplinaEditavelId = criada.body.data.id;
+
+      const res = await request(app)
+        .patch(`${api}/subjects/${disciplinaEditavelId}`)
+        .set(auth(coordenadorToken))
+        .send({ name: 'Disciplina editada', credits: 5 });
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({ code: `${codigoDisciplina}U`, name: 'Disciplina editada', credits: 5 });
+      expect(res.body.data.course.code).toBe(`TU${sufixo}`);
+
+      const movida = await request(app)
+        .patch(`${api}/subjects/${disciplinaEditavelId}`)
+        .set(auth(coordenadorToken))
+        .send({ courseId: cursoId });
+      expect(movida.status).toBe(200);
+      expect(movida.body.data.course.code).toBe(codigoCurso);
+    });
+
+    it('rejeita edições inválidas de disciplina (400, 404 e 409)', async () => {
+      const creditos = await request(app)
+        .patch(`${api}/subjects/${disciplinaEditavelId}`)
+        .set(auth(adminToken))
+        .send({ credits: 0 });
+      expect(creditos.status).toBe(400);
+      expect(creditos.body.code).toBe('VALIDATION_ERROR');
+
+      const vazio = await request(app).patch(`${api}/subjects/${disciplinaEditavelId}`).set(auth(adminToken)).send({});
+      expect(vazio.status).toBe(400);
+
+      const inexistente = await request(app)
+        .patch(`${api}/subjects/id-inexistente`)
+        .set(auth(adminToken))
+        .send({ name: 'Novo nome' });
+      expect(inexistente.status).toBe(404);
+      expect(inexistente.body.code).toBe('SUBJECT_NOT_FOUND');
+
+      const semCurso = await request(app)
+        .patch(`${api}/subjects/${disciplinaEditavelId}`)
+        .set(auth(adminToken))
+        .send({ courseId: 'id-inexistente' });
+      expect(semCurso.status).toBe(404);
+      expect(semCurso.body.code).toBe('COURSE_NOT_FOUND');
+
+      const repetido = await request(app)
+        .patch(`${api}/subjects/${disciplinaEditavelId}`)
+        .set(auth(adminToken))
+        .send({ code: `${codigoDisciplina}A` });
+      expect(repetido.status).toBe(409);
+      expect(repetido.body.code).toBe('SUBJECT_CODE_EXISTS');
+    });
+
+    it('as edições ficam registadas na auditoria', async () => {
+      const audit = await request(app).get(`${api}/audit-events?limit=50`).set(auth(adminToken));
+      expect(audit.status).toBe(200);
+      const acoes = audit.body.data.map((e: { action: string }) => e.action);
+      expect(acoes).toContain('COURSE_UPDATE');
+      expect(acoes).toContain('SUBJECT_UPDATE');
+    });
+  });
+
   // Os testes Anti-BOLA do módulo original (Jest) dependiam de um `checkOwnership` e de rotas
   // `/students/:id/...` que não existem no Core. Ficam como pendentes até essas rotas existirem.
   // Atenção: no Core o `studentId` é o `StudentProfile.id`, não o `user.id`.

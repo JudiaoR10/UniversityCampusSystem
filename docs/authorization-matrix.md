@@ -9,6 +9,8 @@
 | Gerir salas | Não | Não | Parcial | Sim | Sim |
 | Gerir utilizadores | Não | Não | Não | Parcial (listar) | Sim |
 | Consultar auditoria | Não | Não | Não | Sim | Sim |
+| Consultar departamentos, cursos e disciplinas | Sim | Sim | Sim | Sim | Sim |
+| Gerir departamentos, cursos e disciplinas (criar e eliminar; editar cursos e disciplinas) | Não | Não | Não | Sim | Sim |
 
 A autorização é aplicada no backend (`authenticate` + `authorize`).
 

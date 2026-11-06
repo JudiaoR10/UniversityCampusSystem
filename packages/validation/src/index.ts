@@ -239,6 +239,9 @@ export const upsertGradesSchema = z.object({
     )
     .min(1)
     .max(200),
+}).refine((input) => new Set(input.grades.map((grade) => grade.studentId)).size === input.grades.length, {
+  message: 'Cada estudante só pode aparecer uma vez',
+  path: ['grades'],
 });
 
 export const createResultSchema = z.object({
@@ -275,6 +278,10 @@ export const updateScheduleSchema = z
     startsAt: scheduleBase.startsAt.optional(),
     endsAt: scheduleBase.endsAt.optional(),
   })
+  .strict()
+  .refine((schedule) => Object.keys(schedule).length > 0, {
+    message: 'Envie pelo menos um campo para actualizar',
+  })
   .refine(
     (s) => {
       if (s.startsAt && s.endsAt) return s.endsAt.getTime() > s.startsAt.getTime();
@@ -296,6 +303,9 @@ export const markAttendanceSchema = z.object({
     )
     .min(1)
     .max(300),
+}).refine((input) => new Set(input.records.map((record) => record.studentId)).size === input.records.length, {
+  message: 'Cada estudante só pode aparecer uma vez',
+  path: ['records'],
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -508,10 +518,21 @@ export const batchCreateCourseWithSubjectsSchema = z.object({
   subjects: z.array(createSubjectSchema.omit({ courseId: true })).min(1),
 });
 
+export const updateCourseSchema = createCourseSchema
+  .partial()
+  .extend({ description: z.string().max(500).nullable().optional() })
+  .refine((dados) => Object.keys(dados).length > 0, { message: 'Indique pelo menos um campo para actualizar' });
+
+export const updateSubjectSchema = createSubjectSchema
+  .partial()
+  .refine((dados) => Object.keys(dados).length > 0, { message: 'Indique pelo menos um campo para actualizar' });
+
 export type CreateDepartmentInput = z.infer<typeof createDepartmentSchema>;
 export type CreateCourseInput = z.infer<typeof createCourseSchema>;
 export type CreateSubjectInput = z.infer<typeof createSubjectSchema>;
 export type BatchCreateCourseWithSubjectsInput = z.infer<typeof batchCreateCourseWithSubjectsSchema>;
+export type UpdateCourseInput = z.infer<typeof updateCourseSchema>;
+export type UpdateSubjectInput = z.infer<typeof updateSubjectSchema>;
 
 const idSchema = z.string().trim().min(1).max(64);
 const phoneSchema = z.string().trim().min(6).max(30);

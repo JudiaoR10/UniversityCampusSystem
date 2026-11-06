@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { DashboardSummary } from '@smart-campus/shared-types';
 import { campusModules } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
+import { canViewAlerts } from '../lib/roles';
 import { ModuleGlyph } from '../components/ModuleGlyph';
 import { ModuleStatusBadge } from '../components/ModuleStatusBadge';
 import { PageIntro } from '../components/PageIntro';
@@ -23,6 +24,7 @@ const shortcutGroups = [
 
 export function DashboardPage() {
   const { api, user } = useAuth();
+  const canSeeAlerts = canViewAlerts(user?.role);
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,33 +127,35 @@ export function DashboardPage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <div className="surface p-5">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-display text-xl font-semibold text-campus-ink">Alertas recentes</h3>
-            <Link to="/alerts" className="text-xs font-semibold text-campus-teal">
-              Ver todos
-            </Link>
-          </div>
-          {data.recentAlerts.length === 0 ? (
-            <div className="mt-4">
-              <EmptyState title="Tudo calmo" description="Não há alertas a pedir a sua atenção." />
+        {canSeeAlerts ? (
+          <div className="surface p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-display text-xl font-semibold text-campus-ink">Alertas recentes</h3>
+              <Link to="/alerts" className="text-xs font-semibold text-campus-teal">
+                Ver todos
+              </Link>
             </div>
-          ) : (
-            <ul className="mt-4 space-y-3">
-              {data.recentAlerts.map((alert) => (
-                <li key={alert.id} className="rounded-xl border border-campus-line/80 bg-campus-mist/50 px-3 py-2.5 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-campus-ink">{alert.title}</span>
-                    <StatusPill tone={alert.severity === 'CRITICAL' ? 'danger' : alert.severity === 'WARNING' ? 'warning' : 'info'}>
-                      {alert.severity}
-                    </StatusPill>
-                  </div>
-                  {alert.isDemo ? <p className="mt-1 text-xs font-medium text-campus-accent">Dados de demonstração</p> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+            {data.recentAlerts.length === 0 ? (
+              <div className="mt-4">
+                <EmptyState title="Tudo calmo" description="Não há alertas a pedir a sua atenção." />
+              </div>
+            ) : (
+              <ul className="mt-4 space-y-3">
+                {data.recentAlerts.map((alert) => (
+                  <li key={alert.id} className="rounded-xl border border-campus-line/80 bg-campus-mist/50 px-3 py-2.5 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-campus-ink">{alert.title}</span>
+                      <StatusPill tone={alert.severity === 'CRITICAL' ? 'danger' : alert.severity === 'WARNING' ? 'warning' : 'info'}>
+                        {alert.severity}
+                      </StatusPill>
+                    </div>
+                    {alert.isDemo ? <p className="mt-1 text-xs font-medium text-campus-accent">Dados de demonstração</p> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
 
         <div className="surface p-5">
           <h3 className="font-display text-xl font-semibold text-campus-ink">Actividade recente</h3>

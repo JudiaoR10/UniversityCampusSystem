@@ -1,3 +1,5 @@
+import type { AttendanceStatus } from '@smart-campus/shared-types';
+import { readPagination } from '../../../lib/pagination.js';
 import { Router } from 'express';
 import { markAttendanceSchema } from '@smart-campus/validation';
 import { authenticate, authorize } from '../../../middleware/auth.js';
@@ -16,7 +18,7 @@ function queryString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 }
 
-function parseStatus(value: unknown): string | undefined {
+function parseStatus(value: unknown): AttendanceStatus | undefined {
   const status = queryString(value);
   if (status === undefined) return undefined;
   if (!ATTENDANCE_STATUSES.includes(status)) {
@@ -26,7 +28,7 @@ function parseStatus(value: unknown): string | undefined {
       400,
     );
   }
-  return status;
+  return status as AttendanceStatus;
 }
 
 attendanceRouter.get('/attendance/summary', authenticate, authorize(...STUDENT_DATA_ROLES), async (req, res, next) => {
@@ -34,7 +36,7 @@ attendanceRouter.get('/attendance/summary', authenticate, authorize(...STUDENT_D
     const filters = {
       studentId: queryString(req.query.studentId),
       scheduleId: queryString(req.query.scheduleId),
-        status: parseStatus(req.query.status),
+      status: parseStatus(req.query.status),
     };
     success(res, await attendanceService.attendanceSummary(req.user!, filters));
   } catch (err) {
@@ -72,9 +74,9 @@ attendanceRouter.get('/attendance', authenticate, authorize(...STUDENT_DATA_ROLE
     const filters = {
       studentId: queryString(req.query.studentId),
       scheduleId: queryString(req.query.scheduleId),
-        status: parseStatus(req.query.status),
+      status: parseStatus(req.query.status),
     };
-    success(res, await attendanceService.listAttendance(req.user!, filters));
+    success(res, await attendanceService.listAttendance(req.user!, filters, readPagination(req.query)));
   } catch (err) {
     next(err);
   }

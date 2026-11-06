@@ -23,14 +23,14 @@ type ConfirmDialogProps = ConfirmOptions & {
 export function ConfirmDialog({
   open = true,
   title,
-  message,
   description,
+  message,
   details,
   confirmLabel = 'Confirmar',
   confirmTone = 'primary',
   busy = false,
-  onCancel,
   onConfirm,
+  onCancel,
 }: ConfirmDialogProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
   const supportingText = description ?? message;
@@ -69,7 +69,10 @@ export function ConfirmDialog({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <p className="eyebrow">Confirmação</p>
-        <h2 id="confirm-dialog-title" className="mt-1 font-display text-lg font-semibold text-campus-ink">
+        <h2
+          id="confirm-dialog-title"
+          className="mt-1 font-display text-lg font-semibold text-campus-ink"
+        >
           {title}
         </h2>
         {supportingText ? <p className="mt-2 text-sm text-campus-deep/75">{supportingText}</p> : null}
@@ -84,7 +87,7 @@ export function ConfirmDialog({
           </dl>
         ) : null}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className="btn-secondary" disabled={busy} onClick={onCancel}>
+          <button type="button" className="btn-secondary" onClick={onCancel} disabled={busy}>
             Cancelar
           </button>
           <button
@@ -95,8 +98,8 @@ export function ConfirmDialog({
                 ? 'rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 active:scale-[0.97] disabled:opacity-60'
                 : 'btn-primary'
             }
-            disabled={busy}
             onClick={onConfirm}
+            disabled={busy}
           >
             {busy ? 'A processar...' : confirmLabel}
           </button>
@@ -127,7 +130,7 @@ export function useConfirm() {
   }, []);
 
   const dialog = options ? (
-    <ConfirmDialog {...options} onCancel={() => settle(false)} onConfirm={() => settle(true)} />
+    <ConfirmDialog {...options} onConfirm={() => settle(true)} onCancel={() => settle(false)} />
   ) : null;
 
   return { confirm, dialog };

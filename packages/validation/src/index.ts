@@ -239,6 +239,9 @@ export const upsertGradesSchema = z.object({
     )
     .min(1)
     .max(200),
+}).refine((input) => new Set(input.grades.map((grade) => grade.studentId)).size === input.grades.length, {
+  message: 'Cada estudante só pode aparecer uma vez',
+  path: ['grades'],
 });
 
 export const createResultSchema = z.object({
@@ -275,6 +278,10 @@ export const updateScheduleSchema = z
     startsAt: scheduleBase.startsAt.optional(),
     endsAt: scheduleBase.endsAt.optional(),
   })
+  .strict()
+  .refine((schedule) => Object.keys(schedule).length > 0, {
+    message: 'Envie pelo menos um campo para actualizar',
+  })
   .refine(
     (s) => {
       if (s.startsAt && s.endsAt) return s.endsAt.getTime() > s.startsAt.getTime();
@@ -296,6 +303,9 @@ export const markAttendanceSchema = z.object({
     )
     .min(1)
     .max(300),
+}).refine((input) => new Set(input.records.map((record) => record.studentId)).size === input.records.length, {
+  message: 'Cada estudante só pode aparecer uma vez',
+  path: ['records'],
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

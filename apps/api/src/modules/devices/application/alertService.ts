@@ -33,12 +33,13 @@ export async function acknowledgeAlert(id: string, actorId: string, correlationI
 // Alertas de estado de dispositivo
 // ---------------------------------------------------------------------------
 
-/** Quem recebe as notificações operacionais. */
+/** Quem recebe as notificações operacionais (STUDENT nunca). */
 const NOTIFIED_ROLES = ['TECHNICIAN', 'COORDINATOR', 'ADMIN'] as const;
 
 type DeviceRef = { id: string; code: string; name: string };
 
 const offlineTitle = (code: string) => `Dispositivo ${code} offline`;
+const maintenanceTitle = (code: string) => `Dispositivo ${code} em manutenção`;
 
 export async function raiseDeviceAlert(
   tx: Prisma.TransactionClient,
@@ -46,13 +47,31 @@ export async function raiseDeviceAlert(
   from: DeviceStatus,
   to: DeviceStatus,
 ) {
+  if (from === to) return null;
+
+  // Ao sair de um estado com alerta aberto, fecha esse alerta
+  const staleTitles: string[] = [];
+  if (from === 'OFFLINE') staleTitles.push(offlineTitle(device.code));
+  if (from === 'MAINTENANCE') staleTitles.push(maintenanceTitle(device.code));
+  if (staleTitles.length > 0) {
+    await tx.alert.updateMany({
+      where: { deviceId: device.id, title: { in: staleTitles }, acknowledged: false },
+      data: { acknowledged: true },
+    });
+  }
+
   let title: string;
   let message: string;
   let severity: AlertSeverity;
 
-  if (to === 'OFFLINE') {
-    title = offlineTitle(device.code);
-    message = `O dispositivo "${device.name}" (${device.code}) passou de ${from} para OFFLINE.`;
+  if (to === 'OFFLINE' || to === 'MAINTENANCE') {
+    if (to === 'OFFLINE') {
+      title = offlineTitle(device.code);
+      message = `O dispositivo "${device.name}" (${device.code}) passou de ${from} para OFFLINE.`;
+    } else {
+      title = maintenanceTitle(device.code);
+      message = `O dispositivo "${device.name}" (${device.code}) está em manutenção.`;
+    }
     severity = 'WARNING';
 
     const open = await tx.alert.findFirst({
@@ -60,14 +79,9 @@ export async function raiseDeviceAlert(
       select: { id: true },
     });
     if (open) return null;
-  } else if (from === 'OFFLINE' && to === 'ONLINE') {
-    await tx.alert.updateMany({
-      where: { deviceId: device.id, title: offlineTitle(device.code), acknowledged: false },
-      data: { acknowledged: true },
-    });
-
+  } else if (to === 'ONLINE' && (from === 'OFFLINE' || from === 'MAINTENANCE')) {
     title = `Dispositivo ${device.code} recuperado`;
-    message = `O dispositivo "${device.name}" (${device.code}) voltou a ficar ONLINE.`;
+    message = `O dispositivo "${device.name}" (${device.code}) está ONLINE.`;
     severity = 'INFO';
   } else {
     return null;

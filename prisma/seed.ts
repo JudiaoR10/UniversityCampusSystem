@@ -327,6 +327,80 @@ async function main() {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Perfis académicos registados na aplicação.
+  // Versionados para que qualquer pessoa que atualize o Core e corra o seed os
+  // receba. Upsert por matrícula/código de docente: nunca duplica nem apaga.
+  // As contas usam a palavra-passe de demonstração indicada no fim do seed; a
+  // palavra-passe original não é recuperável porque só existe a hash local.
+  // ---------------------------------------------------------------------------
+  const estudantesRegistados = [
+    { studentNumber: 'EST-2026-003', fullName: 'Belvina Luisa Ualuto', email: 'belvinaualuto@gmail.com' },
+    { studentNumber: 'EST-2026-004', fullName: 'Mirson Maluve', email: 'mirsonmaluve@gmail.com' },
+    { studentNumber: 'EST-2026-005', fullName: 'Aura David', email: 'auradavid@gmail.com' },
+    { studentNumber: 'EST-2026-006', fullName: 'Alípio Anderson Paco', email: 'alipiopaco@gmail.com' },
+    { studentNumber: 'EST-2026-007', fullName: 'Jocar Celio Elias', email: 'jocarcelio@gmail.com' },
+    { studentNumber: 'EST-2026-008', fullName: 'Clay José Chidudo', email: 'clayjose@gmail.com' },
+  ];
+
+  const docentesRegistados = [
+    { employeeCode: 'DOC-102', fullName: 'Armando Correia', email: 'armandocorreia@gmail.com', title: 'Docente' },
+    { employeeCode: 'DOC-103', fullName: 'Cidália da Camara', email: 'cidalia@gmail.com', title: 'Docente' },
+    { employeeCode: 'DOC-104', fullName: 'Carsolimo Sambo', email: 'carsolino@gmail.com', title: 'Docente' },
+  ];
+
+  for (const estudante of estudantesRegistados) {
+    const existente = await prisma.studentProfile.findUnique({ where: { studentNumber: estudante.studentNumber } });
+    if (existente) continue;
+
+    const user = await prisma.user.upsert({
+      where: { email: estudante.email },
+      update: { fullName: estudante.fullName, roleId: roleMap['STUDENT'] },
+      create: {
+        email: estudante.email,
+        fullName: estudante.fullName,
+        passwordHash: await hash('Estudante123!'),
+        roleId: roleMap['STUDENT'],
+      },
+    });
+
+    await prisma.studentProfile.create({
+      data: {
+        userId: user.id,
+        studentNumber: estudante.studentNumber,
+        courseId: cursoLei.id,
+        yearOfStudy: 3,
+        status: 'ACTIVE',
+      },
+    });
+  }
+
+  for (const docente of docentesRegistados) {
+    const existente = await prisma.teacherProfile.findUnique({ where: { employeeCode: docente.employeeCode } });
+    if (existente) continue;
+
+    const user = await prisma.user.upsert({
+      where: { email: docente.email },
+      update: { fullName: docente.fullName, roleId: roleMap['TEACHER'] },
+      create: {
+        email: docente.email,
+        fullName: docente.fullName,
+        passwordHash: await hash('Docente123!'),
+        roleId: roleMap['TEACHER'],
+      },
+    });
+
+    await prisma.teacherProfile.create({
+      data: {
+        userId: user.id,
+        employeeCode: docente.employeeCode,
+        departmentId: dept.id,
+        title: docente.title,
+        status: 'ACTIVE',
+      },
+    });
+  }
+
   // Avaliações contínuas padrão da disciplina (o docente pode ajustar pesos depois).
   const defaultAssessments = [
     { title: 'Teste 1', weight: 50 },
@@ -723,6 +797,7 @@ async function main() {
   console.log('  tecnico@smartcampus.demo / Tecnico123!');
   console.log('  estudante@smartcampus.demo / Estudante123!');
   console.log('  estudante2@smartcampus.demo / Estudante123!');
+  console.log('  Perfis partilhados: EST-2026-003..008 / Estudante123! · DOC-102..104 / Docente123!');
 }
 
 main()

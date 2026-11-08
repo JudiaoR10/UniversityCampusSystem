@@ -97,6 +97,9 @@ model User {
   analysisRequests       AnalysisRequest[]       @relation("AnalysisRequestStudent")
   resolvedAnalysisRequests AnalysisRequest[]     @relation("AnalysisRequestResolver")
   financialNotifications FinancialNotification[] @relation("FinancialNotificationStudent")
+  employeeCompensation     EmployeeCompensation?
+  requestedSalaryChanges   SalaryChangeRequest[]   @relation("SalaryChangeRequester")
+  reviewedSalaryChanges    SalaryChangeRequest[]   @relation("SalaryChangeReviewer")
 
 
 
@@ -140,6 +143,7 @@ model Course {
   subjects     Subject[]
   students     StudentProfile[]
   enrolments   Enrolment[]
+  tuition      CourseTuition?
   schedules    ClassSchedule[]
 
   @@index([departmentId])
@@ -222,7 +226,6 @@ model TeacherProfile {
   status       TeacherProfileStatus @default(ACTIVE)
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
-  salaries     TeacherSalary[]
 
   @@index([departmentId])
 }
@@ -232,26 +235,108 @@ enum SalaryStatus {
   PAID
 }
 
-// Registo financeiro mensal. O cadastro académico continua no Core.
-model TeacherSalary {
-  id            String       @id @default(cuid())
-  teacherId     String
-  teacher       TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Restrict)
-  month         String
-  amount        Decimal      @db.Decimal(10, 2)
-  notes         String       @default("")
-  status        SalaryStatus @default(PENDING)
-  paymentMethod PaymentMethod?
-  referenceCode String?
-  paidAt        DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+enum EmployeeCategory {
+  TEACHER
+  TECHNICIAN
+  COORDINATOR
+  ADMINISTRATIVE
+  FINANCE
+  CLEANER
+  GUARD
+  OTHER
+}
 
-  @@unique([teacherId, month])
+enum SalaryChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ExternalEmployee {
+  id           String                @id @default(cuid())
+  employeeCode String                @unique
+  fullName     String
+  category     EmployeeCategory
+  jobTitle     String
+  isActive     Boolean               @default(true)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  compensation EmployeeCompensation?
+
+  @@index([category, isActive])
+  @@map("external_employees")
+}
+
+model EmployeeCompensation {
+  id                 String                @id @default(cuid())
+  userId             String?               @unique
+  user               User?                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  externalEmployeeId String?               @unique
+  externalEmployee   ExternalEmployee?     @relation(fields: [externalEmployeeId], references: [id], onDelete: Restrict)
+  currentAmount      Decimal               @default(0) @db.Decimal(10, 2)
+  approvedAt         DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  salaries           EmployeeSalary[]
+  changeRequests     SalaryChangeRequest[]
+
+  @@map("employee_compensations")
+}
+
+// Registo financeiro mensal. A identidade do funcionário continua no Core ou no cadastro externo mínimo.
+model EmployeeSalary {
+  id             String               @id @default(cuid())
+  compensationId String
+  compensation   EmployeeCompensation @relation(fields: [compensationId], references: [id], onDelete: Restrict)
+  month          String
+  amount         Decimal              @db.Decimal(10, 2)
+  notes          String               @default("")
+  status         SalaryStatus         @default(PENDING)
+  paymentMethod  PaymentMethod?
+  referenceCode  String?
+  paidAt         DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([compensationId, month])
   @@unique([paymentMethod, referenceCode])
   @@index([month, status])
   @@index([paidAt])
-  @@map("teacher_salaries")
+  @@map("employee_salaries")
+}
+
+model SalaryChangeRequest {
+  id             String               @id @default(cuid())
+  compensationId String
+  compensation   EmployeeCompensation @relation(fields: [compensationId], references: [id], onDelete: Restrict)
+  proposedAmount Decimal              @db.Decimal(10, 2)
+  reason         String
+  status         SalaryChangeStatus   @default(PENDING)
+  requestedById  String
+  requestedBy    User                 @relation("SalaryChangeRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedById   String?
+  reviewedBy     User?                @relation("SalaryChangeReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewNotes    String?
+  reviewedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([status, createdAt])
+  @@index([compensationId, status])
+  @@map("salary_change_requests")
+}
+
+model CourseTuition {
+  id          String   @id @default(cuid())
+  courseId    String   @unique
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  amount      Decimal  @db.Decimal(10, 2)
+  notes       String   @default("")
+  updatedById String
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("course_tuitions")
 }
 
 model Enrolment {

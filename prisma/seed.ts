@@ -290,6 +290,17 @@ async function main() {
     },
   });
 
+  await prisma.externalEmployee.upsert({
+    where: { employeeCode: 'LIM-001' },
+    update: { fullName: 'Ana Serviços', category: 'CLEANER', jobTitle: 'Agente de limpeza', isActive: true },
+    create: { employeeCode: 'LIM-001', fullName: 'Ana Serviços', category: 'CLEANER', jobTitle: 'Agente de limpeza' },
+  });
+  await prisma.externalEmployee.upsert({
+    where: { employeeCode: 'GRD-001' },
+    update: { fullName: 'Carlos Segurança', category: 'GUARD', jobTitle: 'Guarda', isActive: true },
+    create: { employeeCode: 'GRD-001', fullName: 'Carlos Segurança', category: 'GUARD', jobTitle: 'Guarda' },
+  });
+
   const studentA = await prisma.studentProfile.findUnique({ where: { userId: studentAId } });
   const studentB = await prisma.studentProfile.findUnique({ where: { userId: studentBId } });
 
@@ -630,7 +641,6 @@ async function main() {
     });
   }
 
-  const teacherProfile = await prisma.teacherProfile.findUnique({ where: { userId: teacherId } });
   if (studentA) {
     await prisma.debt.upsert({
       where: { code: 'DEMO-PROP-2026' },
@@ -646,20 +656,23 @@ async function main() {
       },
     });
   }
-  if (teacherProfile) {
-    const month = new Date().toISOString().slice(0, 7);
-    await prisma.teacherSalary.upsert({
-      where: { teacherId_month: { teacherId: teacherProfile.id, month } },
+  const teacherCompensation = await prisma.employeeCompensation.upsert({
+    where: { userId: teacherId },
+    update: {},
+    create: { userId: teacherId, currentAmount: 45000, approvedAt: new Date() },
+  });
+  const month = new Date().toISOString().slice(0, 7);
+  await prisma.employeeSalary.upsert({
+      where: { compensationId_month: { compensationId: teacherCompensation.id, month } },
       update: {},
       create: {
-        teacherId: teacherProfile.id,
+        compensationId: teacherCompensation.id,
         month,
         amount: 45000,
         notes: 'Salário de demonstração',
         status: 'PENDING',
       },
     });
-  }
 
   const dayMs = 24 * 60 * 60 * 1000;
   const liveStarts = new Date(Date.now() - 15 * 60 * 1000);
@@ -716,6 +729,7 @@ async function main() {
 
   console.log('Seed concluído.');
   console.log('Credenciais de demonstração (apenas desenvolvimento):');
+  console.log('  financas@smartcampus.demo / Finance123!');
   console.log('  admin@smartcampus.demo / Admin123!');
   console.log('  coordenador@smartcampus.demo / Coord123!');
   console.log('  docente@smartcampus.demo / Docente123!');

@@ -142,7 +142,7 @@ export async function deleteRoom(id: string, actorId: string, correlationId: str
     }
     throw err;
    });
-   
+
 
   await audit({
     action: 'ROOM_DELETE',

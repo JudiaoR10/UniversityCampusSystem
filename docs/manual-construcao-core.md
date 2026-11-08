@@ -1012,7 +1012,7 @@ Para apresentar o Core na PTP III:
 2. Stack tecnológica — Fase 2 deste manual  
 3. Demo ao vivo: fluxo transversal + parking + ops  
 4. Swagger aberto em `/api/docs`  
-5. Explicar módulos `available` (já sem placeholders)  
+5. Explicar módulos `available` (já sem placeholders)
 6. Mostrar CI e Docker Compose  
 
 ---

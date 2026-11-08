@@ -227,6 +227,9 @@ export async function remove(id: string, ctx: AuditContext) {
   try {
     removed = await studentRepository.deleteStudentProfile(id);
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      throw conflict('STUDENT_DELETE_CONFLICT', 'O perfil foi alterado em simultâneo; tente novamente');
+    }
     if (isForeignKeyViolation(error)) {
       throw conflict(
         'STUDENT_HAS_DEPENDENCIES',
@@ -238,8 +241,8 @@ export async function remove(id: string, ctx: AuditContext) {
 
   if (!removed) {
     throw conflict(
-      'STUDENT_HAS_SUBJECT_ENROLMENTS',
-      'Não é possível remover um estudante com inscrições activas em disciplinas — cancele ou elimine-as em Inscrições antes de remover o perfil',
+      'STUDENT_HAS_ENROLMENTS',
+      'Não é possível remover um estudante com matrículas, inscrições ou outros registos académicos associados',
     );
   }
 

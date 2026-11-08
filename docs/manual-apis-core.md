@@ -1439,11 +1439,11 @@ Marcar ao validar o Core:
 A interface `/financial` consome exclusivamente o cliente HTTP partilhado e apresenta as acções de acordo com o perfil autenticado:
 
 - `STUDENT` consulta as próprias dívidas, pagamentos, contestações e avisos, e pode submeter uma contestação;
-- `FINANCE` pesquisa estudantes do Core, gere dívidas e pagamentos, decide contestações, acompanha avisos, gere salários de docentes e emite relatórios mensais;
-- `ADMIN` consulta os dados financeiros e salários, imprime relatórios e configura as políticas financeiras; não cria nem altera salários;
+- `FINANCE` pesquisa estudantes do Core, gere dívidas e pagamentos, decide contestações, acompanha avisos, consulta todos os funcionários, cadastra pessoal externo, propõe salários, gera pagamentos após aprovação, define mensalidades por curso e emite relatórios mensais;
+- `ADMIN` acompanha o painel administrativo, consulta dados financeiros, funcionários, salários, mensalidades, contestações e auditoria, aprova ou rejeita propostas salariais, imprime relatórios e configura políticas;
 - os restantes perfis não têm acesso ao módulo financeiro.
 
-A criação de utilizadores e os dados académicos de estudantes e docentes continuam sob responsabilidade do Core. A pesquisa financeira lê apenas a identidade mínima necessária. O registo de pagamento salarial confirma um pagamento já efectuado e não inicia transferências bancárias.
+A criação de utilizadores e os dados académicos de estudantes, docentes e cursos continuam sob responsabilidade do Core. O módulo financeiro apenas lê esses dados partilhados. Funcionários sem conta, como agentes de limpeza e guardas, recebem um cadastro externo mínimo. O registo de pagamento salarial confirma um pagamento já efectuado e não inicia transferências bancárias.
 
 ### Endpoints financeiros
 
@@ -1454,8 +1454,11 @@ A criação de utilizadores e os dados académicos de estudantes e docentes cont
 | Pesquisa de estudantes | `GET /financial/students` | FINANCE/ADMIN |
 | Contestações | `GET/POST/PATCH /financial/analysis-requests` | STUDENT submete e consulta as próprias; FINANCE/ADMIN consultam; FINANCE decide |
 | Resumo e políticas | `GET /financial/reports`, `GET/PATCH /financial/policies/:id` | FINANCE/ADMIN; política alterada apenas por ADMIN |
-| Entrega de avisos | `GET/POST /financial/notifications/:id/delivery|retry` | FINANCE/ADMIN |
-| Docentes e salários | `GET /financial/teachers`, `GET/POST/PATCH /financial/salaries`, `POST /financial/salaries/:id/payment` | FINANCE gere; ADMIN apenas consulta |
+| Entrega de avisos | `GET /financial/notifications/:id/delivery`; `POST /financial/notifications/:id/retry` | FINANCE/ADMIN consultam; FINANCE reenvia |
+| Funcionários | `GET /financial/employees`, `POST /financial/employees/external` | FINANCE/ADMIN consultam; FINANCE cadastra pessoal externo |
+| Aprovação salarial | `GET/POST /financial/salary-change-requests`, `PATCH /financial/salary-change-requests/:id/review` | FINANCE propõe; ADMIN aprova ou rejeita |
+| Salários | `GET/POST /financial/salaries`, `POST /financial/salaries/:id/payment` | FINANCE gera com valor aprovado e regista pagamento; ADMIN consulta |
+| Mensalidades | `GET /financial/course-tuitions`, `PUT /financial/course-tuitions/:id` | FINANCE/ADMIN consultam; FINANCE define valores |
 | Relatórios mensais | `GET /financial/reports/payments`, `GET /financial/reports/salaries` | FINANCE/ADMIN |
 
 Os parâmetros, corpos, respostas e códigos de erro estão definidos em [openapi.yaml](./openapi.yaml). A matriz completa está em [authorization-matrix.md](./authorization-matrix.md).

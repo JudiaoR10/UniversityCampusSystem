@@ -170,7 +170,7 @@ describe('API Grupo Infraestrutura (edifícios, laboratórios, equipamentos)', (
     .set(auth(adminToken));
     expect(continuaExistir.status).toBe(200);
     });
-   
+
   it('remove equipamento, laboratório e edifício', async () => {
     const equipamento = await request(app)
       .delete(`${api}/equipment/${equipamentoId}`)

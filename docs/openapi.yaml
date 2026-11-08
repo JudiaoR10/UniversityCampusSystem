@@ -2151,24 +2151,43 @@ components:
         employeeCode: *id003
         isActive:
           type: boolean
-    TeacherSalary:
+    Employee:
+      type: object
+      required: [employeeKey, userId, externalEmployeeId, employeeCode, fullName, category, jobTitle, isActive, source, currentSalary, salaryApprovedAt]
+      properties:
+        employeeKey: { type: string, example: "CORE:user-id" }
+        userId: { type: string, nullable: true }
+        externalEmployeeId: { type: string, nullable: true }
+        employeeCode: { type: string }
+        fullName: { type: string }
+        category:
+          type: string
+          enum: [TEACHER, TECHNICIAN, COORDINATOR, ADMINISTRATIVE, FINANCE, CLEANER, GUARD, OTHER]
+        jobTitle: { type: string }
+        isActive: { type: boolean }
+        source:
+          type: string
+          enum: [CORE, EXTERNAL]
+        currentSalary: { type: number, nullable: true }
+        salaryApprovedAt: { type: string, format: date-time, nullable: true }
+    EmployeeSalary:
       type: object
       required:
-      - id
-      - teacher
-      - month
-      - amount
-      - notes
-      - status
-      - paymentMethod
-      - referenceCode
-      - paidAt
-      - createdAt
-      - updatedAt
+        - id
+        - employee
+        - month
+        - amount
+        - notes
+        - status
+        - paymentMethod
+        - referenceCode
+        - paidAt
+        - createdAt
+        - updatedAt
       properties:
         id: *id003
-        teacher:
-          $ref: '#/components/schemas/TeacherIdentitySummary'
+        employee:
+          $ref: "#/components/schemas/Employee"
         month: &id005
           type: string
           pattern: ^(20\d{2}|2100)-(0[1-9]|1[0-2])$
@@ -2207,31 +2226,47 @@ components:
           type: string
           format: date-time
         updatedAt: *id004
-    CreateTeacherSalary:
+    CreateEmployeeSalary:
       type: object
       additionalProperties: false
       required:
-      - teacherId
-      - month
-      - amount
+        - employeeKey
+        - month
       properties:
-        teacherId:
+        employeeKey:
           type: string
-          minLength: 1
-          maxLength: 200
+          example: "CORE:user-id"
         month: *id005
-        amount: *id006
         notes: *id007
-    UpdateTeacherSalary:
+    SalaryChangeRequest:
       type: object
-      additionalProperties: false
-      required:
-      - amount
-      - expectedUpdatedAt
+      required: [id, employee, currentAmount, proposedAmount, reason, status, requestedBy, reviewedBy, reviewNotes, reviewedAt, createdAt, updatedAt]
       properties:
-        amount: *id006
-        notes: *id007
-        expectedUpdatedAt: *id004
+        id: { type: string }
+        employee: { $ref: "#/components/schemas/Employee" }
+        currentAmount: { type: number, nullable: true }
+        proposedAmount: *id006
+        reason: { type: string }
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        requestedBy: { type: object }
+        reviewedBy: { type: object, nullable: true }
+        reviewNotes: { type: string, nullable: true }
+        reviewedAt: { type: string, format: date-time, nullable: true }
+        createdAt: *id004
+        updatedAt: *id004
+    CourseTuition:
+      type: object
+      required: [courseId, courseCode, courseName, departmentName, amount, notes, updatedAt]
+      properties:
+        courseId: { type: string }
+        courseCode: { type: string }
+        courseName: { type: string }
+        departmentName: { type: string }
+        amount: { type: number, nullable: true }
+        notes: { type: string }
+        updatedAt: { type: string, format: date-time, nullable: true }
     SalaryPaymentInput:
       type: object
       additionalProperties: false
@@ -4826,8 +4861,8 @@ paths:
   /financial/notifications/{notificationId}/retry:
     post:
       tags:
-      - Financial
-      summary: Repetir envio de aviso pendente ou falhado (FINANCE/ADMIN)
+        - Financial
+      summary: Repetir envio de aviso pendente ou falhado (apenas FINANCE)
       security:
       - bearerAuth: []
       parameters:
@@ -4973,7 +5008,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
     post:
-      summary: 'Registar Nova Dívida [RBAC: Apenas FINANCE e ADMIN]'
+      summary: "Registar Nova Dívida [RBAC: Apenas FINANCE]"
       tags:
       - Financial
       security:
@@ -4998,9 +5033,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
-        '403':
-          description: 'Acesso Negado (ex: STUDENT ou TEACHER a tentar criar dívida)'
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: "Acesso Negado (apenas FINANCE pode criar dívida)"
           content:
             application/json:
               schema:
@@ -5179,7 +5214,7 @@ paths:
         '503': { description: API de notificações não configurada }
   /financial/payments:
     post:
-      summary: 'Registar Pagamento e Regularizar Dívida via Transação ACID [RBAC: Apenas FINANCE e ADMIN]'
+      summary: "Registar Pagamento e Regularizar Dívida via Transação ACID [RBAC: Apenas FINANCE]"
       tags:
       - Financial
       security:
@@ -5204,9 +5239,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
-        '403':
-          description: Acesso Negado (apenas FINANCE e ADMIN podem liquidar dívidas)
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Acesso Negado (apenas FINANCE pode liquidar dívidas)
           content:
             application/json:
               schema:
@@ -5712,7 +5747,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
     patch:
-      summary: 'Resolver Contestação (PROCEDENTE / IMPROCEDENTE) [RBAC: Apenas FINANCE e ADMIN]'
+      summary: "Resolver Contestação (PROCEDENTE / IMPROCEDENTE) [RBAC: Apenas FINANCE]"
       tags:
       - Financial
       security:
@@ -5744,9 +5779,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
-        '403':
-          description: Acesso Negado (STUDENT não pode decidir a sua própria contestação)
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Acesso Negado (apenas FINANCE pode decidir contestações)
           content:
             application/json:
               schema:
@@ -6021,7 +6056,141 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
+                $ref: "#/components/schemas/ApiError"
+  /financial/employees:
+    get:
+      summary: Listar funcionários do Core e do cadastro externo (FINANCE/ADMIN)
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      description: Reutiliza utilizadores docentes, técnicos, coordenadores, administrativos e financeiros do Core e acrescenta pessoal externo sem conta, como guardas e agentes de limpeza.
+      parameters:
+        - { name: q, in: query, schema: { type: string, minLength: 2, maxLength: 100 } }
+        - { name: category, in: query, schema: { type: string, enum: [TEACHER, TECHNICIAN, COORDINATOR, ADMINISTRATIVE, FINANCE, CLEANER, GUARD, OTHER] } }
+        - { name: active, in: query, schema: { type: boolean } }
+        - *id010
+        - *id011
+      responses:
+        "200":
+          description: Página de funcionários.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Employee" } }
+                  meta: { $ref: "#/components/schemas/FinancialPageMeta" }
+        "400": *id012
+        "401": *id013
+        "403": *id014
+  /financial/employees/external:
+    post:
+      summary: Cadastrar funcionário externo sem criar utilizador (apenas FINANCE)
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employeeCode, fullName, category, jobTitle]
+              properties:
+                employeeCode: { type: string }
+                fullName: { type: string }
+                category: { type: string, enum: [CLEANER, GUARD, ADMINISTRATIVE, OTHER] }
+                jobTitle: { type: string }
+      responses:
+        "201": { description: Funcionário externo criado. }
+        "400": *id012
+        "401": *id013
+        "403": *id014
+        "409": *id016
+  /financial/salary-change-requests:
+    get:
+      summary: Consultar propostas de alteração salarial (FINANCE/ADMIN)
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Página de propostas salariais. }
+        "401": *id013
+        "403": *id014
+    post:
+      summary: Propor salário para aprovação do ADMIN (apenas FINANCE)
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employeeKey, proposedAmount, reason]
+              properties:
+                employeeKey: { type: string }
+                proposedAmount: *id006
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "201": { description: Proposta pendente criada. }
+        "400": *id012
+        "401": *id013
+        "403": *id014
+        "409": *id016
+  /financial/salary-change-requests/{id}/review:
+    patch:
+      summary: Aprovar ou rejeitar proposta salarial (apenas ADMIN)
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, reviewNotes]
+              properties:
+                decision: { type: string, enum: [APPROVED, REJECTED] }
+                reviewNotes: { type: string, minLength: 3, maxLength: 500 }
+      responses:
+        "200": { description: Proposta analisada e, quando aprovada, salário actual actualizado. }
+        "400": *id012
+        "401": *id013
+        "403": *id014
+        "404": *id015
+        "409": *id016
+  /financial/course-tuitions:
+    get:
+      summary: Listar cursos académicos e mensalidades (FINANCE/ADMIN)
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Cursos partilhados pelo módulo académico com a configuração financeira. }
+        "401": *id013
+        "403": *id014
+  /financial/course-tuitions/{id}:
+    put:
+      summary: Definir mensalidade de um curso existente (apenas FINANCE)
+      tags: [Financial]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: *id006
+                notes: *id007
+      responses:
+        "200": { description: Mensalidade criada ou actualizada. }
+        "400": *id012
+        "401": *id013
+        "403": *id014
+        "404": *id015
   /financial/salaries:
     get:
       summary: Consultar salários do período (FINANCE/ADMIN)
@@ -6054,7 +6223,7 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/TeacherSalary'
+                      $ref: "#/components/schemas/EmployeeSalary"
                   meta:
                     $ref: '#/components/schemas/FinancialPageMeta'
         '400': *id012
@@ -6069,14 +6238,15 @@ paths:
       tags:
       - Financial
       security:
-      - bearerAuth: []
-      description: Um registo por TeacherProfile.id e mês. Sem cálculo fiscal nem transferência bancária automática.
+        - bearerAuth: []
+      description: Gera o registo mensal com o último valor aprovado pelo ADMIN. O valor não pode ser
+        alterado directamente e esta operação não efectua transferência bancária.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTeacherSalary'
+              $ref: "#/components/schemas/CreateEmployeeSalary"
       responses:
         '201':
           description: Operação concluída.
@@ -6089,53 +6259,7 @@ paths:
                 - meta
                 properties:
                   data:
-                    $ref: '#/components/schemas/TeacherSalary'
-                  meta:
-                    $ref: '#/components/schemas/Meta'
-        '400': *id012
-        '401': *id013
-        '403': *id014
-        '404': *id015
-        '409': *id016
-        '422': *id017
-        '500': *id018
-  /financial/salaries/{id}:
-    patch:
-      summary: Editar salário pendente (apenas FINANCE)
-      tags:
-      - Financial
-      security:
-      - bearerAuth: []
-      description: ADMIN é apenas leitor. Salários pagos são imutáveis. expectedUpdatedAt evita sobrescrever uma alteração
-        concorrente.
-      parameters:
-      - &id019
-        name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          minLength: 1
-          maxLength: 200
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateTeacherSalary'
-      responses:
-        '200':
-          description: Operação concluída.
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                - meta
-                properties:
-                  data:
-                    $ref: '#/components/schemas/TeacherSalary'
+                    $ref: "#/components/schemas/EmployeeSalary"
                   meta:
                     $ref: '#/components/schemas/Meta'
         '400': *id012
@@ -6155,7 +6279,13 @@ paths:
       description: Confirma pagamento já efectuado, não transfere fundos. Define paidAt no momento do registo. Verifica montante,
         versão, estado e referência; operação auditada e atómica.
       parameters:
-      - *id019
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
       requestBody:
         required: true
         content:
@@ -6174,7 +6304,7 @@ paths:
                 - meta
                 properties:
                   data:
-                    $ref: '#/components/schemas/TeacherSalary'
+                    $ref: "#/components/schemas/EmployeeSalary"
                   meta:
                     $ref: '#/components/schemas/Meta'
         '400': *id012
@@ -6190,7 +6320,13 @@ paths:
       tags: [Financial]
       security: [{ bearerAuth: [] }]
       parameters:
-      - *id019
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
       responses:
         '200': { description: Comprovativo para impressão interna }
         '401': *id013

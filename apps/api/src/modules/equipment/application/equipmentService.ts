@@ -140,7 +140,7 @@ export async function deleteEquipment(id: string, actorId: string, correlationId
     }
     throw err;
    });
-   
+
 
   await audit({
     action: 'EQUIPMENT_DELETE',

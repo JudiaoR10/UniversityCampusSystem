@@ -24,7 +24,7 @@ describe('Contrato financeiro e Swagger do Core', () => {
           .map((method) => `${method} ${path}`),
       );
     expect(documented.sort()).toEqual(implemented.sort());
-    expect(implemented).toHaveLength(31);
+    expect(implemented).toHaveLength(37);
   });
 
   it('resolve as referências internas da especificação', () => {

@@ -1,9 +1,5 @@
-import type { EnrolmentStatus, StudentProfileStatus } from '@prisma/client';
+import type { StudentProfileStatus } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
-
-// Estados que representam um vínculo académico activo; os restantes (CANCELLED, COMPLETED)
-// são histórico e não devem impedir a remoção do perfil.
-const ACTIVE_SUBJECT_ENROLMENT_STATUSES: EnrolmentStatus[] = ['PENDING', 'ACTIVE'];
 
 const courseRef = { select: { id: true, code: true, name: true } } as const;
 const userRef = { select: { id: true, fullName: true } } as const;
@@ -115,16 +111,18 @@ export async function updateStudent(id: string, data: UpdateStudentData) {
   });
 }
 
-// Remove a conta (User) e o perfil em conjunto: a conta não pode ficar órfã a permitir login.
-// Devolve null quando o estudante tem inscrições activas em disciplinas.
-// A matrícula no curso (StudentProfile.courseId) e o legado Enrolment são apagados por cascade
-// com o perfil: a matrícula não é um vínculo independente neste sistema.
+// Mantém a conta e protege todos os registos académicos que seriam apagados em cascata.
 export async function deleteStudentProfile(id: string) {
   return prisma.$transaction(async (tx) => {
     const profile = await tx.studentProfile.findFirst({
       where: {
         id,
-        subjectEnrolments: { none: { status: { in: ACTIVE_SUBJECT_ENROLMENT_STATUSES } } },
+        enrolments: { none: {} },
+        subjectEnrolments: { none: {} },
+        grades: { none: {} },
+        attendance: { none: {} },
+        periodResults: { none: {} },
+        exemptions: { none: {} },
       },
       select: { id: true, userId: true },
     });
@@ -132,5 +130,5 @@ export async function deleteStudentProfile(id: string) {
 
     await tx.studentProfile.delete({ where: { id: profile.id } });
     return profile;
-  });
+  }, { isolationLevel: 'Serializable' });
 }

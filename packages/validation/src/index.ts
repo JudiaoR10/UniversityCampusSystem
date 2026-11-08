@@ -472,22 +472,48 @@ export type FinancialAnalysisQuery = z.infer<typeof financialAnalysisQuerySchema
 export const financialMonthSchema = z.string().regex(/^(20\d{2}|2100)-(0[1-9]|1[0-2])$/, 'Use um mês válido no formato AAAA-MM (2000–2100)');
 export const monthlyReportQuerySchema = z.object({ month: financialMonthSchema }).strict();
 export const salaryQuerySchema = financialReadPageSchema.extend({ month: financialMonthSchema });
-export const createSalarySchema = z.object({
-  teacherId: z.string().trim().min(1).max(200),
-  month: financialMonthSchema,
-  amount: financialAmountSchema,
-  notes: z.string().trim().max(500).default(''),
+export const employeeCategorySchema = z.enum(['TEACHER', 'TECHNICIAN', 'COORDINATOR', 'ADMINISTRATIVE', 'FINANCE', 'CLEANER', 'GUARD', 'OTHER']);
+export const employeeQuerySchema = financialReadPageSchema.extend({
+  q: z.string().trim().min(2).max(100).optional(),
+  category: employeeCategorySchema.optional(),
+  active: z.enum(['true', 'false']).transform(value => value === 'true').optional(),
+});
+export const createExternalEmployeeSchema = z.object({
+  employeeCode: z.string().trim().min(2).max(30),
+  fullName: z.string().trim().min(3).max(160),
+  category: employeeCategorySchema.refine(value => ['CLEANER', 'GUARD', 'OTHER', 'ADMINISTRATIVE'].includes(value), 'Categoria externa inválida'),
+  jobTitle: z.string().trim().min(2).max(100),
 }).strict();
-export const updateSalarySchema = createSalarySchema.pick({ amount: true, notes: true }).extend({
-  expectedUpdatedAt: z.string().datetime(),
+export const createSalaryChangeSchema = z.object({
+  employeeKey: z.string().trim().min(3).max(240),
+  proposedAmount: financialAmountSchema,
+  reason: z.string().trim().min(5).max(500),
+}).strict();
+export const reviewSalaryChangeSchema = z.object({
+  decision: z.enum(['APPROVED', 'REJECTED']),
+  reviewNotes: z.string().trim().min(3).max(500),
+}).strict();
+export const salaryChangeQuerySchema = financialReadPageSchema.extend({
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
+});
+export const createSalarySchema = z.object({
+  employeeKey: z.string().trim().min(3).max(240),
+  month: financialMonthSchema,
+  notes: z.string().trim().max(500).default(''),
 }).strict();
 export const salaryPaymentSchema = createPaymentSchema.omit({ debtId: true }).extend({
   expectedUpdatedAt: z.string().datetime(),
 }).strict();
 export type CreateSalaryInput = z.infer<typeof createSalarySchema>;
-export type UpdateSalaryInput = z.infer<typeof updateSalarySchema>;
 export type SalaryPaymentInput = z.infer<typeof salaryPaymentSchema>;
 export type SalaryQuery = z.infer<typeof salaryQuerySchema>;
+export type EmployeeQuery = z.infer<typeof employeeQuerySchema>;
+export type CreateExternalEmployeeInput = z.infer<typeof createExternalEmployeeSchema>;
+export type CreateSalaryChangeInput = z.infer<typeof createSalaryChangeSchema>;
+export type ReviewSalaryChangeInput = z.infer<typeof reviewSalaryChangeSchema>;
+export type SalaryChangeQuery = z.infer<typeof salaryChangeQuerySchema>;
+export const updateCourseTuitionSchema = z.object({ amount: financialAmountSchema, notes: z.string().trim().max(500).default('') }).strict();
+export type UpdateCourseTuitionInput = z.infer<typeof updateCourseTuitionSchema>;
 export type CreateDeviceInput = z.infer<typeof createDeviceSchema>;
 export type UpdateDeviceStatusInput = z.infer<typeof updateDeviceStatusSchema>;
 export type UpdateDeviceInput = z.infer<typeof updateDeviceSchema>;

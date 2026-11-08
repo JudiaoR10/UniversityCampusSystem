@@ -12,6 +12,7 @@ type RoomForm = {
   floor: number;
   buildingId: string;
   status: RoomDto['status'];
+  temPlaca: boolean;
 };
 
 const estados: RoomDto['status'][] = ['AVAILABLE', 'OCCUPIED', 'MAINTENANCE', 'RESERVED'];
@@ -29,9 +30,11 @@ export function RoomsPage() {
     floor: 1,
     buildingId: '',
     status: 'AVAILABLE',
+    temPlaca: false,
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const canManage = user && ['ADMIN', 'COORDINATOR', 'TECHNICIAN'].includes(user.role);
+  const isAdmin = user?.role === 'ADMIN';
 
   async function load() {
     const [roomsRes, buildingsRes] = await Promise.all([api.rooms(), api.buildings()]);
@@ -56,6 +59,7 @@ export function RoomsPage() {
       floor: 1,
       buildingId: buildings[0]?.id ?? '',
       status: 'AVAILABLE',
+      temPlaca: false,
     });
     setEditingId(null);
   }
@@ -69,6 +73,7 @@ export function RoomsPage() {
       floor: room.floor,
       buildingId: room.building.id,
       status: room.status,
+      temPlaca: room.temPlaca ?? false,
     });
     setError(null);
   }
@@ -83,6 +88,7 @@ export function RoomsPage() {
       floor: Number(form.floor),
       buildingId: form.buildingId,
       status: form.status,
+      temPlaca: form.temPlaca,
     };
     try {
       if (editingId) {
@@ -139,6 +145,16 @@ export function RoomsPage() {
             onChange={(status) => setForm({ ...form, status: status as RoomDto['status'] })}
             options={estados.map((estado) => ({ value: estado, label: estado }))}
           />
+          {isAdmin ? (
+            <label className="flex items-center gap-2 field-input !mt-0">
+              <input
+                type="checkbox"
+                checked={form.temPlaca}
+                onChange={(e) => setForm({ ...form, temPlaca: e.target.checked })}
+              />
+              <span className="text-sm">Tem placa</span>
+            </label>
+          ) : null}
           <button type="submit" className="btn-primary w-full">
             {editingId ? 'Guardar alterações' : 'Criar sala'}
           </button>
@@ -160,6 +176,7 @@ export function RoomsPage() {
               <th className="px-4 py-3 font-semibold">Piso</th>
               <th className="px-4 py-3 font-semibold">Capacidade</th>
               <th className="px-4 py-3 font-semibold">Estado</th>
+              {isAdmin ? <th className="px-4 py-3 font-semibold">Tem Placa</th> : null}
               {canManage ? <th className="px-4 py-3 text-right font-semibold">Ações</th> : null}
             </tr>
           </thead>
@@ -172,6 +189,21 @@ export function RoomsPage() {
                 <td className="px-4 py-3">{room.floor}</td>
                 <td className="px-4 py-3">{room.capacity}</td>
                 <td className="px-4 py-3">{room.status}</td>
+                {isAdmin ? (
+                  <td className="px-4 py-3">
+                    {room.temPlaca ? (
+                      <span className="inline-flex items-center gap-1.5 text-campus-emerald">
+                        <span className="w-2 h-2 rounded-full bg-campus-emerald"></span>
+                        Sim
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-campus-rose">
+                        <span className="w-2 h-2 rounded-full bg-campus-rose"></span>
+                        Não
+                      </span>
+                    )}
+                  </td>
+                ) : null}
                 {canManage ? (
                   <td className="px-4 py-3">
                     <TableActions>

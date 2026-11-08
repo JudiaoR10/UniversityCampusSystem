@@ -67,6 +67,7 @@ export type RoomDto = {
   floor: number;
   status: "AVAILABLE" | "OCCUPIED" | "MAINTENANCE" | "RESERVED";
   building: { id: string; code: string; name: string };
+  temPlaca: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -84,6 +85,23 @@ export type BuildingDto = {
   updatedAt: string;
 };
 
+export type POIDto = {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  tipo: string;
+  edificioId: string | null;
+  edificio: { id: string; code: string; name: string } | null;
+  sala_codigo: string | null;
+  sala: { id: string; code: string; name: string; status: string } | null;
+  piso: number | null;
+  mapX: number;
+  mapY: number;
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type LaboratoryDto = {
   id: string;
   code: string;
@@ -91,6 +109,8 @@ export type LaboratoryDto = {
   description: string | null;
   buildingId: string;
   building: { id: string; code: string; name: string };
+  sala_codigo: string | null;
+  sala: { id: string; code: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -884,6 +904,14 @@ export const campusModules: CampusModule[] = [
     label: "Salas",
     path: "/rooms",
     description: "Salas e disponibilidade.",
+    status: "available",
+    groupHint: "Grupo Infraestrutura",
+  },
+  {
+    key: "pois",
+    label: "Pontos de Interesse",
+    path: "/pois",
+    description: "Cadastro de pontos de interesse do campus.",
     status: "available",
     groupHint: "Grupo Infraestrutura",
   },

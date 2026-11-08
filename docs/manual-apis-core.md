@@ -142,6 +142,11 @@ Detalhe: [api-conventions.md](./api-conventions.md).
 | POST | `/equipment` | Sim | ADMIN, COORDINATOR, TECHNICIAN | Criar equipamento |
 | PATCH | `/equipment/:id` | Sim | ADMIN, COORDINATOR, TECHNICIAN | Actualizar equipamento |
 | DELETE | `/equipment/:id` | Sim | ADMIN, COORDINATOR, TECHNICIAN | Eliminar equipamento |
+| GET | `/pois` | Sim | Qualquer | Listar pontos de interesse |
+| GET | `/pois/:id` | Sim | Qualquer | Obter ponto de interesse |
+| POST | `/pois` | Sim | ADMIN, COORDINATOR, TECHNICIAN | Criar ponto de interesse |
+| PATCH | `/pois/:id` | Sim | ADMIN, COORDINATOR, TECHNICIAN | Actualizar ponto de interesse |
+| DELETE | `/pois/:id` | Sim | ADMIN, COORDINATOR, TECHNICIAN | Eliminar ponto de interesse |
 
 ### 3.5 Ocorrências
 
@@ -1424,6 +1429,7 @@ Marcar ao validar o Core:
 | `/audit-events` | `modules/audit/http/auditRouter.ts` |
 | `/devices`, `/sensors/:id/readings`, `/alerts` | `modules/devices/http/devicesRouter.ts` |
 | Criação de dispositivos | `modules/devices/application/deviceService.ts` |
+| `/pois` | `modules/poi/http/poiRouter.ts` |
 | `/parking/*` | `modules/parking/http/parkingRouter.ts` |
 | `/departments`, `/courses`, `/subjects` | `modules/academic/http/academicRouter.ts` |
 | `/financial/*` | `modules/financial/http/financialRouter.ts` |

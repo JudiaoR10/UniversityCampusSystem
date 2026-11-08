@@ -13,6 +13,8 @@ function mapLaboratory(l: {
   description: string | null;
   buildingId: string;
   building: { id: string; code: string; name: string };
+  sala_codigo: string | null;
+  sala: { id: string; code: string; name: string } | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -23,6 +25,8 @@ function mapLaboratory(l: {
     description: l.description,
     buildingId: l.buildingId,
     building: l.building,
+    sala_codigo: l.sala_codigo,
+    sala: l.sala,
     createdAt: l.createdAt.toISOString(),
     updatedAt: l.updatedAt.toISOString(),
   };
@@ -31,7 +35,10 @@ function mapLaboratory(l: {
 export async function listLaboratories() {
   const labs = await prisma.laboratory.findMany({
     orderBy: { code: 'asc' },
-    include: { building: { select: { id: true, code: true, name: true } } },
+    include: {
+      building: { select: { id: true, code: true, name: true } },
+      sala: { select: { id: true, code: true, name: true } },
+    },
   });
   return labs.map(mapLaboratory);
 }
@@ -39,7 +46,10 @@ export async function listLaboratories() {
 export async function getLaboratory(id: string) {
   const lab = await prisma.laboratory.findUnique({
     where: { id },
-    include: { building: { select: { id: true, code: true, name: true } } },
+    include: {
+      building: { select: { id: true, code: true, name: true } },
+      sala: { select: { id: true, code: true, name: true } },
+    },
   });
   if (!lab) throw notFound('LABORATORY_NOT_FOUND', 'Laboratório não encontrado');
   return mapLaboratory(lab);
@@ -49,6 +59,11 @@ export async function createLaboratory(input: CreateLaboratoryInput, actorId: st
   const building = await prisma.building.findUnique({ where: { id: input.buildingId } });
   if (!building) throw notFound('BUILDING_NOT_FOUND', 'Edifício não encontrado');
 
+  if (input.sala_codigo) {
+    const room = await prisma.room.findUnique({ where: { code: input.sala_codigo } });
+    if (!room) throw notFound('ROOM_NOT_FOUND', 'Sala não encontrada');
+  }
+
   try {
     const lab = await prisma.laboratory.create({
       data: {
@@ -56,8 +71,12 @@ export async function createLaboratory(input: CreateLaboratoryInput, actorId: st
         name: input.name,
         description: input.description ?? null,
         buildingId: input.buildingId,
+        sala_codigo: input.sala_codigo ?? null,
       },
-      include: { building: { select: { id: true, code: true, name: true } } },
+      include: {
+        building: { select: { id: true, code: true, name: true } },
+        sala: { select: { id: true, code: true, name: true } },
+      },
     });
 
     await audit({
@@ -79,6 +98,11 @@ export async function createLaboratory(input: CreateLaboratoryInput, actorId: st
 }
 
 export async function updateLaboratory(id: string, input: Partial<CreateLaboratoryInput>, actorId: string, correlationId: string) {
+  if (input.sala_codigo) {
+    const room = await prisma.room.findUnique({ where: { code: input.sala_codigo } });
+    if (!room) throw notFound('ROOM_NOT_FOUND', 'Sala não encontrada');
+  }
+
   try {
     const lab = await prisma.laboratory.update({
       where: { id },
@@ -87,8 +111,12 @@ export async function updateLaboratory(id: string, input: Partial<CreateLaborato
         name: input.name,
         description: input.description ?? null,
         buildingId: input.buildingId,
+        sala_codigo: input.sala_codigo,
       },
-      include: { building: { select: { id: true, code: true, name: true } } },
+      include: {
+        building: { select: { id: true, code: true, name: true } },
+        sala: { select: { id: true, code: true, name: true } },
+      },
     });
 
     await audit({

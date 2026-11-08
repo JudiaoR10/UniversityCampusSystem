@@ -1429,6 +1429,7 @@ Marcar ao validar o Core:
 | `/audit-events` | `modules/audit/http/auditRouter.ts` |
 | `/devices`, `/sensors/:id/readings`, `/alerts` | `modules/devices/http/devicesRouter.ts` |
 | Criação de dispositivos | `modules/devices/application/deviceService.ts` |
+| `/pois` | `modules/poi/http/poiRouter.ts` |
 | `/parking/*` | `modules/parking/http/parkingRouter.ts` |
 | `/departments`, `/courses`, `/subjects` | `modules/academic/http/academicRouter.ts` |
 | `/financial/*` | `modules/financial/http/financialRouter.ts` |

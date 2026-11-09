@@ -91,7 +91,7 @@
 | --- | --- | --- | --- | --- | --- |
 | financial | Gestão financeira | `/financial` | **available** | Grupo Financeiro | `feature/grupo-financeiro-financial-integracao` |
 
-**Modelos Prisma:** `Debt`, `Payment`, `FinancialStatus`, `AnalysisRequest`, `FinancialPolicy`, `FinancialNotification`, `TeacherSalary`.
+**Modelos Prisma:** `Debt`, `Payment`, `FinancialStatus`, `AnalysisRequest`, `FinancialPolicy`, `FinancialNotification`, `ExternalEmployee`, `EmployeeCompensation`, `EmployeeSalary`, `SalaryChangeRequest`, `CourseTuition`.
 
 ---
 

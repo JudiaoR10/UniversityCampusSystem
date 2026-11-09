@@ -270,6 +270,7 @@ function StaffAssessments() {
     setNotice(null);
     setFormError(null);
     setEditingId(assessment.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setForm({
       title: assessment.title,
       subjectId: assessment.subject?.id ?? '',

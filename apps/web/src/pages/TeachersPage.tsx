@@ -8,6 +8,8 @@ import { EmptyState, StatusPill } from '../components/ui';
 import { SelectField } from '../components/SelectField';
 import { DeleteAction, EditAction, TableActions } from '../components/ActionButtons';
 
+const PAGE_SIZE = 20;
+
 const statusLabel: Record<TeacherProfileDto['status'], string> = {
   ACTIVE: 'Activo',
   ON_LEAVE: 'Em licença',
@@ -26,6 +28,7 @@ export function TeachersPage() {
   const [teachers, setTeachers] = useState<TeacherProfileDto[]>([]);
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
   const [alert, setAlert] = useState<AlertState | null>(null);
   const [own, setOwn] = useState<TeacherProfileDto | null>(null);
   const [phone, setPhone] = useState('');
@@ -109,6 +112,7 @@ export function TeachersPage() {
       status: teacher.status,
     });
     setAlert(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function submit(event: FormEvent) {
@@ -132,6 +136,8 @@ export function TeachersPage() {
     try {
       if (editingId) {
         await api.teachers.update(editingId, {
+          fullName: form.fullName,
+          employeeCode: form.employeeCode,
           departmentId: form.departmentId,
           title: form.title || undefined,
           phone: form.phone || null,
@@ -207,6 +213,10 @@ export function TeachersPage() {
     }
   }
 
+  const totalPages = Math.max(1, Math.ceil(teachers.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageTeachers = teachers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   return (
     <div className="space-y-6">
       <PageIntro
@@ -261,9 +271,9 @@ export function TeachersPage() {
       ) : null}
 
       {isAdmin ? (
-        <form onSubmit={submit} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+        <form onSubmit={submit} className={`surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4 ${editingId ? 'ring-2 ring-campus-accent/50 shadow-md' : ''}`}>
           <div className="md:col-span-2 xl:col-span-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="section-title">{editingId ? 'Editar perfil de docente' : 'Novo perfil de docente'}</h2>
+            <h2 className="section-title">{editingId ? `Editar perfil de docente — ${form.fullName || form.employeeCode}` : 'Novo perfil de docente'}</h2>
             {editingId ? (
               <button type="button" className="btn-ghost" onClick={resetForm}>
                 Cancelar edição
@@ -289,6 +299,8 @@ export function TeachersPage() {
             onChange={(event) => setForm({ ...form, password: event.target.value })}
             required
           />
+            </>
+          )}
           <input
             className="field-input !mt-0"
             placeholder="Nome completo"
@@ -296,15 +308,12 @@ export function TeachersPage() {
             onChange={(event) => setForm({ ...form, fullName: event.target.value })}
             required
           />
-            </>
-          )}
           <input
             className="field-input !mt-0"
             placeholder="Código de docente"
             value={form.employeeCode}
             onChange={(event) => setForm({ ...form, employeeCode: event.target.value })}
-            readOnly={editingId !== null}
-            title={editingId ? 'O código de docente não pode ser alterado.' : undefined}
+            title={editingId ? 'Código de docente' : undefined}
             required
           />
           <SelectField
@@ -356,6 +365,7 @@ export function TeachersPage() {
       ) : teachers.length === 0 ? (
         <EmptyState title="Ainda não há docentes" description="Crie o primeiro perfil para o ver neste directório." />
       ) : (
+        <>
         <div className="table-scroll surface">
           <table className="min-w-[720px] w-full text-left text-sm">
             <thead className="bg-campus-mist">
@@ -369,7 +379,7 @@ export function TeachersPage() {
               </tr>
             </thead>
             <tbody>
-              {teachers.map((teacher) => (
+              {pageTeachers.map((teacher) => (
                 <tr key={teacher.id} className="border-t border-campus-line/70">
                   <td className="px-4 py-3 font-mono text-xs">{teacher.employeeCode}</td>
                   <td className="px-4 py-3">{teacher.user.fullName}</td>
@@ -393,6 +403,33 @@ export function TeachersPage() {
             </tbody>
           </table>
         </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-secondary !px-3 !py-1.5 text-xs"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={currentPage <= 1}
+            >
+              Anterior
+            </button>
+            <span className="text-xs text-campus-deep/70">
+              Página {currentPage} de {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn-secondary !px-3 !py-1.5 text-xs"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Seguinte
+            </button>
+          </div>
+          <p className="text-xs text-campus-deep/70">
+            {pageTeachers.length} de {teachers.length} docentes
+          </p>
+        </div>
+        </>
       )}
     </div>
   );

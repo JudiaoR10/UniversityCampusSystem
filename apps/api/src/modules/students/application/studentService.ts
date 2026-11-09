@@ -189,7 +189,15 @@ export async function update(id: string, input: UpdateStudentProfileInput, ctx: 
     if (!course) throw notFound('COURSE_NOT_FOUND', 'Curso não encontrado');
   }
 
-  const row = await studentRepository.updateStudent(id, input);
+  if (input.studentNumber && input.studentNumber !== existing.studentNumber) {
+    const duplicate = await studentRepository.findStudentByStudentNumber(input.studentNumber);
+    if (duplicate && duplicate.id !== id) {
+      throw conflict('STUDENT_NUMBER_EXISTS', `Já existe um estudante com o número '${input.studentNumber}'`);
+    }
+  }
+
+  const { fullName, ...profileData } = input;
+  const row = await studentRepository.updateStudentWithUser(id, existing.userId, profileData, fullName);
 
   await audit({
     action: 'STUDENT_PROFILE_UPDATED',
@@ -227,6 +235,9 @@ export async function remove(id: string, ctx: AuditContext) {
   try {
     removed = await studentRepository.deleteStudentProfile(id);
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      throw conflict('STUDENT_DELETE_CONFLICT', 'O perfil foi alterado em simultâneo; tente novamente');
+    }
     if (isForeignKeyViolation(error)) {
       throw conflict(
         'STUDENT_HAS_DEPENDENCIES',
@@ -238,8 +249,8 @@ export async function remove(id: string, ctx: AuditContext) {
 
   if (!removed) {
     throw conflict(
-      'STUDENT_HAS_SUBJECT_ENROLMENTS',
-      'Não é possível remover um estudante com inscrições activas em disciplinas — cancele ou elimine-as em Inscrições antes de remover o perfil',
+      'STUDENT_HAS_ENROLMENTS',
+      'Não é possível remover um estudante com matrículas, inscrições ou outros registos académicos associados',
     );
   }
 

@@ -199,6 +199,7 @@ export function DevicesPage() {
                     label="Editar tópico e sala"
                     onClick={() => {
                       setEditingId(device.id);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
                       setForm({
                         code: device.code,
                         name: device.name,

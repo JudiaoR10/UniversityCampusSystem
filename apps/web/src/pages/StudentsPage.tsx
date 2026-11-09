@@ -8,6 +8,8 @@ import { EmptyState, StatusPill } from '../components/ui';
 import { SelectField } from '../components/SelectField';
 import { DeleteAction, EditAction, TableActions } from '../components/ActionButtons';
 
+const PAGE_SIZE = 20;
+
 const statusLabel: Record<StudentProfileDto['status'], string> = {
   ACTIVE: 'Activo',
   SUSPENDED: 'Suspenso',
@@ -144,6 +146,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
   const [students, setStudents] = useState<StudentProfileDto[]>([]);
   const [courses, setCourses] = useState<CourseDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
   const [alert, setAlert] = useState<AlertState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { confirm, dialog } = useConfirm();
@@ -206,6 +209,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
       status: student.status,
     });
     setAlert(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function submit(event: FormEvent) {
@@ -229,6 +233,8 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
     try {
       if (editingId) {
         await api.students.update(editingId, {
+          fullName: form.fullName,
+          studentNumber: form.studentNumber,
           courseId: form.courseId,
           yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : null,
           phone: form.phone || null,
@@ -282,6 +288,10 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
     }
   }
 
+  const totalPages = Math.max(1, Math.ceil(students.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStudents = students.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   return (
     <div className="space-y-6">
       <PageIntro
@@ -291,9 +301,9 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
       />
 
       {canManage ? (
-        <form onSubmit={submit} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+        <form onSubmit={submit} className={`surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4 ${editingId ? 'ring-2 ring-campus-accent/50 shadow-md' : ''}`}>
           <div className="md:col-span-2 xl:col-span-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="section-title">{editingId ? 'Editar perfil de estudante' : 'Novo perfil de estudante'}</h2>
+            <h2 className="section-title">{editingId ? `Editar perfil de estudante — ${form.fullName || form.studentNumber}` : 'Novo perfil de estudante'}</h2>
             {editingId ? (
               <button type="button" className="btn-ghost" onClick={resetForm}>
                 Cancelar edição
@@ -319,6 +329,8 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
             onChange={(event) => setForm({ ...form, password: event.target.value })}
             required
           />
+            </>
+          )}
           <input
             className="field-input !mt-0"
             placeholder="Nome completo"
@@ -326,15 +338,12 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
             onChange={(event) => setForm({ ...form, fullName: event.target.value })}
             required
           />
-            </>
-          )}
           <input
             className="field-input !mt-0"
             placeholder="Nº de estudante"
             value={form.studentNumber}
             onChange={(event) => setForm({ ...form, studentNumber: event.target.value })}
-            readOnly={editingId !== null}
-            title={editingId ? 'O número de estudante não pode ser alterado.' : undefined}
+            title={editingId ? 'Nº de estudante' : undefined}
             required
           />
           <SelectField
@@ -386,6 +395,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
       ) : students.length === 0 ? (
         <EmptyState title="Ainda não há estudantes" description="Crie o primeiro perfil para o ver neste directório." />
       ) : (
+        <>
         <div className="table-scroll surface">
           <table className="min-w-[720px] w-full text-left text-sm">
             <thead className="bg-campus-mist">
@@ -399,7 +409,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
               </tr>
             </thead>
             <tbody>
-              {students.map((student) => (
+              {pageStudents.map((student) => (
                 <tr key={student.id} className="border-t border-campus-line/70">
                   <td className="px-4 py-3 font-mono text-xs">{student.studentNumber}</td>
                   <td className="px-4 py-3">{student.user.fullName}</td>
@@ -423,6 +433,33 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
             </tbody>
           </table>
         </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-secondary !px-3 !py-1.5 text-xs"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={currentPage <= 1}
+            >
+              Anterior
+            </button>
+            <span className="text-xs text-campus-deep/70">
+              Página {currentPage} de {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn-secondary !px-3 !py-1.5 text-xs"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Seguinte
+            </button>
+          </div>
+          <p className="text-xs text-campus-deep/70">
+            {pageStudents.length} de {students.length} estudantes
+          </p>
+        </div>
+        </>
       )}
     </div>
   );

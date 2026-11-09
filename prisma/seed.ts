@@ -290,6 +290,17 @@ async function main() {
     },
   });
 
+  await prisma.externalEmployee.upsert({
+    where: { employeeCode: 'LIM-001' },
+    update: { fullName: 'Ana Serviços', category: 'CLEANER', jobTitle: 'Agente de limpeza', isActive: true },
+    create: { employeeCode: 'LIM-001', fullName: 'Ana Serviços', category: 'CLEANER', jobTitle: 'Agente de limpeza' },
+  });
+  await prisma.externalEmployee.upsert({
+    where: { employeeCode: 'GRD-001' },
+    update: { fullName: 'Carlos Segurança', category: 'GUARD', jobTitle: 'Guarda', isActive: true },
+    create: { employeeCode: 'GRD-001', fullName: 'Carlos Segurança', category: 'GUARD', jobTitle: 'Guarda' },
+  });
+
   const studentA = await prisma.studentProfile.findUnique({ where: { userId: studentAId } });
   const studentB = await prisma.studentProfile.findUnique({ where: { userId: studentBId } });
 
@@ -334,13 +345,39 @@ async function main() {
   // As contas usam a palavra-passe de demonstração indicada no fim do seed; a
   // palavra-passe original não é recuperável porque só existe a hash local.
   // ---------------------------------------------------------------------------
-  const estudantesRegistados = [
+  const estudantesRegistados: Array<{
+    studentNumber: string;
+    fullName: string;
+    email: string;
+    yearOfStudy?: number;
+    password?: string;
+  }> = [
     { studentNumber: 'EST-2026-003', fullName: 'Belvina Luisa Ualuto', email: 'belvinaualuto@gmail.com' },
     { studentNumber: 'EST-2026-004', fullName: 'Mirson Maluve', email: 'mirsonmaluve@gmail.com' },
     { studentNumber: 'EST-2026-005', fullName: 'Aura David', email: 'auradavid@gmail.com' },
     { studentNumber: 'EST-2026-006', fullName: 'Alípio Anderson Paco', email: 'alipiopaco@gmail.com' },
     { studentNumber: 'EST-2026-007', fullName: 'Jocar Celio Elias', email: 'jocarcelio@gmail.com' },
     { studentNumber: 'EST-2026-008', fullName: 'Clay José Chidudo', email: 'clayjose@gmail.com' },
+    { studentNumber: 'EST-2026-009', fullName: 'Avelino Mucare Júnior', email: 'avelinojunior@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-010', fullName: 'Albano João Gujamo', email: 'albanogujamo@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-011', fullName: 'Ana Francina Chauque', email: 'anachauque@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-012', fullName: 'Adylan Adriano Cumbane', email: 'adylancumbane@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-013', fullName: 'Alcino Timóteo Sibanda', email: 'alcinosibanda@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-014', fullName: 'Shelton Carlos Ricotso', email: 'sheltonricotso@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-015', fullName: 'Edson Maurício', email: 'edsonmauricio@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-016', fullName: 'Marlon Baptista Muchanga', email: 'marlonmuchanga@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-017', fullName: 'Paula Ubisse', email: 'paulaubisse@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-018', fullName: 'Jaqueline Canaíba', email: 'jaquelinecanaiba@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-019', fullName: 'Paulino Tomé', email: 'paulinotome@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-020', fullName: 'Antônio Elidio Costa', email: 'antoniocosta@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-021', fullName: 'Karen Mahanha', email: 'karenmahanha@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-022', fullName: 'Tiago Manuel Dava', email: 'tiagodava@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-023', fullName: 'Raul Poeira', email: 'raulpoeira@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-024', fullName: 'Kayky Pinto', email: 'kaykypinto@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-025', fullName: 'Emerson Gove', email: 'emersongove@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-026', fullName: 'Darwin Ouana', email: 'darwinouana@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-027', fullName: 'Osório Malloa', email: 'osoriomalloa@gmail.com', yearOfStudy: 2, password: 'smart1234' },
+    { studentNumber: 'EST-2026-028', fullName: 'Shelzia Jessiana Lima Matsinhe', email: 'shelziamatsinhe@gmail.com', yearOfStudy: 2, password: 'smart1234' },
   ];
 
   const docentesRegistados = [
@@ -359,17 +396,20 @@ async function main() {
       create: {
         email: estudante.email,
         fullName: estudante.fullName,
-        passwordHash: await hash('Estudante123!'),
+        passwordHash: await hash(estudante.password ?? 'Estudante123!'),
         roleId: roleMap['STUDENT'],
       },
     });
+
+    const perfilExistente = await prisma.studentProfile.findUnique({ where: { userId: user.id } });
+    if (perfilExistente) continue;
 
     await prisma.studentProfile.create({
       data: {
         userId: user.id,
         studentNumber: estudante.studentNumber,
         courseId: cursoLei.id,
-        yearOfStudy: 3,
+        yearOfStudy: estudante.yearOfStudy ?? 3,
         status: 'ACTIVE',
       },
     });
@@ -704,7 +744,6 @@ async function main() {
     });
   }
 
-  const teacherProfile = await prisma.teacherProfile.findUnique({ where: { userId: teacherId } });
   if (studentA) {
     await prisma.debt.upsert({
       where: { code: 'DEMO-PROP-2026' },
@@ -720,20 +759,23 @@ async function main() {
       },
     });
   }
-  if (teacherProfile) {
-    const month = new Date().toISOString().slice(0, 7);
-    await prisma.teacherSalary.upsert({
-      where: { teacherId_month: { teacherId: teacherProfile.id, month } },
+  const teacherCompensation = await prisma.employeeCompensation.upsert({
+    where: { userId: teacherId },
+    update: {},
+    create: { userId: teacherId, currentAmount: 45000, approvedAt: new Date() },
+  });
+  const month = new Date().toISOString().slice(0, 7);
+  await prisma.employeeSalary.upsert({
+      where: { compensationId_month: { compensationId: teacherCompensation.id, month } },
       update: {},
       create: {
-        teacherId: teacherProfile.id,
+        compensationId: teacherCompensation.id,
         month,
         amount: 45000,
         notes: 'Salário de demonstração',
         status: 'PENDING',
       },
     });
-  }
 
   const dayMs = 24 * 60 * 60 * 1000;
   const liveStarts = new Date(Date.now() - 15 * 60 * 1000);
@@ -790,6 +832,7 @@ async function main() {
 
   console.log('Seed concluído.');
   console.log('Credenciais de demonstração (apenas desenvolvimento):');
+  console.log('  financas@smartcampus.demo / Finance123!');
   console.log('  admin@smartcampus.demo / Admin123!');
   console.log('  coordenador@smartcampus.demo / Coord123!');
   console.log('  docente@smartcampus.demo / Docente123!');
@@ -797,7 +840,7 @@ async function main() {
   console.log('  tecnico@smartcampus.demo / Tecnico123!');
   console.log('  estudante@smartcampus.demo / Estudante123!');
   console.log('  estudante2@smartcampus.demo / Estudante123!');
-  console.log('  Perfis partilhados: EST-2026-003..008 / Estudante123! · DOC-102..104 / Docente123!');
+  console.log('  Perfis partilhados: EST-2026-003..008 / Estudante123! · EST-2026-009..028 / smart1234 · DOC-102..104 / Docente123!');
 }
 
 main()

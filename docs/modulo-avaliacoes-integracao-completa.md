@@ -2,15 +2,15 @@
 
 > Documentação real e detalhada da implementação. Localização, estrutura, código, rotas e fluxo do módulo de avaliações do Smart Campus.
 
-**Data:** 2026-10-20  
-**Branch/Estado:** Implementação completa (Sprint Dispensa/Exame/Recorrência)  
+**Data:** 2026-10-20
+**Branch/Estado:** Implementação completa (Sprint Dispensa/Exame/Recorrência)
 **Testes:** API 144/144 | Web 30/30 | TypeScript limpo
 
 ---
 
 ## 1. Visão Geral
 
-O módulo de avaliações gere todo o ciclo académico: avaliações contínuas, exame normal, exame de recorrência, cálculo automático da nota final, máquina de estados e publicação de resultados. 
+O módulo de avaliações gere todo o ciclo académico: avaliações contínuas, exame normal, exame de recorrência, cálculo automático da nota final, máquina de estados e publicação de resultados.
 
 ### Princípios fundamentais
 
@@ -81,7 +81,7 @@ model Subject {
 
 ### `Assessment`
 
-Suporta tipos `TEST`, `ASSIGNMENT`, `EXAM`, `RECURRENCE`, `OTHER`. 
+Suporta tipos `TEST`, `ASSIGNMENT`, `EXAM`, `RECURRENCE`, `OTHER`.
 - Avaliações `EXAM`/`RECURRENCE` são excluídas do cálculo da média de admissão.
 - A recorrência **substitui** o exame normal no cálculo final.
 
@@ -166,7 +166,7 @@ Função pura e testável.
 
 5. **Calcular média final**
    ```typescript
-   finalPercent = admissionPercent !== null 
+   finalPercent = admissionPercent !== null
      ? (effectiveExamPercent !== null ? (admissionPercent + effectiveExamPercent) / 2 : admissionPercent)
      : null
    ```
@@ -180,7 +180,7 @@ Função pura e testável.
    ```typescript
    // Estado calculado primeiro
    const { state, reason } = computeAcademicState({...});
-   
+
    // Enquanto aguarda recorrência OU em revisão, NÃO mostrar nota final
    const finalGrade = (state === 'ADMITIDO_RECORRENCIA' || state === 'RECORRENCIA_EM_REVISAO')
      ? null
@@ -188,7 +188,7 @@ Função pura e testável.
        ? (finalPercent !== null ? Math.round(finalPercent * 0.2) : null)
        : null;
    ```
-   
+
    **Importante:** A nota `(A+E)/2` é calculada em `finalPercent` mas **não é exposta** enquanto em `ADMITIDO_RECORRENCIA`. Só aparece após lançamento da nota de recorrência.
 
 8. **Devolver resultado completo**
@@ -242,7 +242,7 @@ Avaliações contínuas (`TEST`, `ASSIGNMENT`, `OTHER`) **nunca são bloqueadas*
 
 ## 7. Rotas HTTP
 
-**Localização:** `apps/api/src/modules/assessments/http/assessmentsRouter.ts`  
+**Localização:** `apps/api/src/modules/assessments/http/assessmentsRouter.ts`
 **Prefixo:** `/api/v1` (montado em `app.ts`)
 
 ### Rotas existentes (mantidas)
@@ -386,7 +386,7 @@ Devolve visão completa para gestão docente.
 ## 10. Notas Finais do Estudante
 
 ### `GET /my/final-grades` (estudante autenticado)
-**Handler:** `assessmentsRouter.ts:177-184`  
+**Handler:** `assessmentsRouter.ts:177-184`
 **Service:** `listMyFinalGrades(userId)` → `getFinalGrades(profile.id, actor)`
 
 ### `getFinalGrades(studentId, actor)`
@@ -552,7 +552,7 @@ export function stateBadgeClass(state: AcademicState | null): string {
 | `INVALID_RECURRENCE_MIN` | 400 | Valor inválido para mínimo de recorrência |
 | `VALIDATION_ERROR` | 400 | Erro de validação Zod |
 
-Formato de erro: `{ code, message, details, correlationId }`  
+Formato de erro: `{ code, message, details, correlationId }`
 Formato de sucesso: `{ data, meta }`
 
 ---
@@ -678,5 +678,5 @@ npm run build -w @smart-campus/web  # OK
 
 ---
 
-**Última atualização:** 2026-10-20  
+**Última atualização:** 2026-10-20
 **Responsável:** Implementação conforme requisitos do sprint

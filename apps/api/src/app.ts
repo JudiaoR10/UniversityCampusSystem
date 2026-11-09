@@ -16,6 +16,7 @@ import { configureRateLimits } from './middleware/rateLimits.js';
 import { authRouter } from './modules/auth/http/authRouter.js';
 import { usersRouter } from './modules/users/http/usersRouter.js';
 import { roomsRouter } from './modules/rooms/http/roomsRouter.js';
+import { poiRouter } from './modules/poi/http/poiRouter.js';
 import { buildingsRouter } from './modules/buildings/http/buildingsRouter.js';
 import { laboratoriesRouter } from './modules/laboratories/http/laboratoriesRouter.js';
 import { equipmentRouter } from './modules/equipment/http/equipmentRouter.js';
@@ -117,6 +118,7 @@ export function createApp() {
   v1.use('/financial', financialRouter);
   v1.use(usersRouter);
   v1.use(roomsRouter);
+  v1.use(poiRouter);
   v1.use(buildingsRouter);
   v1.use(laboratoriesRouter);
   v1.use(equipmentRouter);

@@ -6,9 +6,9 @@ import * as roomService from '../application/roomService.js';
 
 export const roomsRouter = Router();
 
-roomsRouter.get('/rooms', authenticate, async (_req, res, next) => {
+roomsRouter.get('/rooms', authenticate, async (req, res, next) => {
   try {
-    success(res, await roomService.listRooms());
+    success(res, await roomService.listRooms(req.user!.role));
   } catch (err) {
     next(err);
   }
@@ -16,7 +16,7 @@ roomsRouter.get('/rooms', authenticate, async (_req, res, next) => {
 
 roomsRouter.get('/rooms/:id', authenticate, async (req, res, next) => {
   try {
-    success(res, await roomService.getRoom(req.params.id));
+    success(res, await roomService.getRoom(req.params.id, req.user!.role));
   } catch (err) {
     next(err);
   }

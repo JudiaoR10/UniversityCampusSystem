@@ -84,7 +84,8 @@ function Delivery({ id }: { id: string }) {
 }
 
 function DeliveryDetails({ id }: { id: string }) {
-  const { api } = useAuth();
+  const { api, user } = useAuth();
+  const canRetry = user?.role === 'FINANCE';
   const load = useCallback(() => api.financialDelivery(id), [api, id]);
   const result = useFinancialLoad(load);
   const [busy, setBusy] = useState(false);
@@ -102,7 +103,7 @@ function DeliveryDetails({ id }: { id: string }) {
     <LoadState {...result} />
     {error && <p role="alert" className="text-red-700">{error}</p>}
     {delivery && <><p>{labels[delivery.deliveryStatus]} · Tentativas: {delivery.attempts}</p>
-      {['PENDING', 'FAILED'].includes(delivery.deliveryStatus) && <IconActionButton label="Reenviar aviso" disabled={busy} onClick={() => void retry()} />}
+      {canRetry && ['PENDING', 'FAILED'].includes(delivery.deliveryStatus) && <IconActionButton label={busy ? 'A reenviar aviso' : 'Reenviar aviso'} disabled={busy} onClick={() => void retry()} />}
       <p className="text-sm text-campus-deep/75">O estado de envio não confirma a leitura pelo estudante.</p>
     </>}
   </div>;

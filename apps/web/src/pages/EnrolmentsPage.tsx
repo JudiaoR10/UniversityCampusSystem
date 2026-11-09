@@ -23,7 +23,6 @@ const statusLabel: Record<EnrolmentStatus, string> = {
 function messageOf(error: unknown) {
   return error instanceof Error ? error.message : 'Erro inesperado';
 }
-
 export function EnrolmentsPage() {
   const { user, api } = useAuth();
   const isStudent = user?.role === 'STUDENT';
@@ -373,4 +372,3 @@ export function EnrolmentsPage() {
     </div>
   );
 }
-

@@ -38,6 +38,7 @@ export function EquipmentPage() {
 
   function startEdit(item: EquipmentDto) {
     setEditingId(item.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setForm({
       code: item.code,
       name: item.name,

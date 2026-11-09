@@ -3,16 +3,14 @@ import { prisma } from '../../../lib/prisma.js';
 import { getMe } from '../../auth/application/authService.js';
 import { getAdminStatus } from '../../admin/application/adminService.js';
 
-export async function getDashboard(userId: string) {
-  const viewer = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: { select: { code: true } } },
-  });
-  const canSeeAlerts = viewer?.role.code !== 'STUDENT';
+export async function getDashboard(userId: string, actorRole?: string) {
+  const isAdmin = actorRole === 'ADMIN';
+  const roomFilter = isAdmin ? {} : { temPlaca: true };
+  const canSeeAlerts = actorRole !== 'STUDENT';
 
   const [currentUser, roomsCount, openIncidents, devicesCount, recentAlerts, recentActivity, core] = await Promise.all([
     getMe(userId),
-    prisma.room.count(),
+    prisma.room.count({ where: roomFilter }),
     prisma.incident.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
     prisma.device.count(),
     canSeeAlerts

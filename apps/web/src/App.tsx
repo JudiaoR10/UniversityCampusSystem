@@ -10,6 +10,7 @@ import { LaboratoriesPage } from './pages/LaboratoriesPage';
 import { EquipmentPage } from './pages/EquipmentPage';
 import { IncidentsPage } from './pages/IncidentsPage';
 import { BuildingsPage } from './pages/BuildingsPage';
+import { POIPage } from './pages/POIPage';
 import { DevicesPage } from './pages/DevicesPage';
 import { IotHubPage } from './pages/IotHubPage';
 import { ParkingPage } from './pages/ParkingPage';
@@ -104,6 +105,7 @@ export function App() {
         <Route path="campus" element={<CampusHubPage />} />
         <Route path="campus/twin" element={<CampusTwinPage />} />
         <Route path="buildings" element={<BuildingsPage />} />
+        <Route path="pois" element={<POIPage />} />
         <Route path="rooms" element={<RoomsPage />} />
         <Route path="laboratories" element={<LaboratoriesPage />} />
         <Route path="equipment" element={<EquipmentPage />} />

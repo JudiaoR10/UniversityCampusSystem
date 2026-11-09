@@ -142,6 +142,15 @@ describe('Financeiro integrado no Core oficial', () => {
     for (const token of [admin, finance, student]) expect((await request(app).get(api + '/debts').set('Authorization', bearer(token))).status).toBe(200);
     expect((await request(app).get(api + '/debts').set('Authorization', bearer(teacher))).status).toBe(403);
   });
+  it('ADMIN consulta, mas as operações financeiras pertencem a FINANCE', async () => {
+    const debt = await createDebt();
+    const payment = { debtId: debt.id, amountPaid: 100, paymentMethod: 'BANK_TRANSFER', referenceCode: randomUUID() };
+    expect((await request(app).post(api + '/debts').set('Authorization', bearer(admin)).send(debtInput())).status).toBe(403);
+    expect((await request(app).post(api + '/payments').set('Authorization', bearer(admin)).send(payment)).status).toBe(403);
+    const created = await request(app).post(api + '/analysis-requests').set('Authorization', bearer(student)).send({ debtId: debt.id, reason: 'Pedido para validar separação de responsabilidades.' });
+    expect(created.status).toBe(201);
+    expect((await request(app).patch(`${api}/analysis-requests/${created.body.data.id}`).set('Authorization', bearer(admin)).send({ decision: 'IMPROCEDENTE', resolutionNotes: 'Consulta administrativa apenas.' })).status).toBe(403);
+  });
   it.each(['detail', 'list', 'status', 'history', 'notifications'])('BOLA leitura: %s', async resource => {
     const paths: Record<string, string> = { detail: `/debts/${otherDebtId}`, list: `/debts?studentId=${otherId}`, status: `/students/${otherId}/status`, history: `/students/${otherId}/history`, notifications: `/students/${otherId}/notifications` };
     const res = await request(app).get(api + paths[resource]).set('Authorization', bearer(student));
@@ -195,6 +204,8 @@ describe('Financeiro integrado no Core oficial', () => {
     for (const suffix of ['status', 'history', 'notifications']) expect((await request(app).get(`${api}/students/${studentId}/${suffix}`).set('Authorization', bearer(student))).status).toBe(200);
     const notification = await prisma.financialNotification.findFirstOrThrow({ where: { studentId } });
     expect((await request(app).get(`${api}/notifications/${notification.id}/delivery`).set('Authorization', bearer(finance))).status).toBe(200);
+    expect((await request(app).get(`${api}/notifications/${notification.id}/delivery`).set('Authorization', bearer(admin))).status).toBe(200);
+    expect((await request(app).post(`${api}/notifications/${notification.id}/retry`).set('Authorization', bearer(admin)).send({})).status).toBe(403);
     expect((await request(app).post(`${api}/notifications/${notification.id}/retry`).set('Authorization', bearer(finance)).send({})).status).toBe(503);
   });
   it('falha da auditoria reverte a criação da dívida na mesma transacção', async () => {

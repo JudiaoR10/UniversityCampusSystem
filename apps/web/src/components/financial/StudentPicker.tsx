@@ -1,7 +1,7 @@
 import { useCallback, useState, type FormEvent } from 'react';
 import type { StudentIdentitySummaryDto } from '@smart-campus/shared-types';
 import { useAuth } from '../../lib/auth';
-import { LoadState, Pagination, useFinancialLoad } from './shared';
+import { BusyLabel, LoadState, Pagination, useFinancialLoad } from './shared';
 
 export function StudentPicker({ selected, onSelect }: { selected: StudentIdentitySummaryDto | null; onSelect: (student: StudentIdentitySummaryDto | null) => void }) {
   const { api } = useAuth();
@@ -24,7 +24,7 @@ export function StudentPicker({ selected, onSelect }: { selected: StudentIdentit
     {open && <>
       <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <label className="flex-1 text-sm font-medium">Nome ou matrícula<input name="search" type="search" minLength={2} maxLength={100} className="field-input" /></label>
-        <button className="btn-secondary" disabled={result.loading}>Pesquisar</button>
+        <button className="btn-secondary" disabled={result.loading}><BusyLabel busy={result.loading} busyText="A pesquisar…">Pesquisar</BusyLabel></button>
       </form>
       <LoadState {...result} />
       {result.data && <>

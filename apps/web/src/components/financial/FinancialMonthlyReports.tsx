@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { MonthlyPaymentReportDto } from '@smart-campus/shared-types';
 import { useAuth } from '../../lib/auth';
-import { LoadState, money, useFinancialLoad } from './shared';
+import { BusyLabel, LoadState, money, useFinancialLoad } from './shared';
 import { SelectField } from '../SelectField';
 
 export const currentFinancialMonth = () => {
@@ -19,7 +19,7 @@ export function FinancialMonthlyReports() {
     <h2 className="font-display text-xl font-semibold">Relatórios mensais</h2>
     <p className="text-sm text-campus-deep/75">Pagamentos efectivamente registados no mês, pela hora de Moçambique. Finance e Admin podem consultar e imprimir.</p>
     <div className="flex flex-wrap gap-4">
-      <div className="min-w-[16rem]"><label htmlFor="monthly-report-kind" className="text-sm font-medium">Relatório</label><SelectField id="monthly-report-kind" value={kind} onChange={(value) => setKind(value as 'payments' | 'salaries')} options={[{ value: 'payments', label: 'Pagamentos dos estudantes' }, { value: 'salaries', label: 'Salários pagos aos docentes' }]} /></div>
+      <div className="min-w-[16rem]"><label htmlFor="monthly-report-kind" className="text-sm font-medium">Relatório</label><SelectField id="monthly-report-kind" value={kind} onChange={(value) => setKind(value as 'payments' | 'salaries')} options={[{ value: 'payments', label: 'Pagamentos dos estudantes' }, { value: 'salaries', label: 'Salários pagos aos funcionários' }]} /></div>
       <label className="text-sm font-medium">Mês do pagamento<input className="field-input" type="month" min="2000-01" max="2100-12" required value={month} onChange={event => setMonth(event.target.value)} /></label>
     </div>
     {/^(20\d{2}|2100)-(0[1-9]|1[0-2])$/.test(month) ? <MonthlyReport key={`${kind}:${month}`} kind={kind} month={month} /> : <p>Seleccione um mês válido.</p>}
@@ -47,7 +47,7 @@ function MonthlyReport({ kind, month }: { kind: 'payments' | 'salaries'; month: 
   return <>
     <LoadState {...result} />
     {report && <>
-      <div className="flex flex-wrap gap-3"><button className="btn-primary" onClick={print}>Imprimir relatório mensal</button><button className="btn-secondary" onClick={result.reload}>Actualizar relatório</button></div>
+      <div className="flex flex-wrap gap-3"><button className="btn-primary" onClick={print}>Imprimir relatório mensal</button><button className="btn-secondary" disabled={result.loading} onClick={result.reload}><BusyLabel busy={result.loading} busyText="A actualizar…">Actualizar relatório</BusyLabel></button></div>
       <div className="surface space-y-4 p-4 sm:p-5"><ReportContent report={report} /></div>
       {createPortal(<div className="financial-print-view" ref={printRef} aria-hidden="true"><ReportContent report={report} /></div>, document.body)}
     </>}
@@ -57,15 +57,15 @@ function MonthlyReport({ kind, month }: { kind: 'payments' | 'salaries'; month: 
 function ReportContent({ report }: { report: MonthlyPaymentReportDto }) {
   return <>
     <p className="financial-document-brand">Smart Campus · Tesouraria</p>
-    <h3 className="font-display text-xl font-semibold">Smart Campus — {report.kind === 'payments' ? 'Pagamentos dos estudantes' : 'Salários pagos aos docentes'}</h3>
+    <h3 className="font-display text-xl font-semibold">Smart Campus — {report.kind === 'payments' ? 'Pagamentos dos estudantes' : 'Salários pagos aos funcionários'}</h3>
     <p>Mês do pagamento: <strong>{report.month}</strong> · Moçambique (UTC+02:00)</p>
     <p>{report.totalPayments} pagamento(s) · Total: <strong>{money(report.totalAmount)}</strong></p>
     <p className="text-sm">Emitido em {reportDate(report.generatedAt)}</p>
     {!report.rows.length ? <p>Não existem pagamentos registados neste mês.</p> : <div className="table-scroll"><table className="w-full min-w-[900px] text-left text-sm">
       <caption className="sr-only">Movimentos do mês {report.month}</caption>
-      <thead><tr>{['Data', report.kind === 'payments' ? 'Estudante / matrícula' : 'Docente / código', 'Descrição', 'Método', 'Referência', 'Valor (MZN)'].map(label => <th className="px-3 py-3" key={label} scope="col">{label}</th>)}</tr></thead>
+      <thead><tr>{['Data', report.kind === 'payments' ? 'Estudante / matrícula' : 'Funcionário / código', 'Descrição', 'Método', 'Referência', 'Valor (MZN)'].map(label => <th className="px-3 py-3" key={label} scope="col">{label}</th>)}</tr></thead>
       <tbody>{report.rows.map(row => <tr className="border-t border-campus-line" key={row.id}>
-        <td className="px-3 py-3">{reportDate(row.paidAt)}</td><td className="px-3 py-3">{row.fullName}<br />{row.identityCode ?? 'Sem matrícula'}</td>
+        <td className="px-3 py-3">{reportDate(row.paidAt)}</td><td className="px-3 py-3">{row.fullName}<br />{row.identityCode ?? (report.kind === 'payments' ? 'Sem matrícula' : 'Sem código')}</td>
         <td className="px-3 py-3">{row.description}</td><td className="px-3 py-3">{paymentMethods[row.paymentMethod]}</td><td className="break-all px-3 py-3">{row.referenceCode}</td><td className="whitespace-nowrap px-3 py-3 text-right">{row.amount.toFixed(2)}</td>
       </tr>)}</tbody>
       <tfoot><tr><th colSpan={5} className="px-3 py-3 text-right">Total do mês (MZN)</th><td className="px-3 py-3 text-right font-semibold">{report.totalAmount.toFixed(2)}</td></tr></tfoot>

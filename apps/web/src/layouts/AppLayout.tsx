@@ -11,7 +11,7 @@ import { initialsFor, roleLabels } from '../lib/labels';
 const navGroups = [
   { id: 'hoje', label: 'Hoje', keys: ['ops', 'dashboard', 'notifications'] },
   { id: 'pessoas', label: 'Pessoas e aulas', keys: ['academic', 'users', 'students', 'teachers', 'enrolments', 'schedules', 'attendance', 'assessments'] },
-  { id: 'campus', label: 'Campus', keys: ['campus', 'campus-twin', 'rooms', 'buildings', 'parking', 'laboratories', 'equipment'] },
+  { id: 'campus', label: 'Campus', keys: ['campus', 'campus-twin', 'rooms', 'pois', 'buildings', 'parking', 'laboratories', 'equipment'] },
   { id: 'operacoes', label: 'Operações', keys: ['iot', 'devices', 'sensors', 'readings', 'incidents', 'maintenance', 'alerts', 'reports'] },
   { id: 'gestao', label: 'Gestão', keys: ['financial', 'admin', 'audit'] },
 ];

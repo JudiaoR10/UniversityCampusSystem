@@ -124,8 +124,8 @@ export async function updateBuilding(id: string, input: Partial<CreateBuildingIn
        }
        throw err;
       });
-      
-  
+
+
     await audit({
       action: 'BUILDING_DELETE',
       resource: 'Building',
@@ -134,6 +134,6 @@ export async function updateBuilding(id: string, input: Partial<CreateBuildingIn
       correlationId,
       metadata: { code: building.code },
     });
-  
+
     return { id: building.id };
   }

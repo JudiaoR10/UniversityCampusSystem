@@ -2,7 +2,7 @@ import { useCallback, useState, type FormEvent } from 'react';
 import type { FinancialPolicyDto } from '@smart-campus/shared-types';
 import { ApiClientError } from '@smart-campus/api-client';
 import { useAuth } from '../../lib/auth';
-import { errorMessage, LoadState, useFinancialLoad } from './shared';
+import { BusyLabel, errorMessage, LoadState, SuccessFeedback, useFinancialLoad } from './shared';
 
 export function FinancialPolicy({ onChanged }: { onChanged: () => void }) {
   const { api } = useAuth();
@@ -47,13 +47,13 @@ function PolicyForm({ policy, persisted, onChanged }: { policy: Pick<FinancialPo
     finally { setBusy(false); }
   }
   return <form className="grid gap-4 sm:grid-cols-2" onSubmit={submit} onChange={() => setSaved(false)}>
+    <SuccessFeedback message={saved ? 'Políticas guardadas.' : ''} onClose={() => setSaved(false)} />
     {!configured && <p className="sm:col-span-2">A política ainda não foi guardada. Estes são os valores padrão em uso; pode ajustá-los e guardar a primeira configuração.</p>}
     <label className="text-sm font-medium">Dias de tolerância<input className="field-input" name="gracePeriodDays" type="number" min={0} max={60} step={1} required defaultValue={policy.gracePeriodDays} disabled={busy} /></label>
     <label className="text-sm font-medium">Limite de dívida vencida (MZN)<input className="field-input" name="maxDebtAmount" type="number" min={0} max={1000000} step="0.01" required defaultValue={policy.maxDebtAmount} disabled={busy} /></label>
     <label className="flex items-center gap-2 sm:col-span-2"><input name="autoBlockEnabled" type="checkbox" defaultChecked={policy.autoBlockEnabled} disabled={busy} />Activar bloqueio automático</label>
     <p className="text-sm text-campus-deep/75 sm:col-span-2">Com o bloqueio activo, o estudante fica bloqueado quando a soma das dívidas vencidas após a tolerância ultrapassa o limite. As consultas e operações seguintes aplicam a nova regra.</p>
     {error && <p role="alert" className="text-red-700 sm:col-span-2">{error}</p>}
-    {saved && <p role="status" className="sm:col-span-2">Políticas guardadas.</p>}
-    <button className="btn-primary justify-self-start" disabled={busy}>Guardar políticas</button>
+    <button className="btn-primary justify-self-start" disabled={busy}><BusyLabel busy={busy} busyText="A guardar…">Guardar políticas</BusyLabel></button>
   </form>;
 }

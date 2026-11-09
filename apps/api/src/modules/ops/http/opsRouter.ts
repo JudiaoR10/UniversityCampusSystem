@@ -5,9 +5,9 @@ import { getOpsSnapshot } from '../application/opsService.js';
 
 export const opsRouter = Router();
 
-opsRouter.get('/ops/snapshot', authenticate, async (_req, res, next) => {
+opsRouter.get('/ops/snapshot', authenticate, async (req, res, next) => {
   try {
-    success(res, await getOpsSnapshot());
+    success(res, await getOpsSnapshot(req.user!.role));
   } catch (err) {
     next(err);
   }

@@ -11,7 +11,7 @@ const student = await prisma.user.findUniqueOrThrow({ where: { email: 'estudante
 const server = createApp().listen(0, '127.0.0.1');
 await new Promise(resolve => server.once('listening', resolve));
 let browser;
-const evidence = 'docs/integration-evidence';
+const evidence = process.env.FINANCIAL_EVIDENCE_DIR || 'docs/integration-evidence';
 try {
   const base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', headless: true });
@@ -24,6 +24,17 @@ try {
   await page.getByRole('button', { name: 'Entrar no campus' }).click();
   await page.waitForURL('**/ops');
   await page.goto(base + '/financial');
+  await page.getByRole('button', { name: 'Guia', exact: true }).click();
+  const financeGuide = page.getByRole('region', { name: 'Guia financeiro' });
+  assert.equal(await financeGuide.getByRole('button', { name: 'Configurar políticas' }).count(), 0);
+  await financeGuide.getByRole('button', { name: 'Registar dívida e pagamento', exact: true }).click();
+  await financeGuide.getByText('Escolher estudante', { exact: true }).waitFor();
+  const highlight = page.locator('[data-financial-guide-highlight]');
+  await highlight.waitFor();
+  assert.equal(await highlight.evaluate(element => getComputedStyle(element).borderColor), 'rgb(26, 107, 92)', 'O realce deve usar a cor do Core');
+  await page.screenshot({ path: `${evidence}/financial-guide-finance.png` });
+  await page.keyboard.press('Escape');
+  assert.equal(await financeGuide.count(), 0, 'Escape deve fechar o guia');
   await page.getByLabel('Nome ou matrícula').fill(student.fullName);
   await page.getByRole('button', { name: 'Pesquisar', exact: true }).click();
   await page.getByRole('button', { name: `Seleccionar ${student.fullName}`, exact: true }).click();
@@ -43,16 +54,24 @@ try {
   await studentPage.getByRole('button', { name: 'Entrar no campus' }).click();
   await studentPage.waitForURL('**/ops');
   await studentPage.goto(base + '/financial');
+  await studentPage.getByRole('button', { name: 'Guia', exact: true }).click();
+  const studentGuide = studentPage.getByRole('region', { name: 'Guia financeiro' });
+  assert.equal(await studentGuide.getByRole('button', { name: 'Gerir salários' }).count(), 0);
+  await studentGuide.getByRole('button', { name: 'Contestar uma cobrança', exact: true }).click();
+  await studentPage.keyboard.press('Escape');
+  assert.equal(await studentGuide.count(), 0);
   await studentPage.getByRole('cell', { name: 'Propina validada no Core', exact: true }).waitFor();
   if (await studentPage.getByRole('button', { name: 'Registar dívida', exact: true }).count()) throw Error('Acção administrativa visível ao estudante');
-  await studentPage.getByRole('button', { name: 'Contestar', exact: true }).click();
+  const studentDebtRow = studentPage.getByRole('row').filter({ hasText: 'Propina validada no Core' });
+  await studentDebtRow.getByRole('button', { name: 'Contestar', exact: true }).click();
   await studentPage.getByLabel('Justificação').fill('Solicito revisão desta cobrança de demonstração.');
   await studentPage.getByRole('button', { name: 'Submeter contestação' }).click();
   await studentPage.getByRole('status').filter({ hasText: 'Operação concluída.' }).waitFor();
   await studentPage.screenshot({ path: `${evidence}/student-core.png`, fullPage: true });
   await page.getByRole('button', { name: 'Contestações', exact: true }).click();
-  await page.getByRole('button', { name: 'Analisar Propina validada no Core', exact: true }).click();
-  await page.getByLabel('Decisão', { exact: true }).selectOption('IMPROCEDENTE');
+  await page.locator('article').filter({ hasText: 'Propina validada no Core' }).getByRole('button', { name: 'Analisar', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Decisão', exact: true }).click();
+  await page.getByRole('option', { name: 'Rejeitar contestação', exact: true }).click();
   await page.getByLabel('Justificação da decisão').fill('Cobrança confirmada pela tesouraria.');
   await page.getByRole('button', { name: 'Registar decisão', exact: true }).click();
   await page.getByText('Decisão registada.', { exact: true }).waitFor();
@@ -69,12 +88,19 @@ try {
   await createdDebtRow.getByRole('cell', { name: 'REGULARIZADA', exact: true }).waitFor();
   await studentPage.reload();
   await studentPage.getByRole('cell', { name: 'REGULARIZADA', exact: true }).waitFor();
-  assert.equal(await studentPage.getByRole('button', { name: 'Contestar', exact: true }).count(), 0);
+  assert.equal(await studentDebtRow.getByRole('button', { name: 'Contestar', exact: true }).count(), 0);
   await studentPage.getByRole('button', { name: 'Histórico de pagamentos', exact: true }).click();
   await studentPage.getByRole('cell', { name: /BROWSER-/ }).waitFor();
   await studentPage.setViewportSize({ width: 390, height: 844 });
   const closeMenu = studentPage.getByRole('button', { name: 'Fechar', exact: true });
   if (await closeMenu.isVisible()) await closeMenu.click();
+  await studentPage.waitForTimeout(400); // Aguarda a transição do menu móvel antes da captura.
+  await studentPage.getByRole('button', { name: 'Guia', exact: true }).click();
+  const mobileGuide = studentPage.getByRole('region', { name: 'Guia financeiro' });
+  const guideBox = await mobileGuide.boundingBox();
+  assert.ok(guideBox && guideBox.x >= 0 && guideBox.x + guideBox.width <= 390, 'Guia deve caber no ecrã móvel');
+  await studentPage.screenshot({ path: `${evidence}/financial-guide-mobile.png` });
+  await studentPage.keyboard.press('Escape');
   await studentPage.screenshot({ path: `${evidence}/financial-history-mobile.png`, fullPage: true, animations: 'disabled' });
   assert.equal(await studentPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'Histórico deve caber no ecrã móvel');
 
@@ -87,6 +113,11 @@ try {
   await adminPage.getByRole('button', { name: 'Entrar no campus' }).click();
   await adminPage.waitForURL('**/ops');
   await adminPage.goto(base + '/financial');
+  await adminPage.getByRole('button', { name: 'Guia', exact: true }).click();
+  const adminGuide = adminPage.getByRole('region', { name: 'Guia financeiro' });
+  await adminGuide.getByRole('button', { name: 'Configurar políticas', exact: true }).waitFor();
+  assert.equal(await adminGuide.getByRole('button', { name: 'Registar dívida e pagamento' }).count(), 0);
+  await adminPage.keyboard.press('Escape');
   await adminPage.getByRole('button', { name: 'Políticas financeiras', exact: true }).click();
   await adminPage.getByLabel('Dias de tolerância').fill('7');
   await adminPage.getByLabel('Limite de dívida vencida (MZN)').fill('250');
@@ -99,33 +130,43 @@ try {
   assert.equal(await adminPage.getByLabel('Limite de dívida vencida (MZN)').inputValue(), '250');
   await adminPage.screenshot({ path: `${evidence}/financial-admin-policies.png`, fullPage: true });
 
-  // Fluxo salarial: só FINANCE escreve; ADMIN consulta e imprime o relatório.
-  await page.getByRole('button', { name: 'Salários dos docentes', exact: true }).click();
-  await page.getByRole('button', { name: 'Novo salário mensal', exact: true }).click();
-  await page.getByLabel('Nome ou código do docente').fill('DOC-100');
-  await page.getByRole('button', { name: 'Pesquisar docente', exact: true }).click();
-  await page.getByRole('button', { name: 'Seleccionar docente Docente Demo', exact: true }).click();
-  await page.getByLabel('Valor do salário (MZN)').fill('15000');
-  await page.getByRole('button', { name: 'Registar salário', exact: true }).click();
-  await page.getByText('Salário mensal registado.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Editar salário', exact: true }).click();
-  await page.getByLabel('Valor do salário (MZN)').fill('17500');
-  await page.getByRole('button', { name: 'Guardar salário', exact: true }).click();
-  await page.getByText('Operação salarial registada.', { exact: true }).waitFor();
+  // FINANCE propõe o valor, ADMIN aprova e só então FINANCE gera e paga o salário mensal.
+  await page.getByRole('button', { name: 'Funcionários', exact: true }).click();
+  const financeTeacher = page.locator('article').filter({ hasText: 'Docente Demo' }).first();
+  await financeTeacher.getByRole('button', { name: 'Propor salário', exact: true }).click();
+  await financeTeacher.getByLabel('Novo salário proposto (MZN)').fill('17500');
+  await financeTeacher.getByLabel('Justificação da proposta').fill('Actualização salarial validada no teste de integração.');
+  await financeTeacher.getByRole('button', { name: 'Enviar para aprovação', exact: true }).click();
+  await page.getByText('Proposta enviada ao administrador.', { exact: true }).waitFor();
+  await adminPage.getByRole('button', { name: 'Funcionários', exact: true }).click();
+  const approval = adminPage.getByRole('region', { name: 'Aprovações salariais' }).locator('form').filter({ hasText: 'Docente Demo' });
+  await approval.getByLabel('Nota da decisão').fill('Valor confirmado pelo administrador.');
+  await approval.getByRole('button', { name: 'Aprovar salário', exact: true }).click();
+  await approval.waitFor({ state: 'detached' });
+  await page.reload();
+  await page.getByRole('button', { name: 'Funcionários', exact: true }).click();
+  const approvedTeacher = page.locator('article').filter({ hasText: 'Docente Demo' }).first();
+  await approvedTeacher.getByRole('button', { name: 'Gerar salário mensal', exact: true }).click();
+  await approvedTeacher.getByLabel('Mês do salário').fill('2099-01');
+  await approvedTeacher.getByRole('button', { name: 'Gerar salário', exact: true }).click();
+  await page.getByText('Salário mensal gerado com o valor aprovado.', { exact: true }).waitFor();
+  await page.getByLabel('Período salarial').fill('2099-01');
   await page.getByRole('button', { name: 'Registar pagamento salarial', exact: true }).click();
   const salaryReference = `SALARY-BROWSER-${Date.now()}`;
   await page.getByLabel('Referência do pagamento salarial').fill(salaryReference);
   await page.getByRole('button', { name: 'Confirmar pagamento salarial', exact: true }).click();
   await page.getByText(salaryReference, { exact: false }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Editar salário', exact: true }).count(), 0);
-  await adminPage.getByRole('button', { name: 'Salários dos docentes', exact: true }).click();
+  await adminPage.reload();
+  await adminPage.getByRole('button', { name: 'Funcionários', exact: true }).click();
+  await adminPage.getByLabel('Período salarial').fill('2099-01');
   await adminPage.getByText(salaryReference, { exact: false }).waitFor();
-  assert.equal(await adminPage.getByRole('button', { name: /Novo salário mensal|Editar salário|Registar pagamento salarial/ }).count(), 0);
+  assert.equal(await adminPage.getByRole('button', { name: /Propor salário|Gerar salário mensal|Registar pagamento salarial/ }).count(), 0);
   await adminPage.getByRole('button', { name: 'Relatórios mensais', exact: true }).click();
-  await adminPage.getByLabel('Relatório', { exact: true }).selectOption('salaries');
+  await adminPage.getByRole('combobox', { name: 'Relatório', exact: true }).click();
+  await adminPage.getByRole('option', { name: 'Salários pagos aos funcionários', exact: true }).click();
   const salaryReport = adminPage.getByRole('region', { name: 'Relatórios mensais' });
   await salaryReport.getByRole('cell', { name: salaryReference, exact: true }).waitFor();
-  await salaryReport.getByRole('cell', { name: '17500.00', exact: true }).waitFor();
+  await salaryReport.getByRole('row').filter({ hasText: salaryReference }).getByRole('cell', { name: '17500.00', exact: true }).waitFor();
   await adminPage.screenshot({ path: `${evidence}/monthly-salary-report.png`, fullPage: true });
   await adminPage.evaluate(() => { window.__printCalls = 0; window.print = () => { window.__printCalls++; window.dispatchEvent(new Event('beforeprint')); }; });
   await adminPage.getByRole('button', { name: 'Imprimir relatório mensal', exact: true }).click();
@@ -149,6 +190,11 @@ try {
   assert.equal(await teacherPage.locator('nav a[href="/financial"]').count(), 0);
   await teacherPage.goto(base + '/financial');
   await teacherPage.waitForURL('**/ops');
-  writeFileSync(`${evidence}/browser.json`, JSON.stringify({ executedAt: new Date().toISOString(), success: true, checks: ['Login FINANCE oficial', 'Pesquisa e selecção de estudante do Core', 'Criação de dívida via UI', 'Login STUDENT oficial', 'Consulta da mesma dívida por User.id', 'Ausência de criação administrativa para STUDENT', 'Contestação via UI', 'Decisão FINANCE visível ao estudante', 'Referência de pagamento com mínimo de 4 caracteres', 'Pagamento FINANCE reflectido no histórico STUDENT', 'Histórico em ecrã móvel sem overflow da página', 'Engrenagem exclusiva ADMIN com políticas persistidas', 'Salário criado, editado e pago por FINANCE', 'ADMIN sem acções de edição salarial', 'Relatório mensal de salários com referência e valor reais', 'Impressão PDF completa sem menus da aplicação', 'TEACHER sem menu financeiro e acesso directo redireccionado'] }, null, 2) + '\n');
+  writeFileSync(`${evidence}/browser.json`, JSON.stringify({ executedAt: new Date().toISOString(), success: true, checks: ['Guia financeiro por perfil com encerramento por Escape', 'Guia visível em ecrã móvel de 390 píxeis', 'Login FINANCE oficial', 'Pesquisa e selecção de estudante do Core', 'Criação de dívida via UI', 'Login STUDENT oficial', 'Consulta da mesma dívida por User.id', 'Ausência de criação administrativa para STUDENT', 'Contestação via UI', 'Decisão FINANCE visível ao estudante', 'Referência de pagamento com mínimo de 4 caracteres', 'Pagamento FINANCE reflectido no histórico STUDENT', 'Histórico em ecrã móvel sem overflow da página', 'Engrenagem exclusiva ADMIN com políticas persistidas', 'Salário proposto por FINANCE, aprovado por ADMIN e pago por FINANCE', 'ADMIN sem acções operacionais de salário', 'Relatório mensal de salários com referência e valor de teste', 'Impressão PDF completa sem menus da aplicação', 'TEACHER sem menu financeiro e acesso directo redireccionado'] }, null, 2) + '\n');
   console.log('Browser: login Core, criação e contestação financeiras confirmados.');
-} finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); await prisma.$disconnect(); }
+} finally {
+  const stopped = new Promise(resolve => { server.close(resolve); server.closeAllConnections(); });
+  await browser?.close();
+  await stopped;
+  await prisma.$disconnect();
+}

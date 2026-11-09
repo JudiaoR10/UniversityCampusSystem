@@ -1210,12 +1210,22 @@ def build_content(doc: Document):
     style_heading(h, 1, "6. Gestão financeira", "cap-fin")
     add_body(
         doc,
-        "A tesouraria do campus: dívidas (propina, taxa, multa ou outra), pagamentos, contestações, avisos, salários dos docentes e relatórios em meticais. O administrador e o perfil Financeiro vêem o campus inteiro; o estudante vê só a sua pasta.",
+        "A tesouraria do campus: dívidas (propina, taxa, multa ou outra), pagamentos, contestações, avisos, salários de funcionários e relatórios em meticais. O administrador e o perfil Financeiro consultam dados do campus; o estudante vê só a sua pasta. As operações disponíveis dependem do perfil.",
     )
     callout(
         doc,
         "Quem entra aqui",
-        "Apenas Estudante, Financeiro e Administrador. Docentes, técnicos e coordenadores são reenviados para o Centro de operações. A tesouraria demo usa financas@smartcampus.demo.",
+        "Apenas Estudante, Financeiro e Administrador têm acesso à área financeira, com opções diferentes conforme o perfil. A tesouraria demo usa financas@smartcampus.demo.",
+    )
+    callout(
+        doc,
+        "Guia interactivo",
+        "Na página financeira, escolha ? Guia e seleccione um caso disponível para o seu perfil. O guia destaca as áreas relacionadas e permite avançar, voltar ou fechar com Esc. Não realiza operações automaticamente; algumas etapas exigem seleccionar um estudante ou ter dados disponíveis.",
+    )
+    callout(
+        doc,
+        "Sobre as imagens",
+        "As capturas desta secção são de uma versão anterior e podem mostrar nomes e opções diferentes dos actuais. Para os passos actualizados consulte o manual financeiro editável do projecto.",
     )
 
     screen(
@@ -1226,12 +1236,12 @@ def build_content(doc: Document):
         caption="Figura 31. Gestão financeira — lista de dívidas de todo o campus.",
         path="/financial  →  separador Dívidas",
         who="Administrador e Financeiro (campus) · Estudante (as suas)",
-        sees="Separadores no topo (Dívidas, Histórico, Contestações, Avisos, e, para gestão: Emissão de propina, Resumo, Salários, Relatórios mensais). Sem estudante seleccionado, a tesouraria vê a fila de todo o campus. Com estudante, vê a pasta individual e pode emitir uma cobrança. Filtros por estado (pendente, vencida, regularizada, cancelada) e origem (propina, taxa, multa, outra).",
+        sees="O Financeiro escolhe um estudante para ver dívidas e efectuar operações. O Administrador usa Consultar estudante para consulta; o Estudante vê a sua pasta. A lista permite filtrar por estado, origem e data.",
         does=[
-            "Filtrar a fila por estado, origem ou data de vencimento.",
-            "Seleccionar um estudante para emitir uma dívida individual.",
-            "Registar um pagamento (transferência, depósito, carteira móvel ou POS) e imprimir o recibo.",
-            "Cancelar uma dívida indevida.",
+            "Filtrar as dívidas do estudante seleccionado por estado, origem ou data de vencimento.",
+            "O Financeiro selecciona um estudante para emitir uma dívida individual.",
+            "O Financeiro regista um pagamento já efectuado e pode imprimir o recibo.",
+            "O Financeiro pode cancelar uma dívida indevida.",
             "O estudante consulta as suas dívidas e pede análise se discordar.",
         ],
     )
@@ -1244,11 +1254,11 @@ def build_content(doc: Document):
         caption="Figura 32. Dívidas de um estudante seleccionado, com faixa de situação.",
         path="/financial  →  seleccionar estudante",
         who="Administrador e Financeiro",
-        sees="Pesquisa por nome ou matrícula, botão Seleccionar, e a faixa de situação financeira (Regular ou Bloqueada). A lista passa a ser só daquele estudante, e o formulário de nova cobrança fica disponível.",
+        sees="Pesquisa por nome ou matrícula, botão Seleccionar e faixa de situação financeira (Regular ou Bloqueada). O formulário de nova cobrança está disponível ao Financeiro.",
         does=[
             "Pesquisar por nome ou número de estudante.",
-            "Trocar ou limpar a selecção para voltar à fila do campus.",
-            "Emitir cobrança, receber pagamento ou abrir contestação sobre uma dívida concreta.",
+            "Trocar ou limpar a selecção para consultar outra pessoa.",
+            "O Financeiro pode emitir cobrança e registar pagamento; o estudante pode contestar uma dívida concreta.",
         ],
     )
 
@@ -1280,7 +1290,7 @@ def build_content(doc: Document):
         sees="Pedidos de análise sobre dívidas. Cada cartão traz o título da dívida, o valor, o motivo, a data e o prazo de análise. Se o prazo passou, aparece o aviso SLA ultrapassado. A gestão filtra por pendente, aceite ou rejeitada.",
         does=[
             "O estudante submete uma contestação a partir da dívida.",
-            "A tesouraria escolhe Analisar e decide: aceitar (PROCEDENTE) ou rejeitar (IMPROCEDENTE), com notas.",
+            "O Financeiro escolhe Analisar e decide: aceitar (PROCEDENTE) ou rejeitar (IMPROCEDENTE), com notas; o Administrador consulta.",
             "Filtrar as pendentes para trabalhar a fila do dia.",
         ],
     )
@@ -1293,12 +1303,12 @@ def build_content(doc: Document):
         caption="Figura 35. Fila de avisos de todo o campus, com estado de entrega.",
         path="/financial  →  Avisos",
         who="Gestão (fila do campus) · Estudante (os seus avisos)",
-        sees="Mensagens enviadas ao estudante (cobrança, vencimento, bloqueio). A gestão vê a fila completa com estado de entrega (pendente, enviada, falhada, só local) e pode filtrar e reenviar as falhadas.",
+        sees="Mensagens associadas ao estudante seleccionado. A gestão pode consultar o estado de envio; o Financeiro pode tentar novamente avisos pendentes ou falhados.",
         does=[
-            "Acompanhar se o aviso chegou.",
-            "Filtrar por estado de entrega.",
-            "Reenviar os avisos falhados.",
+            "Consultar o conteúdo e o estado de envio do aviso.",
+            "O Financeiro pode reenviar um aviso pendente ou falhado.",
         ],
+        note="O estado de envio não confirma que o estudante leu a mensagem.",
     )
 
     screen(
@@ -1308,7 +1318,7 @@ def build_content(doc: Document):
         shot="30d-financeiro-propina.png",
         caption="Figura 36. Emissão em lote a partir das inscrições activas de um curso.",
         path="/financial  →  Emissão de propina",
-        who="Administrador e Financeiro",
+        who="Financeiro",
         sees="Formulário com curso, ano lectivo, valor, data de vencimento e título opcional. O Core cria uma dívida de origem Propina para cada inscrição activa que ainda não tenha esta cobrança em aberto.",
         does=[
             "Escolher o curso e o ano lectivo.",
@@ -1324,7 +1334,7 @@ def build_content(doc: Document):
         shot="30e-financeiro-resumo.png",
         caption="Figura 37. Totais em meticais e lista de estudantes bloqueados.",
         path="/financial  →  Resumo do campus",
-        who="Administrador e Financeiro",
+        who="Financeiro",
         sees="Contagens (total de dívidas, pendentes, vencidas, regularizadas, canceladas, pagamentos, bloqueados) e totais em MZN: em aberto, vencido e recebido este mês. Tabela de estudantes bloqueados com matrícula, dívidas vencidas e valor em atraso.",
         does=[
             "Ler o pulso da tesouraria no mês corrente (hora de Maputo).",
@@ -1335,19 +1345,19 @@ def build_content(doc: Document):
 
     screen(
         doc,
-        title="Salários dos docentes",
+        title="Funcionários e salários",
         bookmark="scr-30f-financeiro-salarios",
         shot="30f-financeiro-salarios.png",
-        caption="Figura 38. Folha salarial mensal dos docentes.",
-        path="/financial  →  Salários dos docentes",
-        who="Administrador consulta · Financeiro cria, edita e paga",
-        sees="Selector de mês e lista de docentes com valor, estado e pagamento. Só o perfil Financeiro altera valores ou marca como pago. Recibo disponível após pagamento.",
+        caption="Figura 38. Área salarial (captura de versão anterior).",
+        path="/financial  →  Funcionários",
+        who="Financeiro propõe e regista pagamentos · Administrador aprova ou rejeita",
+        sees="Pesquisa de funcionários, propostas salariais e pagamentos mensais. O salário só muda após aprovação do Administrador. A área abrange docentes e outras categorias de funcionários.",
         does=[
-            "Escolher o mês salarial.",
-            "Seleccionar o docente, definir o valor e confirmar o pagamento já efectuado.",
-            "Imprimir o recibo salarial.",
+            "O Financeiro selecciona um funcionário, propõe o salário e apresenta a justificação.",
+            "O Administrador analisa a proposta e aprova ou rejeita com uma nota.",
+            "Depois da aprovação, o Financeiro gera o salário mensal e regista o pagamento já efectuado; o comprovativo pode ser impresso.",
         ],
-        note="Os dados académicos do docente continuam no módulo Docentes. Aqui só entra o valor e o pagamento do mês.",
+        note="O cadastro financeiro externo não substitui a gestão académica ou de recursos humanos. O registo não executa uma transferência bancária.",
     )
 
     screen(
@@ -1358,7 +1368,7 @@ def build_content(doc: Document):
         caption="Figura 39. Relatório mensal de pagamentos ou de salários, para impressão.",
         path="/financial  →  Relatórios mensais",
         who="Administrador e Financeiro",
-        sees="Escolha entre Pagamentos dos estudantes e Salários pagos aos docentes, mais o mês. O relatório lista os movimentos efectivamente registados, pela hora de Moçambique, com totais em MZN e opção de imprimir.",
+        sees="Escolha entre Pagamentos dos estudantes e Salários pagos aos funcionários, mais o mês. O relatório lista os movimentos efectivamente registados, pela hora de Moçambique, com totais em MZN e opção de imprimir.",
         does=[
             "Escolher o tipo de relatório e o mês.",
             "Rever totais e linhas.",

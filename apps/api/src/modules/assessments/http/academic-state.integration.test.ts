@@ -448,18 +448,18 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
   it('Cenário 7 — dispensa ao critério do docente: DISPENSADO, sem exame/recorrência e auditada', async () => {
     await resetStudent();
     await setAdmission(11);
-  
+
     // Sem dispensa automática (11 < 14): estaria admitido ao exame...
     const before = await getFinal();
     expect(before.state).toBe('ADMITIDO_AO_EXAME');
-  
+
     // Estudante não pode dispensar.
     const denied = await request(app)
       .post(`/api/v1/assessments/subject/${subjectId}/exemptions`)
       .set('Authorization', `Bearer ${studentToken}`)
       .send({ studentId: studentAId, exempted: true });
     expect(denied.status).toBe(403);
-  
+
     // Docente dispensa livremente com nota escolhida.
     const exemptRes = await request(app)
       .post(`/api/v1/assessments/subject/${subjectId}/exemptions`)
@@ -468,7 +468,7 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
     expect(exemptRes.status).toBe(200);
     expect(exemptRes.body.data.exempted).toBe(true);
     expect(exemptRes.body.data.grade).toBe(15);
-  
+
     const finals = await getFinal();
     expect(finals.state).toBe('DISPENSADO');
     expect(finals.status).toBe('DISPENSADO');
@@ -479,7 +479,7 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
     expect(finals.examGrade).toBeNull();
     expect(finals.recurrenceGrade).toBeNull();
     expect(finals.usedExam).toBe(false);
-  
+
     // Notas de exame e recorrência ficam bloqueadas.
     const examRes = await postGrade(examId, 12);
     expect(examRes.status).toBe(409);
@@ -487,7 +487,7 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
     const recurrenceRes = await postGrade(recurrenceId, 12);
     expect(recurrenceRes.status).toBe(409);
     expect(recurrenceRes.body.code).toBe('STUDENT_DISPENSADO');
-  
+
     // Board expõe a bandeira da dispensa manual e a nota.
     const boardRes = await getBoard();
     expect(boardRes.status).toBe(200);
@@ -497,11 +497,11 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
     expect(entry.exempted).toBe(true);
     expect(entry.exemptionGrade).toBe(15);
     expect(entry.state).toBe('DISPENSADO');
-  
+
     // Auditoria registada.
     const audits = await prisma.auditEvent.count({ where: { action: 'SUBJECT_EXEMPTION_SET' } });
     expect(audits).toBeGreaterThanOrEqual(1);
-  
+
     // Anular a dispensa devolve o estado calculado automaticamente.
     const revokeRes = await request(app)
       .post(`/api/v1/assessments/subject/${subjectId}/exemptions`)
@@ -509,7 +509,7 @@ describe('Sprint — Dispensa, Exame Normal e Recorrência', () => {
       .send({ studentId: studentAId, exempted: false });
     expect(revokeRes.status).toBe(200);
     expect(revokeRes.body.data.exempted).toBe(false);
-  
+
     const restored = await getFinal();
     expect(restored.state).toBe('ADMITIDO_AO_EXAME');
     expect(restored.finalGrade).toBeNull();

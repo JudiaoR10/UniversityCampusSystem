@@ -50,7 +50,9 @@ function mapPosition(code: string, mapX: number | null, mapY: number | null, ind
   return { x: 30 + ((index * 17) % 50), y: 32 + ((index * 13) % 40) };
 }
 
-export async function getOpsSnapshot(): Promise<OpsSnapshot> {
+export async function getOpsSnapshot(actorRole?: string): Promise<OpsSnapshot> {
+  const isAdmin = actorRole === 'ADMIN';
+  const roomWhere = isAdmin ? {} : { temPlaca: true };
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const [settings, occupancy, buildings, rooms, devices, latestReadings, weekReadings] = await Promise.all([
     getAdminSettings(),
@@ -60,6 +62,7 @@ export async function getOpsSnapshot(): Promise<OpsSnapshot> {
       include: { _count: { select: { rooms: true } } },
     }),
     prisma.room.findMany({
+      where: roomWhere,
       select: { id: true, code: true, name: true, floor: true, status: true, capacity: true, buildingId: true },
     }),
     prisma.device.findMany({

@@ -638,6 +638,14 @@ Construir pela ordem do fluxo transversal e depois os restantes.
 
 Validar com `createRoomSchema`. Incluir `building` no DTO.
 
+Regras de negócio (adicionadas pelo Grupo Infraestrutura):
+- Criar: rejeita status `OCCUPIED` ou `MAINTENANCE` — apenas `AVAILABLE` ou `RESERVED`
+- Actualizar: apenas salas em estado `AVAILABLE` podem ser manipuladas
+- Eliminar: apenas salas em estado `AVAILABLE` podem ser eliminadas
+- Visibilidade por role: não-admin vê apenas salas com `temPlaca = true`
+- Filtragem: salas associadas a POIs ou Laboratórios não aparecem na lista de salas
+- `temPlaca`: campo booleano — apenas `ADMIN` pode ver/editar na UI
+
 ## 8.2 Ocorrências (`incidents`)
 
 | Endpoint | Roles |
@@ -682,7 +690,25 @@ Regras de domínio:
 - `OUT` → libertar vaga
 - Fotos/leituras demo claramente marcadas
 
-## 8.6 Testes mínimos da API
+## 8.6 Pontos de Interesse (`poi`)
+
+| Endpoint | Roles |
+| --- | --- |
+| `GET /pois` | autenticado |
+| `GET /pois/:id` | autenticado |
+| `POST /pois` | ADMIN, COORDINATOR, TECHNICIAN |
+| `PATCH /pois/:id` | ADMIN, COORDINATOR, TECHNICIAN |
+| `DELETE /pois/:id` | ADMIN, COORDINATOR, TECHNICIAN |
+
+Regras de domínio:
+
+- POI pode estar associado a um edifício e/ou a uma sala
+- Se associado a uma sala, o piso é determinado automaticamente
+- Coordenadas (mapX, mapY) são calculadas automaticamente com base no edifício
+- Salas associadas a POIs não aparecem na lista de salas (apenas na página de POI)
+- Tipos: ENTRADA, SAIDA, WC, REFEITORIO, BIBLIOTECA, SECRETARIA, AUDITORIO, LABORATORIO, SALA_AULA, ESCADA, ELEVADOR, OUTRO
+
+## 8.7 Testes mínimos da API
 
 ```bash
 npm run test:api
@@ -1012,7 +1038,7 @@ Para apresentar o Core na PTP III:
 2. Stack tecnológica — Fase 2 deste manual  
 3. Demo ao vivo: fluxo transversal + parking + ops  
 4. Swagger aberto em `/api/docs`  
-5. Explicar módulos `available` (já sem placeholders)  
+5. Explicar módulos `available` (já sem placeholders)
 6. Mostrar CI e Docker Compose  
 
 ---

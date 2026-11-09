@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { AuthUser, StudentIdentitySummaryDto } from '@smart-campus/shared-types';
 import { useAuth } from '../lib/auth';
 import { PageIntro } from '../components/PageIntro';
-import { ChipTabs, EmptyState } from '../components/ui';
+import { ChipTabs } from '../components/ui';
 import { StudentPicker } from '../components/financial/StudentPicker';
 import { FinancialDebts } from '../components/financial/FinancialDebts';
 import { FinancialHistory } from '../components/financial/FinancialHistory';
@@ -12,8 +12,11 @@ import { FinancialNotifications } from '../components/financial/FinancialNotific
 import { FinancialReport } from '../components/financial/FinancialReport';
 import { FinancialSalaries } from '../components/financial/FinancialSalaries';
 import { FinancialMonthlyReports } from '../components/financial/FinancialMonthlyReports';
+import { AdminFinancialOverview } from '../components/financial/AdminFinancialOverview';
+import { FinancialCourseTuitions } from '../components/financial/FinancialCourseTuitions';
 import { FinancialTuitionIssuance } from '../components/financial/FinancialTuitionIssuance';
 import { FinancialStandingBanner } from '../components/financial/FinancialStandingBanner';
+import { FinancialGuide } from '../components/financial/guide/FinancialGuide';
 
 export function FinancialPage() {
   const { user } = useAuth();
@@ -24,38 +27,52 @@ export function FinancialPage() {
 }
 
 function FinancialWorkspace({ user }: { user: AuthUser }) {
-  const manager = ['FINANCE', 'ADMIN'].includes(user.role);
+  const isAdmin = user.role === 'ADMIN';
+  const isFinance = user.role === 'FINANCE';
+  const manager = isFinance || isAdmin;
   const [selected, setSelected] = useState<StudentIdentitySummaryDto | null>(null);
-  const [tab, setTab] = useState('debts');
+  const [tab, setTab] = useState(isAdmin ? 'overview' : 'debts');
+  const [studentSection, setStudentSection] = useState('debts');
   const [policiesOpen, setPoliciesOpen] = useState(false);
   const [revision, setRevision] = useState(0);
   const studentId = manager ? selected?.userId : user.id;
   const changed = () => setRevision(n => n + 1);
-  const tabs = [
+  const tabs = isAdmin ? [
+    { id: 'overview', label: 'Visão geral' },
+    { id: 'monthly-reports', label: 'Relatórios mensais' },
+    { id: 'analysis', label: 'Contestações' },
+    { id: 'employees', label: 'Funcionários' },
+    { id: 'course-tuitions', label: 'Mensalidades por curso' },
+    { id: 'student', label: 'Consultar estudante' },
+  ] : [
     { id: 'debts', label: 'Dívidas' }, { id: 'history', label: 'Histórico de pagamentos' },
     { id: 'analysis', label: 'Contestações' }, { id: 'notices', label: 'Avisos' },
-    ...(manager ? [{ id: 'tuition', label: 'Emissão de propina' }, { id: 'report', label: 'Resumo do campus' }] : []),
-    ...(manager ? [{ id: 'salaries', label: 'Salários dos docentes' }, { id: 'monthly-reports', label: 'Relatórios mensais' }] : []),
+    ...(isFinance ? [{ id: 'tuition', label: 'Emissão de propina' }, { id: 'report', label: 'Resumo do campus' }, { id: 'employees', label: 'Funcionários' }, { id: 'course-tuitions', label: 'Mensalidades por curso' }, { id: 'monthly-reports', label: 'Relatórios mensais' }] : []),
   ];
+  const operationalTab = isAdmin && tab === 'student' ? studentSection : tab;
+  const needsStudent = isFinance && ['debts', 'history', 'analysis', 'notices'].includes(tab) || isAdmin && (tab === 'student' || tab === 'analysis');
   return <div className="space-y-6">
     <PageIntro eyebrow="Finanças" title="Gestão financeira"
-      description={manager ? 'Consultar estudantes, registar operações e analisar contestações.' : 'Acompanhar as suas dívidas, pagamentos e pedidos de análise.'}
-      actions={user.role === 'ADMIN' && <button className="btn-secondary" aria-expanded={policiesOpen} aria-controls="financial-policy" onClick={() => setPoliciesOpen(!policiesOpen)}><span aria-hidden="true">⚙</span> Políticas financeiras</button>} />
-    {user.role === 'ADMIN' && policiesOpen && <FinancialPolicy onChanged={changed} />}
+      description={isAdmin ? 'Acompanhar indicadores, relatórios, políticas e auditoria financeira.' : isFinance ? 'Registar operações financeiras, analisar contestações e gerir salários.' : 'Acompanhar as suas dívidas, pagamentos e pedidos de análise.'}
+      actions={<><FinancialGuide role={user.role as 'ADMIN' | 'FINANCE' | 'STUDENT'} navigate={step => { if (step.tab) setTab(step.tab); if (step.section) setStudentSection(step.section); if (step.policy) setPoliciesOpen(true); }} />{isAdmin && <button data-financial-guide="policy-button" className="btn-secondary" aria-expanded={policiesOpen} aria-controls="financial-policy" onClick={() => setPoliciesOpen(!policiesOpen)}><span aria-hidden="true">⚙</span> Políticas financeiras</button>}</>} />
+    <div data-financial-guide="tabs"><ChipTabs items={tabs} value={tab} onChange={setTab} ariaLabel="Secções financeiras" /></div>
+    {isAdmin && policiesOpen && <div data-financial-guide="policy"><FinancialPolicy onChanged={changed} /></div>}
+    {isAdmin && tab === 'student' && <nav data-financial-guide="student-sections" className="flex flex-wrap gap-2" aria-label="Dados financeiros do estudante">
+      {[{ id: 'debts', label: 'Dívidas' }, { id: 'history', label: 'Histórico de pagamentos' }, { id: 'notices', label: 'Avisos' }].map(item => <button key={item.id} className={studentSection === item.id ? 'btn-primary' : 'btn-secondary'} onClick={() => setStudentSection(item.id)}>{item.label}</button>)}
+    </nav>}
+    {needsStudent && <div data-financial-guide="student-picker"><StudentPicker selected={selected} onSelect={setSelected} /></div>}
     {studentId && <FinancialStandingBanner key={`${studentId}:${revision}`} studentId={studentId} />}
-    {manager && ['debts', 'history', 'analysis', 'notices'].includes(tab) && <StudentPicker selected={selected} onSelect={setSelected} />}
-    <ChipTabs items={tabs} value={tab} onChange={setTab} ariaLabel="Secções financeiras" />
-    {tab === 'debts' && (studentId || manager) && <FinancialDebts key={`${studentId ?? 'campus'}:${revision}`} studentId={studentId} />}
-    {tab === 'history' && studentId && <FinancialHistory key={studentId} studentId={studentId} revision={revision} />}
-    {tab === 'analysis' && <FinancialAnalysis key={studentId ?? 'all'} studentId={studentId} manager={manager} onChanged={changed} />}
-    {tab === 'notices' && (studentId || manager) && <FinancialNotifications key={studentId ?? 'campus'} studentId={studentId} manager={manager} />}
-    {tab === 'tuition' && manager && <FinancialTuitionIssuance onCreated={changed} />}
-    {tab === 'report' && manager && <FinancialReport revision={revision} />}
-    {tab === 'salaries' && manager && <FinancialSalaries />}
-    {tab === 'monthly-reports' && manager && <FinancialMonthlyReports />}
-    {!studentId && tab === 'history' && <EmptyState title="Seleccione um estudante" description="Escolha um estudante acima para consultar esta secção." />}
+    {isAdmin && tab === 'overview' && <AdminFinancialOverview revision={revision} onOpenReports={() => setTab('monthly-reports')} onOpenPolicies={() => setPoliciesOpen(true)} />}
+    {operationalTab === 'debts' && studentId && <FinancialDebts key={`${studentId}:${revision}`} studentId={studentId} />}
+    {operationalTab === 'history' && studentId && <div data-financial-guide="history"><FinancialHistory key={studentId} studentId={studentId} revision={revision} /></div>}
+    {tab === 'analysis' && <div data-financial-guide="analysis"><FinancialAnalysis key={studentId ?? 'all'} studentId={studentId} manager={manager} canResolve={isFinance} onChanged={changed} /></div>}
+    {operationalTab === 'notices' && studentId && <div data-financial-guide="notices"><FinancialNotifications key={studentId} studentId={studentId} manager={manager} /></div>}
+    {tab === 'report' && isFinance && <FinancialReport revision={revision} />}
+    {tab === 'tuition' && isFinance && <div data-financial-guide="tuition"><FinancialTuitionIssuance onCreated={changed} /></div>}
+    {tab === 'employees' && manager && <FinancialSalaries />}
+    {tab === 'course-tuitions' && manager && <FinancialCourseTuitions />}
+    {tab === 'monthly-reports' && manager && <div data-financial-guide="monthly-reports"><FinancialMonthlyReports /></div>}
+    {!studentId && manager && ['debts', 'history', 'notices'].includes(operationalTab) && <p className="surface p-4">Seleccione um estudante acima para consultar esta secção.</p>}
     {manager && tab === 'analysis' && !studentId && <p className="text-sm text-campus-deep/75">A apresentar contestações de todos os estudantes.</p>}
-    {manager && tab === 'debts' && !studentId && <p className="text-sm text-campus-deep/75">A apresentar dívidas de todo o campus. Seleccione um estudante para emitir uma cobrança individual.</p>}
-    {manager && tab === 'notices' && !studentId && <p className="text-sm text-campus-deep/75">A apresentar a fila de avisos de todo o campus.</p>}
   </div>;
 }

@@ -109,6 +109,7 @@ export function TeachersPage() {
       status: teacher.status,
     });
     setAlert(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function submit(event: FormEvent) {
@@ -132,6 +133,8 @@ export function TeachersPage() {
     try {
       if (editingId) {
         await api.teachers.update(editingId, {
+          fullName: form.fullName,
+          employeeCode: form.employeeCode,
           departmentId: form.departmentId,
           title: form.title || undefined,
           phone: form.phone || null,
@@ -261,9 +264,9 @@ export function TeachersPage() {
       ) : null}
 
       {isAdmin ? (
-        <form onSubmit={submit} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+        <form onSubmit={submit} className={`surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4 ${editingId ? 'ring-2 ring-campus-accent/50 shadow-md' : ''}`}>
           <div className="md:col-span-2 xl:col-span-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="section-title">{editingId ? 'Editar perfil de docente' : 'Novo perfil de docente'}</h2>
+            <h2 className="section-title">{editingId ? `Editar perfil de docente — ${form.fullName || form.employeeCode}` : 'Novo perfil de docente'}</h2>
             {editingId ? (
               <button type="button" className="btn-ghost" onClick={resetForm}>
                 Cancelar edição
@@ -289,6 +292,8 @@ export function TeachersPage() {
             onChange={(event) => setForm({ ...form, password: event.target.value })}
             required
           />
+            </>
+          )}
           <input
             className="field-input !mt-0"
             placeholder="Nome completo"
@@ -296,15 +301,12 @@ export function TeachersPage() {
             onChange={(event) => setForm({ ...form, fullName: event.target.value })}
             required
           />
-            </>
-          )}
           <input
             className="field-input !mt-0"
             placeholder="Código de docente"
             value={form.employeeCode}
             onChange={(event) => setForm({ ...form, employeeCode: event.target.value })}
-            readOnly={editingId !== null}
-            title={editingId ? 'O código de docente não pode ser alterado.' : undefined}
+            title={editingId ? 'Código de docente' : undefined}
             required
           />
           <SelectField

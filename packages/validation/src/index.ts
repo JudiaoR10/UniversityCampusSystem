@@ -567,6 +567,8 @@ export const createStudentProfileSchema = z.union([
 
 export const updateStudentProfileSchema = z
   .object({
+    fullName: accountNameSchema.optional(),
+    studentNumber: z.string().trim().min(2).max(30).optional(),
     courseId: idSchema.optional(),
     yearOfStudy: z.number().int().min(1).max(10).nullable().optional(),
     phone: phoneSchema.nullable().optional(),
@@ -609,6 +611,8 @@ export const createTeacherProfileSchema = z.union([
 
 export const updateTeacherProfileSchema = z
   .object({
+    fullName: accountNameSchema.optional(),
+    employeeCode: z.string().trim().min(2).max(30).optional(),
     departmentId: idSchema.optional(),
     title: z.string().trim().min(2).max(80).optional(),
     phone: phoneSchema.nullable().optional(),

@@ -20,6 +20,7 @@ export type CreateStudentAccountData = {
 };
 
 export type UpdateStudentData = {
+  studentNumber?: string;
   courseId?: string;
   yearOfStudy?: number | null;
   phone?: string | null;
@@ -112,6 +113,27 @@ export async function updateStudent(id: string, data: UpdateStudentData) {
     where: { id },
     data,
     include: { course: courseRef, user: userRef },
+  });
+}
+
+export async function updateStudentWithUser(
+  id: string,
+  userId: string,
+  profileData: UpdateStudentData,
+  fullName?: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    if (fullName) {
+      await tx.user.update({
+        where: { id: userId },
+        data: { fullName },
+      });
+    }
+    return tx.studentProfile.update({
+      where: { id },
+      data: profileData,
+      include: { course: courseRef, user: userRef },
+    });
   });
 }
 

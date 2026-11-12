@@ -62,6 +62,7 @@ export function RoomsPage() {
 
   function startEdit(room: RoomDto) {
     setEditingId(room.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setForm({
       code: room.code,
       name: room.name,

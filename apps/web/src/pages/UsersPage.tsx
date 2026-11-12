@@ -6,7 +6,7 @@ import { PageIntro } from '../components/PageIntro';
 import { AlertMessage } from '../components/AlertMessage';
 import { ChipTabs, EmptyState, FormField, LoadingState, StatusPill } from '../components/ui';
 import { SelectField } from '../components/SelectField';
-import { BanIcon, CheckIcon, IconActionButton, TableActions } from '../components/ActionButtons';
+import { BanIcon, CheckIcon, EditAction, IconActionButton, TableActions } from '../components/ActionButtons';
 import { StatCard } from '../components/StatCard';
 import { ModuleGlyph } from '../components/ModuleGlyph';
 import { roleLabels } from '../lib/labels';
@@ -32,6 +32,7 @@ export function UsersPage() {
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('ALL');
   const [form, setForm] = useState({ email: '', password: '', fullName: '', role: 'TECHNICIAN' as RoleCode });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const allowed = !!user && ['ADMIN', 'COORDINATOR'].includes(user.role);
   const canCreate = user?.role === 'ADMIN';
 
@@ -70,16 +71,33 @@ export function UsersPage() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  async function onCreate(e: FormEvent) {
+    function startEdit(item: AuthUser) {
+    setEditingId(item.id);
+    setForm({ email: item.email, password: '', fullName: item.fullName, role: item.role });
+    setError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function resetForm() {
+    setEditingId(null);
+    setForm({ email: '', password: '', fullName: '', role: 'TECHNICIAN' });
+  }
+
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      await api.createUser(form);
+      if (editingId) {
+        await api.updateUser(editingId, { fullName: form.fullName });
+        setEditingId(null);
+      } else {
+        await api.createUser(form);
+      }
       setForm({ email: '', password: '', fullName: '', role: 'TECHNICIAN' });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao criar conta');
+      setError(err instanceof Error ? err.message : 'Erro ao guardar utilizador');
     } finally {
       setSaving(false);
     }
@@ -111,27 +129,40 @@ export function UsersPage() {
       {error ? <AlertMessage tone="error" message={error} /> : null}
 
       {canCreate ? (
-        <form onSubmit={onCreate} className="hero-panel grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <h2 className="section-title md:col-span-2 xl:col-span-5">Nova conta de acesso</h2>
+        <form onSubmit={onSubmit} className={`hero-panel grid gap-3 md:grid-cols-2 xl:grid-cols-5 ${editingId ? 'ring-2 ring-campus-accent/50 shadow-md' : ''}`}>
+          <div className="md:col-span-2 xl:col-span-5 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="section-title">
+              {editingId ? `Editar utilizador — ${form.fullName || form.email}` : 'Nova conta de acesso'}
+            </h2>
+            {editingId ? (
+              <button type="button" className="btn-ghost" onClick={resetForm}>
+                Cancelar edição
+              </button>
+            ) : null}
+          </div>
           <FormField label="Nome completo">
             <input className="field-input" placeholder="Ex.: Ana Silva" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required />
           </FormField>
-          <FormField label="Email">
-            <input className="field-input" type="email" placeholder="ana@ujac.ac.mz" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-          </FormField>
-          <FormField label="Password">
-            <input className="field-input" type="password" minLength={8} placeholder="Mínimo 8 caracteres" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
-          </FormField>
-          <FormField label="Papel">
-            <SelectField
-              value={form.role}
-              onChange={(role) => setForm({ ...form, role: role as RoleCode })}
-              options={staffRoles.map((role) => ({ value: role, label: roleLabels[role] }))}
-            />
-          </FormField>
+          {editingId ? null : (
+            <>
+              <FormField label="Email">
+                <input className="field-input" type="email" placeholder="ana@ujac.ac.mz" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+              </FormField>
+              <FormField label="Password">
+                <input className="field-input" type="password" minLength={8} placeholder="Mínimo 8 caracteres" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+              </FormField>
+              <FormField label="Papel">
+                <SelectField
+                  value={form.role}
+                  onChange={(role) => setForm({ ...form, role: role as RoleCode })}
+                  options={staffRoles.map((role) => ({ value: role, label: roleLabels[role] }))}
+                />
+              </FormField>
+            </>
+          )}
           <div className="flex items-end">
             <button type="submit" className="btn-primary w-full" disabled={saving}>
-              {saving ? 'A criar…' : 'Criar conta'}
+              {saving ? 'A guardar…' : editingId ? 'Guardar alterações' : 'Criar conta'}
             </button>
           </div>
         </form>
@@ -194,6 +225,7 @@ export function UsersPage() {
                     {canCreate ? (
                       <td className="text-right">
                         <TableActions>
+                          <EditAction title={`Editar ${item.fullName}`} onClick={() => startEdit(item)} />
                           <IconActionButton
                             label={item.isActive ? 'Desactivar' : 'Activar'}
                             icon={item.isActive ? <BanIcon /> : <CheckIcon />}

@@ -1308,6 +1308,8 @@ export type CreateStudentProfilePayload =
     };
 
 export type UpdateStudentProfilePayload = {
+  fullName?: string;
+  studentNumber?: string;
   courseId?: string;
   yearOfStudy?: number | null;
   phone?: string | null;
@@ -1349,6 +1351,8 @@ export type CreateTeacherProfilePayload =
     };
 
 export type UpdateTeacherProfilePayload = {
+  fullName?: string;
+  employeeCode?: string;
   departmentId?: string;
   title?: string;
   phone?: string | null;

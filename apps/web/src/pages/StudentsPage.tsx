@@ -206,6 +206,7 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
       status: student.status,
     });
     setAlert(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function submit(event: FormEvent) {
@@ -229,6 +230,8 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
     try {
       if (editingId) {
         await api.students.update(editingId, {
+          fullName: form.fullName,
+          studentNumber: form.studentNumber,
           courseId: form.courseId,
           yearOfStudy: form.yearOfStudy ? Number(form.yearOfStudy) : null,
           phone: form.phone || null,
@@ -291,9 +294,9 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
       />
 
       {canManage ? (
-        <form onSubmit={submit} className="surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4">
+        <form onSubmit={submit} className={`surface grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-4 ${editingId ? 'ring-2 ring-campus-accent/50 shadow-md' : ''}`}>
           <div className="md:col-span-2 xl:col-span-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="section-title">{editingId ? 'Editar perfil de estudante' : 'Novo perfil de estudante'}</h2>
+            <h2 className="section-title">{editingId ? `Editar perfil de estudante — ${form.fullName || form.studentNumber}` : 'Novo perfil de estudante'}</h2>
             {editingId ? (
               <button type="button" className="btn-ghost" onClick={resetForm}>
                 Cancelar edição
@@ -319,6 +322,8 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
             onChange={(event) => setForm({ ...form, password: event.target.value })}
             required
           />
+            </>
+          )}
           <input
             className="field-input !mt-0"
             placeholder="Nome completo"
@@ -326,15 +331,12 @@ function StudentsDirectory({ canManage }: { canManage: boolean }) {
             onChange={(event) => setForm({ ...form, fullName: event.target.value })}
             required
           />
-            </>
-          )}
           <input
             className="field-input !mt-0"
             placeholder="Nº de estudante"
             value={form.studentNumber}
             onChange={(event) => setForm({ ...form, studentNumber: event.target.value })}
-            readOnly={editingId !== null}
-            title={editingId ? 'O número de estudante não pode ser alterado.' : undefined}
+            title={editingId ? 'Nº de estudante' : undefined}
             required
           />
           <SelectField

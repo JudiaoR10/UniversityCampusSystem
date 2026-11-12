@@ -33,6 +33,7 @@ export function BuildingsPage() {
 
   function startEdit(b: BuildingDto) {
     setEditingId(b.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setForm({
       code: b.code,
       name: b.name,

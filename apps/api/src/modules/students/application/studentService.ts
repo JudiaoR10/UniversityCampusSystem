@@ -189,7 +189,15 @@ export async function update(id: string, input: UpdateStudentProfileInput, ctx: 
     if (!course) throw notFound('COURSE_NOT_FOUND', 'Curso não encontrado');
   }
 
-  const row = await studentRepository.updateStudent(id, input);
+  if (input.studentNumber && input.studentNumber !== existing.studentNumber) {
+    const duplicate = await studentRepository.findStudentByStudentNumber(input.studentNumber);
+    if (duplicate && duplicate.id !== id) {
+      throw conflict('STUDENT_NUMBER_EXISTS', `Já existe um estudante com o número '${input.studentNumber}'`);
+    }
+  }
+
+  const { fullName, ...profileData } = input;
+  const row = await studentRepository.updateStudentWithUser(id, existing.userId, profileData, fullName);
 
   await audit({
     action: 'STUDENT_PROFILE_UPDATED',

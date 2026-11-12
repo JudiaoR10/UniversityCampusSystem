@@ -39,6 +39,7 @@ export function LaboratoriesPage() {
 
   function startEdit(lab: LaboratoryDto) {
     setEditingId(lab.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setForm({
       code: lab.code,
       name: lab.name,

@@ -54,6 +54,7 @@ export function SensorsPage() {
 
   function startEdit(sensor: SensorDto) {
     setEditingId(sensor.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setForm({
       code: sensor.code,
       name: sensor.name,

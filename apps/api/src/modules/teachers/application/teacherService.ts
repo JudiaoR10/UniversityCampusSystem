@@ -191,7 +191,15 @@ export async function update(id: string, input: UpdateTeacherProfileInput, ctx: 
     if (!department) throw notFound('DEPARTMENT_NOT_FOUND', 'Departamento não encontrado');
   }
 
-  const row = await teacherRepository.updateTeacher(id, input);
+  if (input.employeeCode && input.employeeCode !== existing.employeeCode) {
+    const duplicate = await teacherRepository.findTeacherByEmployeeCode(input.employeeCode);
+    if (duplicate && duplicate.id !== id) {
+      throw conflict('TEACHER_EMPLOYEE_CODE_EXISTS', `Já existe um docente com o código '${input.employeeCode}'`);
+    }
+  }
+
+  const { fullName, ...profileData } = input;
+  const row = await teacherRepository.updateTeacherWithUser(id, existing.userId, profileData, fullName);
 
   await audit({
     action: 'TEACHER_PROFILE_UPDATED',

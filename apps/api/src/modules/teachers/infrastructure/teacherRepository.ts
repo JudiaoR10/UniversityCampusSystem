@@ -16,6 +16,7 @@ export type CreateTeacherAccountData = {
 };
 
 export type UpdateTeacherData = {
+  employeeCode?: string;
   departmentId?: string;
   title?: string | null;
   phone?: string | null;
@@ -108,6 +109,27 @@ export async function updateTeacher(id: string, data: UpdateTeacherData) {
     where: { id },
     data,
     include: { department: departmentRef, user: userRef },
+  });
+}
+
+export async function updateTeacherWithUser(
+  id: string,
+  userId: string,
+  profileData: UpdateTeacherData,
+  fullName?: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    if (fullName) {
+      await tx.user.update({
+        where: { id: userId },
+        data: { fullName },
+      });
+    }
+    return tx.teacherProfile.update({
+      where: { id },
+      data: profileData,
+      include: { department: departmentRef, user: userRef },
+    });
   });
 }
 

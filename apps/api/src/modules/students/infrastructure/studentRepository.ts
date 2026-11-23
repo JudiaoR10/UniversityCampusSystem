@@ -111,6 +111,27 @@ export async function updateStudent(id: string, data: UpdateStudentData) {
   });
 }
 
+export async function updateStudentWithUser(
+  id: string,
+  userId: string,
+  profileData: UpdateStudentData,
+  fullName?: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    if (fullName) {
+      await tx.user.update({
+        where: { id: userId },
+        data: { fullName },
+      });
+    }
+    return tx.studentProfile.update({
+      where: { id },
+      data: profileData,
+      include: { course: courseRef, user: userRef },
+    });
+  });
+}
+
 // Mantém a conta e protege todos os registos académicos que seriam apagados em cascata.
 export async function deleteStudentProfile(id: string) {
   return prisma.$transaction(async (tx) => {

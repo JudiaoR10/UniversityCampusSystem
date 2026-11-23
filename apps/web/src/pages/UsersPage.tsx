@@ -94,6 +94,7 @@ export function UsersPage() {
       } else {
         await api.createUser(form);
       }
+      await api.createUser(form);
       setForm({ email: '', password: '', fullName: '', role: 'TECHNICIAN' });
       await load();
     } catch (err) {
